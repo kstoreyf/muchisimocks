@@ -31,6 +31,8 @@ bacco.configuration.update({'pk':{'boltzmann_solver': 'CLASS'}})
 # b1, b2, bs2, blap
 biases_vec = [[b1, 0, 0, 0] for b1 in np.linspace(0.5, 1.5, 10)]
 
+np.savetxt('biases_vec.txt', biases_vec)
+
 grid = bacco.visualization.uniform_grid(npix=ngrid, L=BoxSize, ndim=3, bounds=False)
 
 indicesLH = np.array([10,29,37,40,70,85,127,158,165,184,208,220,240,254,267,274,293,305,336,374,375,388,433,444,
@@ -39,9 +41,11 @@ indicesLH = np.array([10,29,37,40,70,85,127,158,165,184,208,220,240,254,267,274,
                       1157,1173,1175,1219,1222,1299,1309,1314,1317,1331,1365,1372,1378,1391,1397,1418,1444,1459,
                       1510,1512,1513,1515,1517,1533,1553,1567,1568,1599,1622,1642,1657,1659,1667])
 
-for i in indicesLH:
+for iLH in range(len(indicesLH)):
 
-    pred_disp = np.load('/dipc_storage/mpelle/Yin_data/Quijote/LH%04d/pred_pos_%04d.npy'%(indicesLH[i], indicesLH[i]))
+    print('-------------------------- LH number:', iLH)
+
+    pred_disp = np.load('/dipc_storage/mpelle/Yin_data/Quijote/LH%04d/pred_pos_%04d.npy'%(indicesLH[iLH], indicesLH[iLH]))
 
     pred_pos = bacco.scaler.add_displacement(None,
                                 pred_disp,
@@ -51,7 +55,7 @@ for i in indicesLH:
                                 vel_factor=0,
                                 verbose=True)[0]
 
-    dens_yin = np.load('/dipc_storage/mpelle/Yin_data/Quijote/LH%04d/lin_den_%04d.npy'%(indicesLH[i], indicesLH[i]))
+    dens_yin = np.load('/dipc_storage/mpelle/Yin_data/Quijote/LH%04d/lin_den_%04d.npy'%(indicesLH[iLH], indicesLH[iLH]))
 
     k_nyq = np.pi * ngrid / BoxSize
 
@@ -151,6 +155,9 @@ for i in indicesLH:
 
     for ib, biases in enumerate(biases_vec):
 
+        print('-------------------------- bias number:', ib)
+
+
         bias_extended = np.concatenate([[1], biases])
 
         prod = np.array(list(itertools.combinations_with_replacement(np.arange(5), r=2)))
@@ -162,5 +169,5 @@ for i in indicesLH:
 
         kk = power_all_terms_pred[0]['k']
 
-        fname = 'biased_pk_m2m_num_%04d_bias_num_%d.txt'%(indicesLH[i], ib)
+        fname = 'biased_pk_m2m_num_%04d_bias_num_%d.txt'%(indicesLH[iLH], ib)
         np.savetxt(fname, np.transpose([kk, sum_terms_power]))
