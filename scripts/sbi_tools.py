@@ -5,6 +5,19 @@ import pickle
 from sbi.inference import SNPE
 from sbi import utils
 
+def set_N_threads(N_threads=1):
+    
+    print('N_threads: %s'%(N_threads))
+    
+    os.environ["OMP_NUM_THREADS"] = str(N_threads)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(N_threads)
+    os.environ["MKL_NUM_THREADS"] = str(N_threads)
+    os.environ["VECLIB_MAXIMUM_THREADS"] = str(N_threads)
+    os.environ["NUMEXPR_NUM_THREADS"] = str(N_threads)
+    
+    return N_threads
+
+
 def get_prior(dict_bounds):
 
     lower_bound = np.vstack(tuple(dict_bounds[key] for key in dict_bounds))[:,0]
