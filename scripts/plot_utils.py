@@ -210,8 +210,8 @@ def corner_plot(theta, inferred_theta, custom_titles, dict_bounds=None, color_in
                 linestyles='--'
             )
 
-            ax.scatter(tmp_xx, tmp_yy, s=.01, c=color_infer, alpha=0.5)
-            ax.scatter(tmp_xx_true, tmp_yy_true, s=30, c='k', marker='x')
+            ax.scatter(tmp_xx, tmp_yy, s=.01, color=color_infer, alpha=0.5)
+            ax.scatter(tmp_xx_true, tmp_yy_true, s=30, color='k', marker='x')
 
             ax.set_xlim([min_x, max_x])
             ax.set_ylim([min_y, max_y])
