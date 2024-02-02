@@ -112,14 +112,23 @@ def simple_plot(x_label='x', y_label='y', custom_labels=None, custom_lines=None)
 
 def corner_plot(theta, inferred_theta, custom_titles, dict_bounds=None, color_infer='crimson', fontsize=20, fontsize1=13, N_ticks=3, nbins_contour=30):
 
-    fig, axs = plt.subplots(len(custom_titles), len(custom_titles), figsize=(2*len(custom_titles), 2*len(custom_titles)))
+    if len(custom_titles)==1:
+        subplot_size = 4
+    else:
+        subplot_size = 2
+
+    fig, axs = plt.subplots(len(custom_titles), len(custom_titles), figsize=(subplot_size*len(custom_titles), 
+                                                                             subplot_size*len(custom_titles)))
 
     for ii in range(len(custom_titles)):
 
         for jj in range(ii+1, len(custom_titles)):
             axs[ii, jj].set_axis_off()
 
-        ax = axs[ii, ii]
+        if len(custom_titles)==1:
+            ax = axs
+        else:
+            ax = axs[ii, ii]
         
         [kk.set_linewidth(1.5) for kk in ax.spines.values()]
         
@@ -229,10 +238,16 @@ def corner_plot(theta, inferred_theta, custom_titles, dict_bounds=None, color_in
 
         tmp_custom_ticks = np.linspace(min_x, max_x, N_ticks+2)[1:-1]
         tmp_custom_labels = np.around(tmp_custom_ticks, 3).astype(str)
-        axs[-1,ii].set_xticks(tmp_custom_ticks)
-        axs[-1,ii].set_xticklabels(tmp_custom_labels, fontsize=fontsize1, color='k', rotation=30)
-        axs[-1,ii].set_xlabel(custom_titles[ii], fontsize=fontsize)
-        axs[ii,ii].set_xlim([min_x, max_x])
+
+        if len(custom_titles)==1:
+            axlast = axs
+        else:
+            axlast = axs[-1,ii]
+
+        axlast.set_xticks(tmp_custom_ticks)
+        axlast.set_xticklabels(tmp_custom_labels, fontsize=fontsize1, color='k', rotation=30)
+        axlast.set_xlabel(custom_titles[ii], fontsize=fontsize)
+        ax.set_xlim([min_x, max_x])
         
     plt.tight_layout()
     plt.subplots_adjust(hspace=0.07, wspace=0.07)
