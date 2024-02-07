@@ -52,7 +52,7 @@ def train_model(theta_train, xx_train, prior, num_hidden_features=64, num_transf
         torch.from_numpy(theta_train.astype('float32')), 
         torch.from_numpy(xx_train.astype('float32'))
     )
-    
+
     density_estimator = inference.train(
         training_batch_size=training_batch_size,
         validation_fraction=validation_fraction,
