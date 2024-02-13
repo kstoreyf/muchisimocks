@@ -6,15 +6,19 @@ import baccoemu
 
 def main():
 
-    tag_emuPk = '_5param'
+    tag_emuPk = '_2param'
 
     param_bounds = {'omega_cold': [0.23, 0.4],
                     'sigma8_cold': [0.73, 0.9],
                     'hubble': [0.6, 0.8],
                     'ns': [0.92, 1.01],
                     'omega_baryon': [0.04, 0.06]}
-    #param_names = ['omega_cold', 'sigma8_cold']
-    param_names = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
+    if '_2param' in tag_emuPk:
+        param_names = ['omega_cold', 'sigma8_cold']
+    elif '_5param' in tag_emuPk:
+        param_names = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
+    else:
+        raise KeyError('define parameters!')
     n_params = len(param_names)
     n_tot = 1000
     
