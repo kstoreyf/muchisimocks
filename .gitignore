@@ -2,5 +2,8 @@ __pycache__
 *.egg-info
 sbi-logs/
 
+plots/
+
+data/
 data/emuPks/
 data/cosmolib/
