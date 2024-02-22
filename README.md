@@ -1,2 +1,2 @@
 # muchisimocks
-muchísimos mocks for cosmological inference with SBI!
+muchísimos mocks for cosmological inference
