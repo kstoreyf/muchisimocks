@@ -7,7 +7,7 @@ def main():
     kk, Pk = load_emuPks(tag_emuPk)
     box_size = 1000.
     
-    fn_emuPkerrG = f'../data/emuPks/emuPks_errgaussian_{tag_emuPk}.npy'
+    fn_emuPkerrG = f'../data/emuPks/emuPks_errgaussian{tag_emuPk}.npy'
 
     errs_gaussian = []
     for i in range(Pk.shape[0]):
