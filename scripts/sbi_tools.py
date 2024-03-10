@@ -9,6 +9,8 @@ def set_N_threads(N_threads=1):
     
     print('N_threads: %s'%(N_threads))
     
+    torch.set_num_threads(N_threads)
+    
     os.environ["OMP_NUM_THREADS"] = str(N_threads)
     os.environ["OPENBLAS_NUM_THREADS"] = str(N_threads)
     os.environ["MKL_NUM_THREADS"] = str(N_threads)
@@ -32,7 +34,8 @@ def get_prior(dict_bounds):
     return prior
     
     
-def train_model(theta_train, xx_train, prior, num_hidden_features=64, num_transforms=8, num_blocks=4, training_batch_size=16, learning_rate=0.00031, validation_fraction=0.2):
+def train_model(theta_train, xx_train, prior, num_hidden_features=64, num_transforms=8, num_blocks=4, 
+                training_batch_size=16, learning_rate=0.00031, validation_fraction=0.2):
     
     torch.manual_seed(0)
     

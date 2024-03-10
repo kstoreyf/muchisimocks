@@ -7,7 +7,7 @@ import baccoemu
 def main():
 
     tag_emuPk = '_2param'
-    n_tot = 1000
+    n_tot = 10000
 
     #emu = baccoemu.Lbias_expansion(verbose=False)
     fn_emu = '/dipc_storage/cosmosims/data_share/lbias_emulator/lbias_emulator2.0.0'
@@ -70,21 +70,16 @@ def latin_hypercube(param_names, param_bounds, n_tot):
 
 def setup_cosmo_emu():
     print("Setting up emulator cosmology")
-    Ob = 0.049
-    Om = 0.3175
-    hubble = 0.6711
-    ns = 0.9624
-    sigma8 = 0.834
     cosmo_params = {
-        'omega_cold'    :  Om,
-        'sigma8_cold'   :  sigma8, # if A_s is not specified
-        'omega_baryon'  :  Ob,
-        'ns'            :  ns,
-        'hubble'        :  hubble,
+        'omega_cold'    :  0.3175,
+        'sigma8_cold'   :  0.834, # if A_s is not specified
+        'omega_baryon'  :  0.049,
+        'ns'            :  0.9624,
+        'hubble'        :  0.6711,
         'neutrino_mass' :  0.0,
         'w0'            : -1.0,
         'wa'            :  0.0,
-        'expfactor'     :  1
+        'expfactor'     :  1.0
     }
     return cosmo_params
 

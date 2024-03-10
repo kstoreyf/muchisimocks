@@ -11,7 +11,8 @@ def main():
 
     errs_gaussian = []
     for i in range(Pk.shape[0]):
-        print(i)
+        if i%100==0:
+            print(i)
         err_gaussian = bacco.statistics.approx_pk_gaussian_error(kk, Pk[i], box_size)
         errs_gaussian.append(err_gaussian)
     errs_gaussian = np.array(errs_gaussian)
