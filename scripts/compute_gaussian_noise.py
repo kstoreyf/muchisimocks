@@ -5,9 +5,10 @@ import bacco
 def main():
     tag_emuPk = '_2param'
     kk, Pk = load_emuPks(tag_emuPk)
-    box_size = 1000.
+    box_size = 500.
+    tag_errG = f'_boxsize{int(box_size)}'
     
-    fn_emuPkerrG = f'../data/emuPks/emuPks_errgaussian{tag_emuPk}.npy'
+    fn_emuPkerrG = f'../data/emuPks/emuPks_errgaussian{tag_emuPk}{tag_errG}.npy'
 
     errs_gaussian = []
     for i in range(Pk.shape[0]):
