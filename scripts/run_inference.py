@@ -12,6 +12,7 @@ import time
 import sys
 sys.path.append('/dipc/kstoreyf/muchisimocks/scripts')
 import utils
+import moment_network as mn
 import scaler_custom as scl
 
 import generate_emuPks as genP
@@ -20,7 +21,7 @@ import generate_emuPks as genP
 def main():
     run_moment = True
     run_sbi = False
-    run_emcee = True
+    run_emcee = False
     run_dynesty = False
 
     data_mode = 'emuPk'
@@ -28,15 +29,15 @@ def main():
         frac_train=0.4, 
         frac_val=0.1, 
         frac_test=0.5
+        
     elif data_mode == 'muchisimocks':
         frac_train=0.70, 
         frac_val=0.15, 
         frac_test=0.15
 
-    tag_fit = '_emuPk'
-
     tag_data = '_2param'
     tag_errG = f'_boxsize500'
+    tag_inf = '_'+data_mode + tag_data + tag_errG
     #tag_errG = f''
     n_tot = 2000
     
@@ -61,7 +62,13 @@ def main():
     y_train_scaled, y_val_scaled, y_test_scaled, \
                y_err_train_scaled, y_err_val_scaled, y_err_test_scaled = ys_scaled
     
-    
+    if run_moment:
+        moment_network = mn.MomentNetwork(theta_train, theta_val, theta_test, 
+                            y_train_scaled, y_val_scaled, y_test_scaled,
+                            y_err_train_scaled, y_err_val_scaled, y_err_test_scaled,
+                            tag_mn=tag_inf)
+        moment_network.run()
+        moment_network.evaluate_test_set()
     
 
 
