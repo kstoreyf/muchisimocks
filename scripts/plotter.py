@@ -16,19 +16,30 @@ def plot_loss(history):
     plt.yscale('log')
     
 
-def plot_hists_mean(theta_true, theta_pred, param_labels):
-    n_params = theta_true.shape[1]
-    diffs = theta_pred - theta_true
-
+def plot_hists_mean(fracdiffs_arr, param_labels, label_arr=None,
+                    color_arr=['salmon'], bins=20, xlim_auto=True,
+                    alpha=0.5, histtype='bar'):
+    if fracdiffs_arr.ndim==2:
+        fracdiffs_arr = np.array([fracdiffs_arr])
+    n_params = fracdiffs_arr.shape[-1]
+    
     for pp in range(n_params):
-        plt.figure(figsize=(2.5,2.5))
-        #delta_param = (theta_train_pred[:,pp] - theta_train[:,pp])/theta_train[:,pp]
-        delta_param = diffs[:,pp]/theta_true[:,pp]
-        plt.hist(delta_param, bins=20, alpha=0.5, color='salmon')
+        plt.figure(figsize=(3,3))
+        for i, fracdiffs in enumerate(fracdiffs_arr):
+            #delta_param = (theta_train_pred[:,pp] - theta_train[:,pp])/theta_train[:,pp]
+            label = None
+            if label_arr is not None:
+                label = label_arr[i]
+            plt.hist(fracdiffs[:,pp], bins=bins, alpha=alpha, 
+                     color=color_arr[i], label=label, histtype=histtype,
+                     lw=2)
         plt.xlabel(rf'$\Delta${param_labels[pp]}/{param_labels[pp]}', fontsize=14)
         plt.ylabel(r'$N$ in bin', fontsize=14)
         plt.axvline(0, color='grey')
-        plt.xlim(-np.max(abs(delta_param)), np.max(abs(delta_param)))
+        if not xlim_auto:
+            plt.xlim(-np.max(abs(fracdiffs_arr[:,:,pp])), np.max(abs(fracdiffs[:,:,pp])))
+        if label_arr is not None:
+            plt.legend(fontsize=8)
 
 
 def plot_hists_cov(theta_true, theta_pred, covs_pred, param_labels):
@@ -89,7 +100,7 @@ def plot_hists_cov(theta_true, theta_pred, covs_pred, param_labels):
 
 def plot_contours(samples_arr, labels, colors, param_names, param_label_dict, 
                   smooth_arr=None, bins_arr=None,
-                  truth_loc={}, extents={}, fn_save=None):
+                  truth_loc={}, title=None, extents={}, fn_save=None):
 
     c = chainconsumer.ChainConsumer()
     if smooth_arr is None:
@@ -116,5 +127,8 @@ def plot_contours(samples_arr, labels, colors, param_names, param_label_dict,
     c.add_truth(chainconsumer.Truth(location=truth_loc))
 
     fig = c.plotter.plot(figsize = (5,4) )
+    #ax = fig.gca()
+    #ax.set_title(title)
+    fig.suptitle(title)
     if fn_save is not None:
         plt.savefig(fn_save)
