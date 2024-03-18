@@ -3,6 +3,8 @@ from scipy.stats import qmc
 
 import baccoemu
 
+import utils
+
 
 def main():
 
@@ -34,7 +36,7 @@ def main():
     
 def generate_pks(theta, param_names, emu, tag_emuPk):
     
-    cosmo_params = setup_cosmo_emu()
+    cosmo_params = utils.setup_cosmo_emu()
     bias_params = [1., 0., 0., 0.]
     k = np.logspace(-2, np.log10(0.75), 30)
 
@@ -49,6 +51,8 @@ def generate_pks(theta, param_names, emu, tag_emuPk):
     fn_emuPk = f'../data/emuPks/emuPks{tag_emuPk}.npy'
     fn_emuPk_params = f'../data/emuPks/emuPks_params{tag_emuPk}.txt'
     fn_emuk = f'../data/emuPks/emuPks_k{tag_emuPk}.txt'
+    fn_bias_vector = f'../data/emuPks/bias_params.txt'
+    np.savetxt(fn_bias_vector, bias_params)
 
     np.save(fn_emuPk, pks)
     header = ','.join(param_names)
@@ -66,24 +70,6 @@ def latin_hypercube(param_names, param_bounds, n_tot):
     u_bounds = [param_bounds[param_name][1] for param_name in param_names]
     theta = qmc.scale(theta_orig, l_bounds, u_bounds)
     return theta
-
-
-def setup_cosmo_emu():
-    print("Setting up emulator cosmology")
-    cosmo_params = {
-        'omega_cold'    :  0.3175,
-        'sigma8_cold'   :  0.834, # if A_s is not specified
-        'omega_baryon'  :  0.049,
-        'ns'            :  0.9624,
-        'hubble'        :  0.6711,
-        'neutrino_mass' :  0.0,
-        'w0'            : -1.0,
-        'wa'            :  0.0,
-        'expfactor'     :  1.0
-    }
-    return cosmo_params
-
-
 
 
 

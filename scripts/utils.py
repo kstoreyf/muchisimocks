@@ -1,5 +1,6 @@
 import numpy as np 
 
+import baccoemu
 
 param_label_dict = {'omega_cold': r'$\Omega_\mathrm{m}$',
                 'sigma8_cold': r'$\sigma_{8}$',
@@ -10,9 +11,15 @@ param_label_dict = {'omega_cold': r'$\Omega_\mathrm{m}$',
                 'n_s': r'$n_\mathrm{s}$',
                 'omega_baryon': r'$\Omega_\mathrm{b}$',}
 
+color_dict_methods = {'mn': 'blue',
+                      'emcee': 'purple'}
+
+label_dict_methods = {'mn': 'Moment Network',
+                      'emcee': 'MCMC (emcee)'}
+
 
 def idxs_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):
-
+    print(frac_train, frac_val, frac_test)
     tol = 1e-6
     assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!" 
     N_halos = len(random_ints)
@@ -31,3 +38,36 @@ def split_train_val_test(arr, idxs_train, idxs_val, idxs_test):
     arr_val = arr[idxs_val]
     arr_test = arr[idxs_test]
     return arr_train, arr_val, arr_test
+
+
+def setup_cosmo_emu(cosmo='quijote'):
+    print("Setting up emulator cosmology")
+    if cosmo=='quijote':
+        cosmo_params = {
+            'omega_cold'    :  0.3175,
+            'sigma8_cold'   :  0.834,
+            'omega_baryon'  :  0.049,
+            'ns'            :  0.9624,
+            'hubble'        :  0.6711,
+            'neutrino_mass' :  0.0,
+            'w0'            : -1.0,
+            'wa'            :  0.0,
+            'expfactor'     :  1.0
+        }
+    else:
+        raise ValueError(f'Cosmo {cosmo} not recognized!')
+    return cosmo_params
+
+
+
+def load_emu():
+    #emu = baccoemu.Lbias_expansion(verbose=False)
+    fn_emu = '/dipc_storage/cosmosims/data_share/lbias_emulator/lbias_emulator2.0.0'
+    emu = baccoemu.Lbias_expansion(verbose=False, 
+                                nonlinear_emu_path=fn_emu,
+                                nonlinear_emu_details='details.pickle',
+                                nonlinear_emu_field_name='NN_n',
+                                nonlinear_emu_read_rotation=False)
+    emu_param_names = emu.emulator['nonlinear']['keys']
+    emu_bounds =  emu.emulator['nonlinear']['bounds']
+    return emu, emu_bounds, emu_param_names
