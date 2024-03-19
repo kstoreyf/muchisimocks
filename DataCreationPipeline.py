@@ -7,7 +7,6 @@ def fv2bro(t_fv_field) :
     '''Returns back row ordered array (shape ngrid * ngrid * ngrid, 3) from front vector (shape 3, ngrid, ngrid, ngrid)'''
     return np.reshape(t_fv_field, (3, int(t_fv_field.size / 3))).T
 
-Seed=1915
 npart = 512
 boxsize = 1000.
 
@@ -15,102 +14,142 @@ bacco.configuration.update({'pk':{'boltzmann_solver': 'CLASS'}})
 bacco.configuration.update({'pknbody' : {'ngrid'  :  npart}})
 bacco.configuration.update({'scaling' : {'disp_ngrid' : npart}})
 
-# CHOOSE COSMOLOGY
+start_cosmo = 0
+end_cosmo = 500
 
-Omega0 = 0.3175
-OmegaBaryon = 0.049
-HubbleParam = 0.6711
-ns = 0.9624
-sigma8 = 0.834
-expfactor = 1.
+for cind in range(start_cosmo,end_cosmo):
+    inpath = '/dipc/kstoreyf/muchisimocks/data/cosmolib/'
+    cospars = np.loadtxt(inpath+'LH'+str(cind)+'/cosmo_'+str(cind)+'.txt')
 
-pars_arr = np.array([Omega0, OmegaBaryon, HubbleParam, ns, sigma8])
+    # CHOOSE COSMOLOGY
+    Omega0 = cospars[0] #0.3175
+    sigma8 = cospars[1] #0.834
+    HubbleParam = cospars[2] #0.6711
+    OmegaBaryon = cospars[3] #0.049
+    ns = cospars[4] #0.9624
+    Seed= int(cospars[5]) #1915
+    
+    print('-------> Seed for the simulation:', Seed)
+    
+    expfactor = 1.
 
-## Start cosmology class
+    pars_arr = np.array([Omega0, OmegaBaryon, HubbleParam, ns, sigma8])
 
-pars = {'omega_cdm':Omega0-OmegaBaryon, 'omega_baryon':OmegaBaryon, 'hubble':HubbleParam, 
-        'neutrino_mass':0.0, 'sigma8':sigma8, 'ns':ns, 'expfactor':expfactor}
-cosmo = bacco.Cosmology(**pars) #bacco.Cosmology(**bacco.cosmo_parameters.Planck13)  
-print(cosmo)
+    ## Start cosmology class
 
-
-# CREATE A ZA SIMULATION
-
-sim, disp_field = bacco.utils.create_lpt_simulation(cosmo, boxsize, Nmesh=npart, Seed=Seed,
-                                                    FixedInitialAmplitude=False,InitialPhase=0, 
-                                                    expfactor=1, LPT_order=1, order_by_order=None,
-                                                    phase_type=1, ngenic_phases=True, return_disp=True, 
-                                                    sphere_mode=0)
-
-np.save('ZA_disp.npy', disp_field,allow_pickle=True)
-np.save('lin_field.npy', sim.linear_field[0],allow_pickle=True)
-np.save('ZA_vel.npy', sim.sdm['vel'].reshape((3,512,512,512)), allow_pickle=True)
-np.savetxt('cosmo_pars.txt', pars_arr.T)
-
-# RUN MAP2MAP
-
-## Positions
-os.system('python m2m.py test --test-in-patterns "ZA_disp.npy" --test-tgt-patterns "ZA_disp.npy" --in-norms "cosmology.dis" --tgt-norms "cosmology.dis" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "map2map/weights/d2d_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
-
-os.system('mv ._out.npy pred_disp.npy')
-
-## Velocities
-os.system('python m2m.py test --test-in-patterns "ZA_vel.npy" --test-tgt-patterns "ZA_vel.npy" --in-norms "cosmology.vel" --tgt-norms "cosmology.vel" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "v2halov_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
-
-os.system('mv ._out.npy pred_vel.npy')
+    pars = {'omega_cdm':Omega0-OmegaBaryon, 'omega_baryon':OmegaBaryon, 'hubble':HubbleParam, 
+            'neutrino_mass':0.0, 'sigma8':sigma8, 'ns':ns, 'expfactor':expfactor}
+    cosmo = bacco.Cosmology(**pars) #bacco.Cosmology(**bacco.cosmo_parameters.Planck13)  
+    print(cosmo)
 
 
-# COMPUTE BIAS MODEL
+    # CREATE A ZA SIMULATION
+
+    sim, disp_field = bacco.utils.create_lpt_simulation(cosmo, boxsize, Nmesh=npart, Seed=Seed,
+                                                        FixedInitialAmplitude=False,InitialPhase=0, 
+                                                        expfactor=1, LPT_order=1, order_by_order=None,
+                                                        phase_type=1, ngenic_phases=True, return_disp=True, 
+                                                        sphere_mode=0)
+    
+    norm=npart**3.
+
+    np.save('ZA_disp.npy', disp_field,allow_pickle=True)
+    np.save('lin_field.npy', sim.linear_field[0]*norm,allow_pickle=True)
+    #np.save('ZA_vel.npy', sim.sdm['vel'].reshape((3,512,512,512)), allow_pickle=True)
+    np.savetxt('cosmo_pars.txt', pars_arr.T)
+
+    # RUN MAP2MAP
+
+    ## Positions
+    os.system('python m2m.py test --test-in-patterns "ZA_disp.npy" --test-tgt-patterns "ZA_disp.npy" --in-norms "cosmology.dis" --tgt-norms "cosmology.dis" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "map2map/weights/d2d_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
+
+    os.system('mv ._out.npy pred_disp.npy')
+
+    ## Velocities
+    #os.system('python m2m.py test --test-in-patterns "ZA_vel.npy" --test-tgt-patterns "ZA_vel.npy" --in-norms "cosmology.vel" --tgt-norms "cosmology.vel" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "v2halov_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
+
+    #os.system('mv ._out.npy pred_vel.npy')
 
 
-## Read displacement, velocities and linear density
-pred_disp = np.load('pred_disp.npy')
-velocities = fv2bro(np.load('pred_vel.npy')).copy(order='C')
-dens_lin = np.load('lin_field.npy')
-
-## Create regular grid and displace particles
-grid = bacco.visualization.uniform_grid(npix=npart, L=boxsize, ndim=3, bounds=False)
-
-pred_pos = bacco.scaler.add_displacement(None,
-                                 pred_disp,
-                                 box=boxsize,
-                                 pos=grid.reshape(-1,3),
-                                 vel=None,
-                                 vel_factor=0,
-                                 verbose=True)[0]
+    # COMPUTE BIAS MODEL
 
 
-## Include RSD
+    ## Read displacement, velocities and linear density
+    pred_disp = np.load('pred_disp.npy')
+    #velocities = fv2bro(np.load('pred_vel.npy')).copy(order='C')
+    dens_lin = np.load('lin_field.npy')
 
-pred_pos = bacco.statistics.compute_zsd(pred_pos, velocities, cosmo,boxsize, zspace_axis=2)
+    ## Create regular grid and displace particles
+    grid = bacco.visualization.uniform_grid(npix=npart, L=boxsize, ndim=3, bounds=False)
 
-## Start bias model class
+    pred_pos = bacco.scaler.add_displacement(None,
+                                     pred_disp,
+                                     box=boxsize,
+                                     pos=grid.reshape(-1,3),
+                                     vel=None,
+                                     vel_factor=0,
+                                     verbose=True)[0]
 
-k_nyq = np.pi * npart / boxsize
-damping_scale = k_nyq
 
-bmodel = bacco.BiasModel(sim=sim, linear_delta=dens_lin, ngrid=npart, ngrid1=None, 
-                         sdm=False, mode="dm",
-                         npart_for_fake_sim=npart, damping_scale=damping_scale, 
-                         bias_model='expansion', deposit_method="cic", 
-                         use_displacement_of_nn=False, interlacing=False, 
-                         )
+    ## Include RSD
 
-## Compute lagrangian fields
+    #pred_pos = bacco.statistics.compute_zsd(pred_pos, velocities, cosmo,boxsize, zspace_axis=2)
 
-bias_fields = bmodel.bias_terms_lag()
+    ## Start bias model class
 
-## Compute eulerian fields
+    #k_nyq = np.pi * npart / boxsize
+    damping_scale = 0.7 #k_nyq
+    interlacing = False
 
-bias_terms_eul_pred=[]
-for ii in range(0,len(bias_fields)):
-    bias_terms_pred = bacco.statistics.compute_mesh(ngrid=npart, box=boxsize, pos=pred_pos, 
-                              mass = (bias_fields[ii]).flatten(), deposit_method='cic', 
-                              interlacing=False)
-    bias_terms_eul_pred.append(bias_terms_pred)
-bias_terms_eul_pred = np.array(bias_terms_eul_pred)
+    bmodel = bacco.BiasModel(sim=sim, linear_delta=dens_lin, ngrid=npart, ngrid1=None, 
+                             sdm=False, mode="dm",
+                             npart_for_fake_sim=npart, damping_scale=damping_scale, 
+                             bias_model='expansion', deposit_method="cic", 
+                             use_displacement_of_nn=False, interlacing=interlacing, 
+                             )
 
-## Save eulerian fields
+    ## Compute lagrangian fields
 
-np.save('Eulerian_fields.npy', bias_terms_eul_pred, allow_pickle=True)
+    bias_fields = bmodel.bias_terms_lag()
+
+    ## Compute eulerian fields
+    bias_terms_eul_pred=[]
+    for ii in range(0,len(bias_fields)):
+        bias_terms_pred = bacco.statistics.compute_mesh(ngrid=npart, box=boxsize, pos=pred_pos, 
+                                  mass = (bias_fields[ii]).flatten(), deposit_method='cic', 
+                                  interlacing=interlacing)
+        bias_terms_eul_pred.append(bias_terms_pred)
+    bias_terms_eul_pred = np.array(bias_terms_eul_pred)
+    
+    from bacco.visualization import np_get_kmesh
+    import pyfftw
+    ngrid=512
+    k_nyq = np.pi/1000*128
+    kmesh = np_get_kmesh( (ngrid, ngrid, ngrid), boxsize, real=True)
+    mask = (kmesh[:,:,:,0]<=k_nyq) & (kmesh[:,:,:,1]<=k_nyq) & (kmesh[:,:,:,2]<=k_nyq) & (kmesh[:,:,:,0]>-k_nyq) & (kmesh[:,:,:,1]>-k_nyq) & (kmesh[:,:,:,2]>-k_nyq)
+    bias_terms_eul_pred_kcut=[]
+    for fid in range(5):
+        field = bias_terms_eul_pred[fid][0]
+        deltak = pyfftw.builders.rfftn(field, auto_align_input=False, auto_contiguous=False, avoid_copy=True)
+        deltakcut = deltak()[mask]
+        deltakcut= deltakcut.reshape(128, 128, 65)
+        delta = pyfftw.builders.irfftn(deltakcut, axes=(0,1,2))()
+        bias_terms_eul_pred_kcut.append(delta)
+    bias_terms_eul_pred_kcut = np.array(bias_terms_eul_pred_kcut)
+
+
+    ##### REDUCE DIMENSIONALITY EXAMPLE ####
+    #rho = np.random.uniform(0., 1., (32,32,32))
+    #print(rho.shape)
+    #ns = 2
+    #nf = rho.shape[0] // ns
+    #rhof = rho.reshape((nf,ns,nf,ns,nf,ns))
+    #print(rhof.shape)
+    #rholr = np.sum(rhof, axis=(1,3,5))
+    #print(rholr.shape)
+    #######################################
+
+    ## Save eulerian fields
+    outpath = '/dipc/kstoreyf/muchisimocks/data/cosmolib/'
+    np.save(outpath+'LH'+str(cind)+'/Eulerian_fields_lr_'+str(cind)+'.npy', bias_terms_eul_pred_kcut, allow_pickle=True)
 
