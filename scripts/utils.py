@@ -1,3 +1,4 @@
+import getdist
 import numpy as np 
 
 import baccoemu
@@ -12,19 +13,21 @@ param_label_dict = {'omega_cold': r'$\Omega_\mathrm{m}$',
                 'omega_baryon': r'$\Omega_\mathrm{b}$',}
 
 color_dict_methods = {'mn': 'blue',
-                      'emcee': 'purple'}
+                      'emcee': 'purple',
+                      'dynesty': 'red'}
 
 label_dict_methods = {'mn': 'Moment Network',
-                      'emcee': 'MCMC (emcee)'}
+                      'emcee': 'MCMC (emcee)',
+                      'dynesty': 'MCMC (dynesty)'}
 
 
 def idxs_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):
     print(frac_train, frac_val, frac_test)
     tol = 1e-6
     assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!" 
-    N_halos = len(random_ints)
-    int_train = int(frac_train*N_halos)
-    int_test = int((1-frac_test)*N_halos)
+    N_tot = len(random_ints)
+    int_train = int(frac_train*N_tot)
+    int_test = int((1-frac_test)*N_tot)
 
     idxs_train = np.where(random_ints < int_train)[0]
     idxs_test = np.where(random_ints >= int_test)[0]
@@ -71,3 +74,17 @@ def load_emu():
     emu_param_names = emu.emulator['nonlinear']['keys']
     emu_bounds =  emu.emulator['nonlinear']['bounds']
     return emu, emu_bounds, emu_param_names
+
+
+
+def get_posterior_maxes(samples_equal, param_names):
+    samps = getdist.MCSamples(names=param_names)
+    samps.setSamples(samples_equal)
+    maxes = []
+    for i, pn in enumerate(param_names):
+        xvals = np.linspace(min(samples_equal[:,i]), max(samples_equal[:,i]), 1000)
+        dens = samps.get1DDensity(pn)   
+        probs = dens(xvals)
+        posterior_max = xvals[np.argmax(probs)]
+        maxes.append(posterior_max)
+    return maxes

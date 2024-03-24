@@ -1,9 +1,14 @@
-import numpy as np
 import matplotlib as mpl
 from matplotlib import pyplot as plt
+import numpy as np
+import os
 import pandas as pd
 
 import chainconsumer
+import dynesty
+import emcee
+
+import utils
 
 
 def plot_loss(history):
@@ -132,3 +137,73 @@ def plot_contours(samples_arr, labels, colors, param_names, param_label_dict,
     fig.suptitle(title)
     if fn_save is not None:
         plt.savefig(fn_save)
+        
+        
+smooth_dict = {'mn': 1, 'emcee': 2, 'dynesty': 2}
+bins_dict = {'mn': None, 'emcee': 10, 'dynesty': 7}
+
+def plot_contours_inf(param_names, idx_obs, theta_obs_true,
+                      methods, tags_inf, 
+                      colors=None, labels=None, labels_extra=None):
+    title = f'test model {idx_obs}'
+    truth_loc = dict(zip(param_names, theta_obs_true))
+
+    samples_arr = []
+    for i, method in enumerate(methods):
+        if method=='mn':
+            rng = np.random.default_rng(42)
+            dir_mn = f'../data/results_moment_network/mn{tags_inf[i]}'
+            theta_test_pred = np.load(f'{dir_mn}/theta_test_pred.npy')
+            covs_test_pred = np.load(f'{dir_mn}/covs_test_pred.npy')
+            try:
+                samples_mn = rng.multivariate_normal(theta_test_pred[idx_obs], 
+                                                    covs_test_pred[idx_obs], int(1e6),
+                                                    check_valid='raise')
+            except ValueError:
+                title += f' [$C$ not PSD!]'
+                samples_mn = rng.multivariate_normal(theta_test_pred[idx_obs], 
+                                                    covs_test_pred[idx_obs], int(1e6),
+                                                    check_valid='ignore')
+            samples_arr.append(samples_mn)
+            
+        if method=='emcee':
+            dir_emcee =  f'../data/results_emcee/samplers{tags_inf[i]}'
+            fn_emcee = f'{dir_emcee}/sampler_idxtest{idx_obs}.npy'
+            if not os.path.exists(fn_emcee):
+                print(f'File {fn_emcee} not found')
+                return
+            reader = emcee.backends.HDFBackend(fn_emcee)
+
+            tau = reader.get_autocorr_time()
+            n_burn = int(2 * np.max(tau))
+            thin = int(0.5 * np.min(tau))
+            #print(n_burn, thin)
+            samples_emcee = reader.get_chain(discard=n_burn, flat=True, thin=thin)
+            samples_arr.append(samples_emcee)
+            
+        if method=='dynesty':
+            dir_dynesty =  f'../data/results_dynesty/samplers{tags_inf[i]}'
+            fn_dynesty = f'{dir_dynesty}/sampler_results_idxtest{idx_obs}.npy'
+            results_dynesty = np.load(fn_dynesty, allow_pickle=True).item()
+            #samples_dynesty = results_dynesty.samples_equal()
+            
+            from dynesty.utils import resample_equal
+            # draw posterior samples
+            weights = np.exp(results_dynesty['logwt'] - results_dynesty['logz'][-1])
+            samples_dynesty = resample_equal(results_dynesty.samples, weights)
+
+            samples_arr.append(samples_dynesty)
+
+
+    smooth_arr = [smooth_dict[method] for method in methods]
+    bins_arr = [bins_dict[method] for method in methods]
+    if colors is None:
+        colors = [utils.color_dict_methods[meth] for meth in methods]
+    if labels is None:
+        labels = [utils.label_dict_methods[meth] for meth in methods]
+    if labels_extra is not None:
+        labels = [labels[i] + ' ' + labels_extra[i] for i in range(len(labels))]
+
+    plot_contours(samples_arr, labels, colors, param_names, utils.param_label_dict, 
+                        smooth_arr=smooth_arr, bins_arr=bins_arr,
+                        truth_loc=truth_loc, title=title, extents={}, fn_save=None)

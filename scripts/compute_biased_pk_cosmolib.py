@@ -1,5 +1,7 @@
-import numpy as np
 import os
+os.environ["OMP_NUM_THREADS"] = str(1)
+
+import numpy as np
 from pathlib import Path
 import time
 
@@ -13,6 +15,7 @@ def main():
     dir_mocks = '../data/cosmolib'
     tag_pk = '_b1000'
     dir_pks = f'../data/pks_cosmolib/pks{tag_pk}'
+    overwrite = False
     
     Path.mkdir(Path(dir_pks), parents=True, exist_ok=True)
     
@@ -22,12 +25,17 @@ def main():
     fn_bias_vector = f'{dir_pks}/bias_params.txt'
     np.savetxt(fn_bias_vector, bias_vector)
     
-    n_lib = 1
-    #n_lib = 500
+    #n_lib = 1
+    n_lib = 500
     for idx_LH in range(n_lib):
+        if idx_LH%10==0:
+            print(idx_LH)
         fn_fields = f'{dir_mocks}/LH{idx_LH}/Eulerian_fields_lr_{idx_LH}.npy'
         fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
         fn_pk = f'{dir_pks}/pk_{idx_LH}.npy'
+        if os.path.exists(fn_pk) and not overwrite:
+            print(f"P(k) for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing")
+            continue
         
         start = time.time()
         tracer_field = get_tracer_field(fn_fields, bias_vector)
@@ -51,7 +59,7 @@ def get_tracer_field(fn_fields, bias_vector):
     return tracer_field_eul_norm512
 
 
-def compute_pk(tracer_field, fn_params, n_grid, fn_pk, n_threads=12):
+def compute_pk(tracer_field, fn_params, n_grid, fn_pk, n_threads=8):
 
     param_vals = np.loadtxt(fn_params)
     param_dict = dict(zip(param_names, param_vals))
@@ -96,7 +104,8 @@ def compute_pk(tracer_field, fn_params, n_grid, fn_pk, n_threads=12):
 def get_cosmo(param_dict):
     a_scale = 1
     cosmopars = dict(
-            omega_cdm=param_dict['omega_cold'],
+            # careful, this is CDM! Om_cdm = Om_cold - Om_baryon
+            omega_cdm=param_dict['omega_cold']-param_dict['omega_baryon'],
             omega_baryon=param_dict['omega_baryon'],
             hubble=param_dict['h'],
             ns=param_dict['n_s'],

@@ -49,10 +49,10 @@ def prior_transform(u):
     return np.array(u_transformed)
 
 
-def evaluate_dynesty(pk_data, cov_inv, scaler,
+def evaluate_dynesty(idx_test, pk_data, cov_inv, scaler,
                      emu, cosmo_params, bias_params, k,
                      dict_bounds, param_names, emu_param_names,
-                     n_threads=8):
+                     tag_inf='', n_threads=16):
     
     global _pk_data, _cov_inv, _scaler
     global _emu, _cosmo_params, _bias_params, _k
@@ -62,15 +62,24 @@ def evaluate_dynesty(pk_data, cov_inv, scaler,
     _emu, _cosmo_params, _bias_params, _k =  emu, cosmo_params, bias_params, k
     _dict_bounds, _param_names, _emu_param_names = dict_bounds, param_names, emu_param_names
     
+    start = time.time()
     n_params = len(param_names)
     with dynesty.pool.Pool(n_threads, log_likelihood, prior_transform) as pool:
-        sampler_test = dynesty.NestedSampler(pool.loglike, pool.prior_transform, n_params, 
-                                            nlive=20, bound='single')
-        sampler_test.run_nested(dlogz=0.01)
-        
-    results_test = sampler_test.results
-    samples_dynesty_test = results_test.samples_equal()
-    print(samples_dynesty_test.shape)
+        sampler = dynesty.NestedSampler(pool.loglike, pool.prior_transform, n_params, 
+                                             nlive=50, bound='single')
+        sampler.run_nested(dlogz=0.1)
+    end = time.time()
+    print(f"Time: {end-start} s ({(end-start)/60} min)")
+    
+    results_dynesty = sampler.results
+    samples_dynesty = results_dynesty.samples_equal()
+    print(samples_dynesty.shape)
+    
+    dir_dynesty =  f'../data/results_dynesty/samplers{tag_inf}'
+    p = pathlib.Path(dir_dynesty)
+    p.mkdir(parents=True, exist_ok=True)
+    fn_dynesty = f'{dir_dynesty}/sampler_results_idxtest{idx_test}.npy'
+    np.save(fn_dynesty, results_dynesty)
 
 
 def evaluate_emcee(idx_test, pk_data, cov_inv, scaler,
@@ -96,6 +105,10 @@ def evaluate_emcee(idx_test, pk_data, cov_inv, scaler,
     p = pathlib.Path(dir_emcee)
     p.mkdir(parents=True, exist_ok=True)
     fn_emcee = f'{dir_emcee}/sampler_idxtest{idx_test}.npy'
+    if os.path.exists(fn_emcee):
+        print("File exists, skipping")
+        return
+    
     backend = emcee.backends.HDFBackend(fn_emcee)
     backend.reset(n_walkers, n_params)
 

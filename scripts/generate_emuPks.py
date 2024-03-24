@@ -11,6 +11,13 @@ def main():
     tag_emuPk = '_2param'
     n_tot = 10000
 
+    # save random ints for later train/val/test split
+    rng = np.random.default_rng(42)
+    random_ints = np.arange(n_tot)
+    rng.shuffle(random_ints) #in-place
+    fn_rands = f'../data/emuPks/randints{tag_emuPk}.npy'
+    np.save(fn_rands, random_ints)
+    
     #emu = baccoemu.Lbias_expansion(verbose=False)
     fn_emu = '/dipc_storage/cosmosims/data_share/lbias_emulator/lbias_emulator2.0.0'
     emu = baccoemu.Lbias_expansion(nonlinear_emu_path=fn_emu,
@@ -32,6 +39,7 @@ def main():
     
     theta = latin_hypercube(param_names, param_bounds, n_tot)
     generate_pks(theta, param_names, emu, tag_emuPk)
+
 
     
 def generate_pks(theta, param_names, emu, tag_emuPk):
