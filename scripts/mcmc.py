@@ -52,7 +52,15 @@ def prior_transform(u):
 def evaluate_dynesty(idx_test, pk_data, cov_inv, scaler,
                      emu, cosmo_params, bias_params, k,
                      dict_bounds, param_names, emu_param_names,
-                     tag_inf='', n_threads=16):
+                     tag_inf='', n_threads=10):
+    
+    dir_dynesty =  f'../data/results_dynesty/samplers{tag_inf}'
+    p = pathlib.Path(dir_dynesty)
+    p.mkdir(parents=True, exist_ok=True)
+    fn_dynesty = f'{dir_dynesty}/sampler_results_idxtest{idx_test}.npy'
+    if os.path.exists(fn_dynesty):
+        print("File exists, skipping")
+        return
     
     global _pk_data, _cov_inv, _scaler
     global _emu, _cosmo_params, _bias_params, _k
@@ -72,13 +80,9 @@ def evaluate_dynesty(idx_test, pk_data, cov_inv, scaler,
     print(f"Time: {end-start} s ({(end-start)/60} min)")
     
     results_dynesty = sampler.results
-    samples_dynesty = results_dynesty.samples_equal()
-    print(samples_dynesty.shape)
+    #samples_dynesty = results_dynesty.samples_equal()
+    #print(samples_dynesty.shape)
     
-    dir_dynesty =  f'../data/results_dynesty/samplers{tag_inf}'
-    p = pathlib.Path(dir_dynesty)
-    p.mkdir(parents=True, exist_ok=True)
-    fn_dynesty = f'{dir_dynesty}/sampler_results_idxtest{idx_test}.npy'
     np.save(fn_dynesty, results_dynesty)
 
 
@@ -98,7 +102,7 @@ def evaluate_emcee(idx_test, pk_data, cov_inv, scaler,
     n_params = len(param_names)
     
     # n_burn = 100
-    n_steps = 5000 # 50000
+    n_steps = 4000 # 50000
     n_walkers = 4 * n_params
 
     dir_emcee =  f'../data/results_emcee/samplers{tag_inf}'
@@ -130,5 +134,6 @@ def evaluate_emcee(idx_test, pk_data, cov_inv, scaler,
 
     print(f"Time: {end-start} s ({(end-start)/60} min)")
 
+    # saving done thru emcee backend! generate samples later, directly from saved sampler
     #samples_emcee = sampler_emcee.get_chain(discard=n_burn, flat=True, thin=1)
     #np.save(samples_emcee, fn_emcee)

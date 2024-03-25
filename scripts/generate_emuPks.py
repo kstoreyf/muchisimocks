@@ -8,14 +8,14 @@ import utils
 
 def main():
 
-    tag_emuPk = '_2param'
+    tag_datagen = '_2param'
     n_tot = 10000
 
     # save random ints for later train/val/test split
     rng = np.random.default_rng(42)
     random_ints = np.arange(n_tot)
     rng.shuffle(random_ints) #in-place
-    fn_rands = f'../data/emuPks/randints{tag_emuPk}.npy'
+    fn_rands = f'../data/emuPks/randints{tag_datagen}.npy'
     np.save(fn_rands, random_ints)
     
     #emu = baccoemu.Lbias_expansion(verbose=False)
@@ -26,9 +26,9 @@ def main():
                                 nonlinear_emu_read_rotation=False,
                                 verbose=False)
     
-    if '_2param' in tag_emuPk:
+    if '_2param' in tag_datagen:
         param_names = ['omega_cold', 'sigma8_cold']
-    elif '_5param' in tag_emuPk:
+    elif '_5param' in tag_datagen:
         param_names = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
     else:
         raise KeyError('define parameters!')
@@ -38,11 +38,11 @@ def main():
     param_bounds = {name: emu_bounds[param_keys.index(name)] for name in param_names}
     
     theta = latin_hypercube(param_names, param_bounds, n_tot)
-    generate_pks(theta, param_names, emu, tag_emuPk)
+    generate_pks(theta, param_names, emu, tag_datagen)
 
 
     
-def generate_pks(theta, param_names, emu, tag_emuPk):
+def generate_pks(theta, param_names, emu, tag_datagen):
     
     cosmo_params = utils.setup_cosmo_emu()
     bias_params = [1., 0., 0., 0.]
@@ -56,9 +56,9 @@ def generate_pks(theta, param_names, emu, tag_emuPk):
                                                     **cosmo_params)
         pks.append(pk_gg)
         
-    fn_emuPk = f'../data/emuPks/emuPks{tag_emuPk}.npy'
-    fn_emuPk_params = f'../data/emuPks/emuPks_params{tag_emuPk}.txt'
-    fn_emuk = f'../data/emuPks/emuPks_k{tag_emuPk}.txt'
+    fn_emuPk = f'../data/emuPks/emuPks{tag_datagen}.npy'
+    fn_emuPk_params = f'../data/emuPks/emuPks_params{tag_datagen}.txt'
+    fn_emuk = f'../data/emuPks/emuPks_k{tag_datagen}.txt'
     fn_bias_vector = f'../data/emuPks/bias_params.txt'
     np.savetxt(fn_bias_vector, bias_params)
 

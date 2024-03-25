@@ -26,22 +26,22 @@ def main():
     run_dynesty = False
     
     # for likelihood methods
-    idxs_obs = np.arange(10)
+    idxs_obs = np.arange(100)
 
-    n_train = 1000
+    n_train = 8500
     n_val = 250
     n_test = 1000
         
     data_mode = 'emuPk'
 
     ### Load data
-    tag_data = '_2param'
+    tag_datagen = '_2param'
     tag_errG = f'_boxsize500'
-    tag_inf = '_'+data_mode + tag_data + tag_errG + f'_ntrain{n_train}'
+    tag_inf = '_'+data_mode + tag_datagen + tag_errG
     #tag_errG = f''
     
     dir_data = '../data/emuPks'
-    theta, y, y_err, k, param_names = load_data_emuPk(dir_data, tag_data, tag_errG)
+    theta, y, y_err, k, param_names = load_data_emuPk(dir_data, tag_datagen, tag_errG)
     bias_params = np.loadtxt(f'{dir_data}/bias_params.txt')
 
     ### Train-val-test split
@@ -54,7 +54,7 @@ def main():
         frac_train=0.70
         frac_val=0.15
         frac_test=0.15
-    fn_rands = f'{dir_data}/randints{tag_data}.npy'
+    fn_rands = f'{dir_data}/randints{tag_datagen}.npy'
     random_ints = np.load(fn_rands, allow_pickle=True)
     idxs_train, idxs_val, idxs_test = utils.idxs_train_val_test(random_ints, 
                                    frac_train=frac_train, frac_val=frac_val, frac_test=frac_test)
@@ -76,6 +76,7 @@ def main():
     
     ### Run inference
     if run_moment:
+        tag_inf += f'_ntrain{n_train}'
         moment_network = mn.MomentNetwork(theta_train=theta_train, y_train=y_train_scaled, y_err_train=y_err_train_scaled,
                             theta_val=theta_val, y_val=y_val_scaled, y_err_val=y_err_val_scaled,
                             theta_test=theta_test, y_test=y_test_scaled, y_err_test=y_err_test_scaled,
@@ -84,6 +85,10 @@ def main():
         moment_network.evaluate_test_set()
         
     if run_emcee:
+        
+        emu, emu_bounds, emu_param_names = utils.load_emu()
+        dict_bounds = {name: emu_bounds[emu_param_names.index(name)] for name in param_names}
+        cosmo_params = utils.setup_cosmo_emu()   
             
         for idx_obs in idxs_obs:
             
@@ -95,10 +100,6 @@ def main():
             err_gaussian_scaled = y_err_test_scaled[idx_obs]
             var = err_gaussian_scaled**2 + err_1p_scaled**2
             cov_inv = np.diag(1/var)
-        
-            emu, emu_bounds, emu_param_names = utils.load_emu()
-            dict_bounds = {name: emu_bounds[emu_param_names.index(name)] for name in param_names}
-            cosmo_params = utils.setup_cosmo_emu()
         
             mcmc.evaluate_emcee(idx_obs, y_data, cov_inv, scaler,
                         emu, cosmo_params, bias_params, k,
@@ -106,7 +107,11 @@ def main():
                         tag_inf=tag_inf)
             
     if run_dynesty:
-            
+        
+        emu, emu_bounds, emu_param_names = utils.load_emu()
+        dict_bounds = {name: emu_bounds[emu_param_names.index(name)] for name in param_names}
+        cosmo_params = utils.setup_cosmo_emu()
+                        
         for idx_obs in idxs_obs:
             
             y_data_unscaled = y_test[idx_obs]
@@ -118,25 +123,21 @@ def main():
             var = err_gaussian_scaled**2 + err_1p_scaled**2
             cov_inv = np.diag(1/var)
         
-            emu, emu_bounds, emu_param_names = utils.load_emu()
-            dict_bounds = {name: emu_bounds[emu_param_names.index(name)] for name in param_names}
-            cosmo_params = utils.setup_cosmo_emu()
-        
             mcmc.evaluate_dynesty(idx_obs, y_data, cov_inv, scaler,
                         emu, cosmo_params, bias_params, k,
                         dict_bounds, param_names, emu_param_names,
                         tag_inf=tag_inf)
         
 
-def load_data_emuPk(dir_data, tag_data, tag_errG, rng=None):
+def load_data_emuPk(dir_data, tag_datagen, tag_errG, rng=None):
 
     if rng is None:
         rng = np.random.default_rng(42)
 
-    fn_emuPk = f'{dir_data}/emuPks{tag_data}.npy'
-    fn_emuPk_params = f'{dir_data}/emuPks_params{tag_data}.txt'
-    fn_emuk = f'{dir_data}/emuPks_k{tag_data}.txt'
-    fn_emuPkerrG = f'{dir_data}/emuPks_errgaussian{tag_data}{tag_errG}.npy'
+    fn_emuPk = f'{dir_data}/emuPks{tag_datagen}.npy'
+    fn_emuPk_params = f'{dir_data}/emuPks_params{tag_datagen}.txt'
+    fn_emuk = f'{dir_data}/emuPks_k{tag_datagen}.txt'
+    fn_emuPkerrG = f'{dir_data}/emuPks_errgaussian{tag_datagen}{tag_errG}.npy'
 
     Pk_noiseless = np.load(fn_emuPk)
     gaussian_error_pk = np.load(fn_emuPkerrG)
