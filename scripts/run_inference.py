@@ -25,24 +25,28 @@ def main():
     run_emcee = False
     run_dynesty = False
     
-    # for likelihood methods
+    # for likelihood methods only
     idxs_obs = np.arange(100)
 
-    n_train = 8500
+    # train test split, and number of rlzs per cosmo
+    n_rlzs_per_cosmo = 5
+    n_train = 1000
+    #n_train = 1000*n_rlzs_per_cosmo
     n_val = 250
     n_test = 1000
-        
-    data_mode = 'emuPk'
 
     ### Load data
-    tag_datagen = '_2param'
+    data_mode = 'emuPk'
+    tag_emuPk = '_2param'
     tag_errG = f'_boxsize500'
-    tag_inf = '_'+data_mode + tag_datagen + tag_errG
-    #tag_errG = f''
+    n_rlzs_per_cosmo = 5
+    tag_datagen = f'{tag_emuPk}{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
+    tag_inf = '_'+data_mode + tag_datagen
     
     dir_data = '../data/emuPks'
-    theta, y, y_err, k, param_names = load_data_emuPk(dir_data, tag_datagen, tag_errG)
-    bias_params = np.loadtxt(f'{dir_data}/bias_params.txt')
+    theta, y, y_err, k, param_names, bias_params, random_ints = load_data_emuPk(dir_data, 
+                                                     tag_emuPk, tag_errG, tag_datagen,
+                                                     n_rlzs_per_cosmo=n_rlzs_per_cosmo)
 
     ### Train-val-test split
     if data_mode == 'emuPk':
@@ -54,8 +58,7 @@ def main():
         frac_train=0.70
         frac_val=0.15
         frac_test=0.15
-    fn_rands = f'{dir_data}/randints{tag_datagen}.npy'
-    random_ints = np.load(fn_rands, allow_pickle=True)
+        
     idxs_train, idxs_val, idxs_test = utils.idxs_train_val_test(random_ints, 
                                    frac_train=frac_train, frac_val=frac_val, frac_test=frac_test)
     
@@ -63,9 +66,20 @@ def main():
     idxs_val = idxs_val[:n_val]
     idxs_test = idxs_test[:n_test]
     
+    n_emuPk = len(random_ints)
+    idxs_train_orig = idxs_train.copy()
+    idxs_train = []
+    for n_rlz in range(n_rlzs_per_cosmo):
+        idxs_train.extend(idxs_train_orig + n_rlz*n_emuPk)
+    idxs_train = np.array(idxs_train)
+    print(idxs_train.shape)
+            
     theta_train, theta_val, theta_test = utils.split_train_val_test(theta, idxs_train, idxs_val, idxs_test)
     y_train, y_val, y_test = utils.split_train_val_test(y, idxs_train, idxs_val, idxs_test)
     y_err_train, y_err_val, y_err_test = utils.split_train_val_test(y_err, idxs_train, idxs_val, idxs_test)
+    print(theta_train.shape, theta_val.shape, theta_test.shape)
+    print(y_train.shape, y_val.shape, y_test.shape)
+    print(y_err_train.shape, y_err_val.shape, y_err_test.shape)
     
     ### Scale data
     ys_scaled = scale_y_data(y_train, y_val, y_test,
@@ -77,6 +91,7 @@ def main():
     ### Run inference
     if run_moment:
         tag_inf += f'_ntrain{n_train}'
+        tag_inf += f'_nrlzs{n_rlzs_per_cosmo}'
         moment_network = mn.MomentNetwork(theta_train=theta_train, y_train=y_train_scaled, y_err_train=y_err_train_scaled,
                             theta_val=theta_val, y_val=y_val_scaled, y_err_val=y_err_val_scaled,
                             theta_test=theta_test, y_test=y_test_scaled, y_err_test=y_err_test_scaled,
@@ -128,36 +143,88 @@ def main():
                         dict_bounds, param_names, emu_param_names,
                         tag_inf=tag_inf)
         
+        
+def load_data_emuPk(dir_data, tag_emuPk, tag_errG, tag_datagen, 
+                    n_rlzs_per_cosmo=1, return_noiseless=False):
 
-def load_data_emuPk(dir_data, tag_datagen, tag_errG, rng=None):
-
-    if rng is None:
-        rng = np.random.default_rng(42)
-
-    fn_emuPk = f'{dir_data}/emuPks{tag_datagen}.npy'
-    fn_emuPk_params = f'{dir_data}/emuPks_params{tag_datagen}.txt'
-    fn_emuk = f'{dir_data}/emuPks_k{tag_datagen}.txt'
-    fn_emuPkerrG = f'{dir_data}/emuPks_errgaussian{tag_datagen}{tag_errG}.npy'
-
-    Pk_noiseless = np.load(fn_emuPk)
-    gaussian_error_pk = np.load(fn_emuPkerrG)
-    theta = np.genfromtxt(fn_emuPk_params, delimiter=',', names=True)
-    param_names = theta.dtype.names
-    # from tuples to 2d array
-    theta = np.array([list(tup) for tup in theta])
+    fn_emuPk = f'{dir_data}/emuPks{tag_emuPk}.npy'
+    fn_emuPkerrG = f'{dir_data}/emuPks_errgaussian{tag_emuPk}{tag_errG}.npy'
+    fn_emuPk_noisy = f'{dir_data}/emuPks_noisy{tag_datagen}.npy'
+    fn_emuPk_params = f'{dir_data}/emuPks_params{tag_emuPk}.txt'
+    fn_emuk = f'{dir_data}/emuPks_k{tag_emuPk}.txt'
+    fn_bias_vector = f'{dir_data}/bias_params.txt'
+    fn_rands = f'{dir_data}/randints{tag_emuPk}.npy'
+        
+    Pk = np.load(fn_emuPk_noisy, allow_pickle=True)   
+    Pk_noiseless = np.load(fn_emuPk, allow_pickle=True)
     k = np.genfromtxt(fn_emuk)
+    bias_vector = np.loadtxt(fn_bias_vector)
+    random_ints = np.load(fn_rands, allow_pickle=True)
+
+    theta_noiseless = np.genfromtxt(fn_emuPk_params, delimiter=',', names=True)
+    param_names = theta_noiseless.dtype.names
+    theta_noiseless = np.array([list(tup) for tup in theta_noiseless]) # from tuples to 2d array
+    gaussian_error_pk_noiseless = np.load(fn_emuPkerrG, allow_pickle=True)
     
-    # add noise
-    Pk = rng.normal(Pk_noiseless, gaussian_error_pk)    
-    
-    print(theta.shape, Pk.shape, k.shape, gaussian_error_pk.shape)
-    # should really do this mask just on training set, but for now have some bad test data for some reason
+    theta = utils.repeat_arr_rlzs(theta_noiseless, n_rlzs=n_rlzs_per_cosmo)
+    gaussian_error_pk = utils.repeat_arr_rlzs(gaussian_error_pk_noiseless, n_rlzs=n_rlzs_per_cosmo)
+
     mask = np.all(Pk>0, axis=0)
     Pk = Pk[:,mask]
+    Pk_noiseless = Pk_noiseless[:,mask]
     gaussian_error_pk = gaussian_error_pk[:,mask]
+    gaussian_error_pk_noiseless = gaussian_error_pk_noiseless[:,mask]
     k = k[mask]
     
-    return theta, Pk, gaussian_error_pk, k, param_names
+    if return_noiseless:
+        return theta, Pk, gaussian_error_pk, k, param_names, bias_vector, random_ints, \
+               theta_noiseless, Pk_noiseless, gaussian_error_pk_noiseless
+    
+    else:
+        return theta, Pk, gaussian_error_pk, k, param_names, bias_vector, random_ints
+
+
+# def load_data_emuPk(dir_data, tag_datagen, tag_errG, rng=None,
+#                     n_rlzs_per_cosmo=1):
+
+#     if rng is None:
+#         rng = np.random.default_rng(42)
+
+#     fn_emuPk = f'{dir_data}/emuPks{tag_datagen}.npy'
+#     fn_emuPk_params = f'{dir_data}/emuPks_params{tag_datagen}.txt'
+#     fn_emuk = f'{dir_data}/emuPks_k{tag_datagen}.txt'
+#     fn_emuPkerrG = f'{dir_data}/emuPks_errgaussian{tag_datagen}{tag_errG}.npy'
+
+#     Pk_noiseless = np.load(fn_emuPk)
+#     gaussian_error_pk = np.load(fn_emuPkerrG)
+#     theta = np.genfromtxt(fn_emuPk_params, delimiter=',', names=True)
+#     param_names = theta.dtype.names
+#     # from tuples to 2d array
+#     theta = np.array([list(tup) for tup in theta])
+#     k = np.genfromtxt(fn_emuk)
+#     print(theta.shape, Pk_noiseless.shape, k.shape, gaussian_error_pk.shape)
+    
+#     # add noise
+#     #Pk = rng.normal(Pk_noiseless, gaussian_error_pk)    
+#     # generate more shape- doing this hackily for now to keep same realizations as mcmc for first set
+#     #Pk = np.empty(Pk_noiseless.shape)
+#     Pk = rng.normal(Pk_noiseless, gaussian_error_pk)    
+#     for _ in range(n_rlzs_per_cosmo-1):
+#         # i think first set should be equiv to orig?
+#         Pk_wnoise = rng.normal(Pk_noiseless, gaussian_error_pk)    
+#         Pk = np.vstack((Pk, Pk_wnoise))
+#     # repeat theta, err arrs
+#     theta = np.repeat(theta, n_rlzs_per_cosmo, axis=0)
+#     gaussian_error_pk = np.repeat(gaussian_error_pk, n_rlzs_per_cosmo, axis=0)
+    
+#     print('After rlzs:', theta.shape, Pk.shape, k.shape, gaussian_error_pk.shape)
+#     # should really do this mask just on training set, but for now have some bad test data for some reason
+#     mask = np.all(Pk>0, axis=0)
+#     Pk = Pk[:,mask]
+#     gaussian_error_pk = gaussian_error_pk[:,mask]
+#     k = k[mask]
+    
+#     return theta, Pk, gaussian_error_pk, k, param_names
 
 
 

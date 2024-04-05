@@ -65,15 +65,18 @@ def setup_cosmo_emu(cosmo='quijote'):
 
 
 
-def load_emu():
-    #emu = baccoemu.Lbias_expansion(verbose=False)
-    #fn_emu = '/dipc_storage/cosmosims/data_share/lbias_emulator/lbias_emulator2.0.0'
-    fn_emu = '/cosmos_storage/cosmosims/data_share/lbias_emulator/lbias_emulator2.0.0'
-    emu = baccoemu.Lbias_expansion(verbose=False, 
-                                nonlinear_emu_path=fn_emu,
-                                nonlinear_emu_details='details.pickle',
-                                nonlinear_emu_field_name='NN_n',
-                                nonlinear_emu_read_rotation=False)
+def load_emu(emu_name='2.0'):
+    if emu_name=='public':
+        emu = baccoemu.Lbias_expansion(verbose=False)
+    elif emu_name=='2.0':
+        fn_emu = '/cosmos_storage/cosmosims/data_share/lbias_emulator/lbias_emulator2.0.0'
+        emu = baccoemu.Lbias_expansion(verbose=False, 
+                                    nonlinear_emu_path=fn_emu,
+                                    nonlinear_emu_details='details.pickle',
+                                    nonlinear_emu_field_name='NN_n',
+                                    nonlinear_emu_read_rotation=False)
+    else:
+        raise ValueError(f'Emulator {emu_name} not recognized!')
     emu_param_names = emu.emulator['nonlinear']['keys']
     emu_bounds =  emu.emulator['nonlinear']['bounds']
     return emu, emu_bounds, emu_param_names
@@ -159,3 +162,8 @@ def get_samples_dynesty(idx_obs, tag_inf):
     samples = resample_equal(results_dynesty.samples, weights)
 
     return samples
+
+
+def repeat_arr_rlzs(arr, n_rlzs=1):
+    arr_repeat = np.repeat(arr, n_rlzs, axis=0)
+    return arr_repeat
