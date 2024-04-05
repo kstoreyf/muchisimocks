@@ -31,7 +31,6 @@ def main():
     # train test split, and number of rlzs per cosmo
     n_rlzs_per_cosmo = 5
     n_train = 1000
-    #n_train = 1000*n_rlzs_per_cosmo
     n_val = 250
     n_test = 1000
 
@@ -39,7 +38,6 @@ def main():
     data_mode = 'emuPk'
     tag_emuPk = '_2param'
     tag_errG = f'_boxsize500'
-    n_rlzs_per_cosmo = 5
     tag_datagen = f'{tag_emuPk}{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
     tag_inf = '_'+data_mode + tag_datagen
     
@@ -91,7 +89,6 @@ def main():
     ### Run inference
     if run_moment:
         tag_inf += f'_ntrain{n_train}'
-        tag_inf += f'_nrlzs{n_rlzs_per_cosmo}'
         moment_network = mn.MomentNetwork(theta_train=theta_train, y_train=y_train_scaled, y_err_train=y_err_train_scaled,
                             theta_val=theta_val, y_val=y_val_scaled, y_err_val=y_err_val_scaled,
                             theta_test=theta_test, y_test=y_test_scaled, y_err_test=y_err_test_scaled,
