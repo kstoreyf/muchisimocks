@@ -3,6 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import bacco
 
+os.environ["MKL_SERVICE_FORCE_INTEL"] = str(1)
+
+
 def fv2bro(t_fv_field) :
     '''Returns back row ordered array (shape ngrid * ngrid * ngrid, 3) from front vector (shape 3, ngrid, ngrid, ngrid)'''
     return np.reshape(t_fv_field, (3, int(t_fv_field.size / 3))).T
@@ -17,6 +20,7 @@ bacco.configuration.update({'scaling' : {'disp_ngrid' : npart}})
 start_cosmo = 0
 end_cosmo = 500
 
+tag_m2m = ''
 for cind in range(start_cosmo,end_cosmo):
     inpath = '/dipc/kstoreyf/muchisimocks/data/cosmolib/'
     cospars = np.loadtxt(inpath+'LH'+str(cind)+'/cosmo_'+str(cind)+'.txt')
@@ -44,7 +48,7 @@ for cind in range(start_cosmo,end_cosmo):
 
 
     # CREATE A ZA SIMULATION
-
+    print("Generating ZA sim")
     sim, disp_field = bacco.utils.create_lpt_simulation(cosmo, boxsize, Nmesh=npart, Seed=Seed,
                                                         FixedInitialAmplitude=False,InitialPhase=0, 
                                                         expfactor=1, LPT_order=1, order_by_order=None,
@@ -53,16 +57,21 @@ for cind in range(start_cosmo,end_cosmo):
     
     norm=npart**3.
 
+    print("Saving sims and params")
     np.save('ZA_disp.npy', disp_field,allow_pickle=True)
     np.save('lin_field.npy', sim.linear_field[0]*norm,allow_pickle=True)
     #np.save('ZA_vel.npy', sim.sdm['vel'].reshape((3,512,512,512)), allow_pickle=True)
     np.savetxt('cosmo_pars.txt', pars_arr.T)
 
     # RUN MAP2MAP
-
+    print("Running map2map")
     ## Positions
-    os.system('python m2m.py test --test-in-patterns "ZA_disp.npy" --test-tgt-patterns "ZA_disp.npy" --in-norms "cosmology.dis" --tgt-norms "cosmology.dis" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "map2map/weights/d2d_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
+    # if i don't pass num-threads, it tries to read from slurm, but i'm not running w slurm
+    
+    # os.system('python m2m.py test --test-in-patterns "ZA_disp.npy" --test-tgt-patterns "ZA_disp.npy" --in-norms "cosmology.dis" --tgt-norms "cosmology.dis" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "map2map/weights/d2d_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
+    os.system('python m2m.py test --num-threads 12 --test-in-patterns "ZA_disp.npy" --test-tgt-patterns "ZA_disp.npy" --in-norms "cosmology.dis" --tgt-norms "cosmology.dis" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "map2map/weights/d2d_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
 
+    print("Renaming map2map result")
     os.system('mv ._out.npy pred_disp.npy')
 
     ## Velocities
@@ -73,15 +82,17 @@ for cind in range(start_cosmo,end_cosmo):
 
     # COMPUTE BIAS MODEL
 
-
+    print("Reloading map2map result")
     ## Read displacement, velocities and linear density
     pred_disp = np.load('pred_disp.npy')
     #velocities = fv2bro(np.load('pred_vel.npy')).copy(order='C')
     dens_lin = np.load('lin_field.npy')
 
     ## Create regular grid and displace particles
+    print("Generating grid")
     grid = bacco.visualization.uniform_grid(npix=npart, L=boxsize, ndim=3, bounds=False)
 
+    print("Adding predicted displacements")
     pred_pos = bacco.scaler.add_displacement(None,
                                      pred_disp,
                                      box=boxsize,
@@ -101,6 +112,7 @@ for cind in range(start_cosmo,end_cosmo):
     damping_scale = 0.7 #k_nyq
     interlacing = False
 
+    print("Setting up bias model")
     bmodel = bacco.BiasModel(sim=sim, linear_delta=dens_lin, ngrid=npart, ngrid1=None, 
                              sdm=False, mode="dm",
                              npart_for_fake_sim=npart, damping_scale=damping_scale, 
@@ -109,10 +121,11 @@ for cind in range(start_cosmo,end_cosmo):
                              )
 
     ## Compute lagrangian fields
-
+    print("Computing lagrangian fields")
     bias_fields = bmodel.bias_terms_lag()
 
     ## Compute eulerian fields
+    print("Computing eulerian fields")
     bias_terms_eul_pred=[]
     for ii in range(0,len(bias_fields)):
         bias_terms_pred = bacco.statistics.compute_mesh(ngrid=npart, box=boxsize, pos=pred_pos, 
@@ -121,6 +134,11 @@ for cind in range(start_cosmo,end_cosmo):
         bias_terms_eul_pred.append(bias_terms_pred)
     bias_terms_eul_pred = np.array(bias_terms_eul_pred)
     
+    print("Saving full eulerian fields")
+    outpath = f'/dipc/kstoreyf/muchisimocks/data/cosmolib{tag_m2m}/'
+    np.save(outpath+'LH'+str(cind)+'/Eulerian_fields_lr_'+str(cind)+'_full.npy', bias_terms_eul_pred, allow_pickle=True)
+    
+    print("Cutting k-modes")
     from bacco.visualization import np_get_kmesh
     import pyfftw
     ngrid=512
@@ -150,6 +168,7 @@ for cind in range(start_cosmo,end_cosmo):
     #######################################
 
     ## Save eulerian fields
-    outpath = '/dipc/kstoreyf/muchisimocks/data/cosmolib/'
+    print("Saving cut eulerian fields")
+    outpath = f'/dipc/kstoreyf/muchisimocks/data/cosmolib{tag_m2m}/'
     np.save(outpath+'LH'+str(cind)+'/Eulerian_fields_lr_'+str(cind)+'.npy', bias_terms_eul_pred_kcut, allow_pickle=True)
 
