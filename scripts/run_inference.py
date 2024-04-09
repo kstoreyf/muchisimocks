@@ -29,7 +29,7 @@ def main():
     idxs_obs = np.arange(100)
 
     # train test split, and number of rlzs per cosmo
-    n_rlzs_per_cosmo = 5
+    n_rlzs_per_cosmo = 9
     n_train = 1000
     n_val = 250
     n_test = 1000
@@ -45,6 +45,7 @@ def main():
     theta, y, y_err, k, param_names, bias_params, random_ints = load_data_emuPk(dir_data, 
                                                      tag_emuPk, tag_errG, tag_datagen,
                                                      n_rlzs_per_cosmo=n_rlzs_per_cosmo)
+    print(theta.shape, y.shape, y_err.shape, random_ints.shape)
 
     ### Train-val-test split
     if data_mode == 'emuPk':
@@ -165,7 +166,7 @@ def load_data_emuPk(dir_data, tag_emuPk, tag_errG, tag_datagen,
     
     theta = utils.repeat_arr_rlzs(theta_noiseless, n_rlzs=n_rlzs_per_cosmo)
     gaussian_error_pk = utils.repeat_arr_rlzs(gaussian_error_pk_noiseless, n_rlzs=n_rlzs_per_cosmo)
-
+    
     mask = np.all(Pk>0, axis=0)
     Pk = Pk[:,mask]
     Pk_noiseless = Pk_noiseless[:,mask]

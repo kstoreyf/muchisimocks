@@ -15,7 +15,7 @@ def main():
 
     box_size = 500.
     tag_errG = f'_boxsize{int(box_size)}'
-    n_rlzs_per_cosmo = 1
+    n_rlzs_per_cosmo = 9
     tag_datagen = f'{tag_emuPk}{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
 
     fn_emuPk = f'../data/emuPks/emuPks{tag_emuPk}.npy'

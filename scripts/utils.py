@@ -165,5 +165,5 @@ def get_samples_dynesty(idx_obs, tag_inf):
 
 
 def repeat_arr_rlzs(arr, n_rlzs=1):
-    arr_repeat = np.tile(arr, (5,1))
+    arr_repeat = np.tile(arr, (n_rlzs,1))
     return arr_repeat

@@ -132,7 +132,8 @@ def plot_hists_cov(theta_true_arr, theta_pred_arr, covs_pred_arr, param_labels,
     plt.xlabel(r'$\chi^2$')
     plt.ylabel(r'$N$ in bin')
     for i in range(chi2s_arr.shape[0]):
-        plt.hist(chi2s_arr[i], bins=np.linspace(xmin, xmax, nbins), color=color_arr[i], 
+        plt.hist(chi2s_arr[i], bins=np.linspace(xmin, xmax, nbins), 
+                 color=color_arr[i], label=label_arr[i],
                  alpha=alpha, density=True, lw=lw, histtype=histtype)
     df = n_params #TODO check ??
     plt.plot(x_normal, chi2.pdf(x_normal, df), color='black', lw=1, label=rf'$\chi^2$ PDF, df={df}')
