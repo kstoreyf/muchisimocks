@@ -10,37 +10,45 @@ import bacco
 
 
 def main():
-    #compute_pks_muchisimocks()
-    compute_pks_quijote_LH()
+    compute_pks_muchisimocks()
+    #compute_pks_quijote_LH()
     
 
 def compute_pks_muchisimocks():
-    dir_mocks = '../data/cosmolib'
-    tag_pk = '_b1000'
-    dir_pks = f'../data/pks_cosmolib/pks{tag_pk}'
-    overwrite = False
+    tag_mocks = '_HR'
+    dir_mocks = f'../data/cosmolib{tag_mocks}'
+    tag_pk = '_b0000'
+    dir_pks = f'../data/pks_cosmolib/pks{tag_mocks}{tag_pk}'
+    tag_fields = '_hr'
+    #tag_fields = '_lr'
+    tag_fields_extra = '_2GpcBox'
+    overwrite = True
     
     Path.mkdir(Path(dir_pks), parents=True, exist_ok=True)
-    
-    bias_vector = [1., 0., 0., 0.]
-    n_grid = 128
-    n_grid_orig = 512
-    box_size = 1000.0
-    
+
+    bias_vector = [0., 0., 0., 0.]    
     fn_bias_vector = f'{dir_pks}/bias_params.txt'
     np.savetxt(fn_bias_vector, bias_vector)
+
+    #n_grid = 128
+    n_grid_orig = None #compute from fields, if we don't know that it's different
+    #n_grid_orig = 512
+    if '2Gpc' in tag_fields_extra:
+        box_size = 2000.0
+    else:
+        box_size = 1000.0
     
     # order of saved cosmo param files
     param_names = ['omega_cold', 'sigma_8', 'h', 'omega_baryon', 'n_s', 'seed']
 
-    #n_lib = 1
-    n_lib = 500
+    n_lib = 1
+    #n_lib = 500
     for idx_LH in range(n_lib):
         if idx_LH%10==0:
             print(idx_LH)
-        fn_fields = f'{dir_mocks}/LH{idx_LH}/Eulerian_fields_lr_{idx_LH}.npy'
+        fn_fields = f'{dir_mocks}/LH{idx_LH}/Eulerian_fields{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
         fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
-        fn_pk = f'{dir_pks}/pk_{idx_LH}.npy'
+        fn_pk = f'{dir_pks}/pk_{idx_LH}{tag_fields_extra}.npy'
         if os.path.exists(fn_pk) and not overwrite:
             print(f"P(k) for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing")
             continue
@@ -48,13 +56,16 @@ def compute_pks_muchisimocks():
         start = time.time()
         # normalize by 512 because that's the original ngrid size
         bias_terms_eul = np.load(fn_fields)
+        if n_grid_orig is None:
+            n_grid_orig = bias_terms_eul.shape[-1]
+        print(f"n_grid_orig = {n_grid_orig}")
         tracer_field = get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
         
         param_vals = np.loadtxt(fn_params)
         param_dict = dict(zip(param_names, param_vals))
         cosmo = get_cosmo(param_dict)
         
-        compute_pk(tracer_field, cosmo, box_size, n_grid, fn_pk=fn_pk)
+        compute_pk(tracer_field, cosmo, box_size, fn_pk=fn_pk)
         end = time.time()
         print(f"Computed P(k) for idx_LH={idx_LH} in time {end-start} s")
     
@@ -92,7 +103,7 @@ def compute_pks_quijote_LH():
                       1510,1512,1513,1515,1517,1533,1553,1567,1568,1599,1622,1642,1657,1659,1667])
 
     for idx_LH in idxs_LH:
-    #for idx_LH in idxs_LH[:5]:
+    #for idx_LH in idxs_LH[:1]:
         if idx_LH%10==0:
             print(idx_LH)
         idx_LH_str = f'{idx_LH:04}'
@@ -133,7 +144,7 @@ def compute_pks_quijote_LH():
         # compute sim pk
         start = time.time()
         tracer_field_sim = get_tracer_field(bias_terms_eul_sim, bias_vector, n_grid_norm=n_grid_orig)
-        compute_pk(tracer_field_sim, cosmo, box_size, n_grid,
+        compute_pk(tracer_field_sim, cosmo, box_size,
                    k_min=k_min, k_max=k_max, n_bins=n_bins,
                    fn_pk=fn_pk_sim)
         end = time.time()
@@ -160,11 +171,11 @@ def compute_pks_quijote_LH():
         # compute map2map pred pk
         start = time.time()
         tracer_field_pred = get_tracer_field(bias_terms_eul_pred, bias_vector, n_grid_norm=n_grid_orig)
-        compute_pk(tracer_field_pred, cosmo, box_size, n_grid,
+        compute_pk(tracer_field_pred, cosmo, box_size,
                    k_min=k_min, k_max=k_max, n_bins=n_bins,
                    fn_pk=fn_pk_pred)
         end = time.time()
-        print(f"Computed P(k) for orig sim for idx_LH={idx_LH} in time {end-start} s")
+        print(f"Computed P(k) for map2map pred for idx_LH={idx_LH} in time {end-start} s")
     
     
 def displacements_to_bias_fields(dens_lin, disp, n_grid, box_size, 
@@ -177,8 +188,20 @@ def displacements_to_bias_fields(dens_lin, disp, n_grid, box_size,
 
     bacco.configuration.update({'number_of_threads': n_threads})
 
-    bmodel = bacco.BiasModel(sim=None, linear_delta=dens_lin[0], ngrid=n_grid, ngrid1=n_grid,
-                            sdm=True, mode="dm", BoxSize=box_size,
+    #print("Generating grid")
+    grid = bacco.visualization.uniform_grid(npix=n_grid, L=box_size, ndim=3, bounds=False)
+
+    #print("Adding predicted displacements")
+    pos = bacco.scaler.add_displacement(None,
+                                        disp,
+                                        box=box_size,
+                                        pos=grid.reshape(-1,3),
+                                        vel=None,
+                                        vel_factor=0,
+                                        verbose=False)[0]
+
+    bmodel = bacco.BiasModel(sim=None, linear_delta=dens_lin[0], ngrid=n_grid, ngrid1=None,
+                            sdm=False, mode="dm", BoxSize=box_size,
                             npart_for_fake_sim=n_grid, damping_scale=damping_scale,
                             bias_model='expansion', deposit_method="cic",
                             use_displacement_of_nn=False, interlacing=False,
@@ -188,7 +211,7 @@ def displacements_to_bias_fields(dens_lin, disp, n_grid, box_size,
 
     bias_terms_eul = []
     for ii in range(0,len(bias_fields)):
-        bias_terms = bacco.statistics.compute_mesh(ngrid=n_grid, box=box_size, pos=disp,
+        bias_terms = bacco.statistics.compute_mesh(ngrid=n_grid, box=box_size, pos=pos,
                                 mass = (bias_fields[ii]).flatten(), deposit_method='cic',
                                 interlacing=False)
         bias_terms_eul.append(bias_terms)
@@ -212,10 +235,14 @@ def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=512):
     return tracer_field_eul_norm
 
 
-def compute_pk(tracer_field, cosmo, box_size, n_grid,
+def compute_pk(tracer_field, cosmo, box_size,
                k_min=0.01, k_max=0.4, n_bins=30, log_binning=True,
                n_threads=8, fn_pk=None):
 
+    # n_grid has to match the tracer field size!
+    n_grid = tracer_field.shape[-1]
+    print("To compute pk, using n_grid = ", n_grid)
+    
     args_power = {'ngrid':n_grid,
                 'box':box_size,
                 'cosmology':cosmo,
@@ -253,10 +280,10 @@ def get_cosmo(param_dict):
     if 'omega_m' in param_dict:
         omega_cdm = param_dict['omega_m']
     elif 'omega_cold' in param_dict:
-        omega_cdm = param_dict['omega_cold']-param_dict['omega_baryon'],
+        omega_cdm = param_dict['omega_cold']-param_dict['omega_baryon']
     else:
         raise ValueError("param_dict must include omega_m or omega_cold!")
-    
+
     cosmopars = dict(
             omega_cdm=omega_cdm,
             omega_baryon=param_dict['omega_baryon'],

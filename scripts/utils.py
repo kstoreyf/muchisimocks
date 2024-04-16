@@ -5,14 +5,16 @@ import os
 import baccoemu
 
 
-param_label_dict = {'omega_cold': r'$\Omega_\mathrm{m}$',
+param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
                 'sigma8_cold': r'$\sigma_{8}$',
                 'sigma_8': r'$\sigma_{8}$',
                 'hubble': r'$h$',
                 'h': r'$h$',
                 'ns': r'$n_\mathrm{s}$',
                 'n_s': r'$n_\mathrm{s}$',
-                'omega_baryon': r'$\Omega_\mathrm{b}$',}
+                'omega_baryon': r'$\Omega_\mathrm{b}$',
+                'omega_m': r'$\Omega_\mathrm{m}$',
+                }
 
 color_dict_methods = {'mn': 'blue',
                       'emcee': 'purple',
@@ -65,16 +67,27 @@ def setup_cosmo_emu(cosmo='quijote'):
 
 
 
-def load_emu(emu_name='2.0'):
-    if emu_name=='public':
+def load_emu(emu_name='lbias_2.0'):
+    dir_emus_lbias = '/cosmos_storage/cosmosims/data_share'
+    dir_emus_mpk = '/cosmos_storage/cosmosims/datashare'
+    if emu_name=='lbias_public':
         emu = baccoemu.Lbias_expansion(verbose=False)
-    elif emu_name=='2.0':
-        fn_emu = '/cosmos_storage/cosmosims/data_share/lbias_emulator/lbias_emulator2.0.0'
+    elif emu_name=='lbias_2.0':
+        fn_emu = f'{dir_emus_lbias}/lbias_emulator/lbias_emulator2.0.0'
         emu = baccoemu.Lbias_expansion(verbose=False, 
                                     nonlinear_emu_path=fn_emu,
                                     nonlinear_emu_details='details.pickle',
                                     nonlinear_emu_field_name='NN_n',
                                     nonlinear_emu_read_rotation=False)
+    elif emu_name=='mpk':
+        standardspace_folder = f'{dir_emus_mpk}/mpk_baccoemu_new/mpk_oldsims_standard_emu_npca7_neurons_400_400_dropout_0.0_bn_False/'
+        emu = baccoemu.Matter_powerspectrum(nonlinear_emu_path=standardspace_folder, 
+                                                     nonlinear_emu_details='details.pickle')
+    elif emu_name=='mpk_extended':
+        extendedspace_folder = f'{dir_emus_mpk}/mpk_baccoemu_new/mpk_extended_emu_npca_20_batch_size_256_nodes_400_400_dropout_0.0_batch_norm_False/'
+        emu = baccoemu.Matter_powerspectrum(nonlinear_emu_path=extendedspace_folder, 
+                                            nonlinear_emu_details='details.pickle')
+        
     else:
         raise ValueError(f'Emulator {emu_name} not recognized!')
     emu_param_names = emu.emulator['nonlinear']['keys']
