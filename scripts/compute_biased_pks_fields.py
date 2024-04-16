@@ -10,8 +10,8 @@ import bacco
 
 
 def main():
-    compute_pks_muchisimocks()
-    #compute_pks_quijote_LH()
+    #compute_pks_muchisimocks()
+    compute_pks_quijote_LH()
     
 
 def compute_pks_muchisimocks():
@@ -72,14 +72,16 @@ def compute_pks_muchisimocks():
         print(f"Computed P(k) for idx_LH={idx_LH} in time {end-start} s")
     
 
-# TODO: split into 2 functions, first gen and save bias fields, then separate to compute pks
 def compute_pks_quijote_LH():
     dir_mocks = '/cosmos_storage/home/mpelle/Yin_data/Quijote'
     dir_fields = '../data/quijote_LH'
     tag_pk = '_b0000'
     dir_pks_sim = f'../data/pks_quijote_LH/pks_sim{tag_pk}'
     dir_pks_pred = f'../data/pks_quijote_LH/pks_pred{tag_pk}'
-    overwrite = False
+    overwrite_fields = False
+    overwrite_pks = True
+    compute_sim = True
+    compute_pred = True
     
     Path.mkdir(Path(dir_pks_sim), parents=True, exist_ok=True)
     Path.mkdir(Path(dir_pks_pred), parents=True, exist_ok=True)
@@ -104,80 +106,112 @@ def compute_pks_quijote_LH():
                       1157,1173,1175,1219,1222,1299,1309,1314,1317,1331,1365,1372,1378,1391,1397,1418,1444,1459,
                       1510,1512,1513,1515,1517,1533,1553,1567,1568,1599,1622,1642,1657,1659,1667])
 
-    for idx_LH in idxs_LH:
-    #for idx_LH in idxs_LH[:1]:
-        if idx_LH%10==0:
-            print(idx_LH)
-        idx_LH_str = f'{idx_LH:04}'
-        
-        # SIMULATED
-        fn_pk_sim = f'{dir_pks_sim}/pk_{idx_LH_str}.npy'
-        if os.path.exists(fn_pk_sim) and not overwrite:
-            print(f"P(k) for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing")
-            continue
-    
-        # set up needed for both sim and pred 
-        k_nyq = np.pi * n_grid / box_size
-        damping_scale = k_nyq
-        k_min = 0.01
-        k_max = 1
-        n_bins = 50
-        fn_dens_lin = f'{dir_mocks}/LH{idx_LH_str}/lin_den_{idx_LH_str}.npy'
-        dens_lin = np.load(fn_dens_lin)
+    if compute_sim:
 
-        # get params
-        fn_params = f'{dir_mocks}/LH{idx_LH_str}/param_{idx_LH_str}.txt'
-        param_vals = np.loadtxt(fn_params)
-        param_dict = dict(zip(param_names, param_vals))
-        cosmo = get_cosmo(param_dict)
-        
-        # get fields sim
-        fn_disp_sim = f'{dir_mocks}/LH{idx_LH_str}/dis_{idx_LH_str}.npy'
-        fn_fields_sim = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields_sim_{idx_LH_str}.npy'
-        Path.mkdir(Path(f'{dir_fields}/LH{idx_LH_str}'), parents=True, exist_ok=True)
-    
-        disp_sim = np.load(fn_disp_sim)
-        start = time.time()
-        bias_terms_eul_sim = displacements_to_bias_fields(dens_lin, disp_sim, n_grid, box_size, 
-                                    damping_scale=damping_scale, fn_fields=fn_fields_sim)
-        end = time.time()
-        print(f"Generated bias fields for orig sim for idx_LH={idx_LH} in time {end-start} s")
+        for idx_LH in idxs_LH:
+
+            if idx_LH%10==0:
+                print(idx_LH)
+            idx_LH_str = f'{idx_LH:04}'
+                
+            # check fields existence
+            fn_fields_sim = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields_sim_{idx_LH_str}.npy'
+            if os.path.exists(fn_fields_sim) and not overwrite_fields:
+                print(f"Fields for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite_fields}, loading")
+                bias_terms_eul_sim = np.load(fn_fields_sim, allow_pickle=True)
+            else:        
+                print(f"Computing fields for orig sim for idx_LH={idx_LH}")
+
+                fn_dens_lin = f'{dir_mocks}/LH{idx_LH_str}/lin_den_{idx_LH_str}.npy'
+                dens_lin = np.load(fn_dens_lin)
+                
+                # get fields sim
+                fn_disp_sim = f'{dir_mocks}/LH{idx_LH_str}/dis_{idx_LH_str}.npy'
+                Path.mkdir(Path(f'{dir_fields}/LH{idx_LH_str}'), parents=True, exist_ok=True)
             
-        # compute sim pk
-        start = time.time()
-        tracer_field_sim = get_tracer_field(bias_terms_eul_sim, bias_vector, n_grid_norm=n_grid_orig)
-        compute_pk(tracer_field_sim, cosmo, box_size,
-                   k_min=k_min, k_max=k_max, n_bins=n_bins,
-                   fn_pk=fn_pk_sim)
-        end = time.time()
-        print(f"Computed P(k) for orig sim for idx_LH={idx_LH} in time {end-start} s")
+                disp_sim = np.load(fn_disp_sim)
+                start = time.time()
+                bias_terms_eul_sim = displacements_to_bias_fields(dens_lin, disp_sim, n_grid, box_size, 
+                                            damping_scale=damping_scale, fn_fields=fn_fields_sim)
+                end = time.time()
+                print(f"Generated bias fields for orig sim for idx_LH={idx_LH} in time {end-start} s")
+                
+            # check pk existence
+            fn_pk_sim = f'{dir_pks_sim}/pk_{idx_LH_str}.npy'
+            if os.path.exists(fn_pk_sim) and not overwrite_pks:
+                print(f"P(k) for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite_pks}, continuing")
+                continue
+            
+            # compute sim pk
+            k_nyq = np.pi * n_grid / box_size
+            damping_scale = k_nyq
+            k_min, k_max, n_bins = 0.01, 1, 50
+            
+            # get params
+            fn_params = f'{dir_mocks}/LH{idx_LH_str}/param_{idx_LH_str}.txt'
+            param_vals = np.loadtxt(fn_params)
+            param_dict = dict(zip(param_names, param_vals))
+            cosmo = get_cosmo(param_dict)
+            
+            start = time.time()
+            tracer_field_sim = get_tracer_field(bias_terms_eul_sim, bias_vector, n_grid_norm=n_grid_orig)
+            compute_pk(tracer_field_sim, cosmo, box_size,
+                    k_min=k_min, k_max=k_max, n_bins=n_bins,
+                    fn_pk=fn_pk_sim)
+            end = time.time()
+            print(f"Computed P(k) for orig sim for idx_LH={idx_LH} in time {end-start} s")
 
-        # PREDICTED
-        fn_pk_pred = f'{dir_pks_pred}/pk_{idx_LH_str}.npy'
-        if os.path.exists(fn_pk_pred) and not overwrite:
-            print(f"P(k) for map2map prediction for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing")
-            continue
+    if compute_pred:
 
-        # get fields map2map pred
-        fn_disp_pred = f'{dir_mocks}/LH{idx_LH_str}/pred_pos_{idx_LH_str}.npy'
-        fn_fields_pred = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields_pred_{idx_LH_str}.npy'
-        Path.mkdir(Path(f'{dir_fields}/LH{idx_LH_str}'), parents=True, exist_ok=True)
+        for idx_LH in idxs_LH:
 
-        disp_pred = np.load(fn_disp_pred)
-        start = time.time()
-        bias_terms_eul_pred = displacements_to_bias_fields(dens_lin, disp_pred, n_grid, box_size, 
-                                    damping_scale=damping_scale, fn_fields=fn_fields_pred)
-        end = time.time()
-        print(f"Generated bias fields for map2map pred for idx_LH={idx_LH} in time {end-start} s")
-         
-        # compute map2map pred pk
-        start = time.time()
-        tracer_field_pred = get_tracer_field(bias_terms_eul_pred, bias_vector, n_grid_norm=n_grid_orig)
-        compute_pk(tracer_field_pred, cosmo, box_size,
-                   k_min=k_min, k_max=k_max, n_bins=n_bins,
-                   fn_pk=fn_pk_pred)
-        end = time.time()
-        print(f"Computed P(k) for map2map pred for idx_LH={idx_LH} in time {end-start} s")
+            if idx_LH%10==0:
+                print(idx_LH)
+            idx_LH_str = f'{idx_LH:04}'            
+
+            # check fields existence
+            fn_fields_pred = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields_pred_{idx_LH_str}.npy'
+            if os.path.exists(fn_fields_pred) and not overwrite_fields:
+                print(f"Fields for prediction for idx_LH={idx_LH} exists and overwrite={overwrite_fields}, loading")
+                bias_terms_eul_pred = np.load(fn_fields_pred, allow_pickle=True)
+            else:        
+                print(f"Computing fields for orig sim for idx_LH={idx_LH}")
+                
+                # get fields map2map pred
+                fn_disp_pred = f'{dir_mocks}/LH{idx_LH_str}/pred_pos_{idx_LH_str}.npy'
+                Path.mkdir(Path(f'{dir_fields}/LH{idx_LH_str}'), parents=True, exist_ok=True)
+
+                disp_pred = np.load(fn_disp_pred)
+                start = time.time()
+                bias_terms_eul_pred = displacements_to_bias_fields(dens_lin, disp_pred, n_grid, box_size, 
+                                            damping_scale=damping_scale, fn_fields=fn_fields_pred)
+                end = time.time()
+                print(f"Generated bias fields for map2map pred for idx_LH={idx_LH} in time {end-start} s")
+                
+            # PREDICTED
+            fn_pk_pred = f'{dir_pks_pred}/pk_{idx_LH_str}.npy'
+            if os.path.exists(fn_pk_pred) and not overwrite_pks:
+                print(f"P(k) for map2map prediction for idx_LH={idx_LH} exists and overwrite={overwrite_pks}, continuing")
+                continue
+            
+            # compute map2map pred pk
+            k_nyq = np.pi * n_grid / box_size
+            damping_scale = k_nyq
+            k_min, k_max, n_bins = 0.01, 1, 50
+            
+            # get params
+            fn_params = f'{dir_mocks}/LH{idx_LH_str}/param_{idx_LH_str}.txt'
+            param_vals = np.loadtxt(fn_params)
+            param_dict = dict(zip(param_names, param_vals))
+            cosmo = get_cosmo(param_dict)
+            
+            start = time.time()
+            tracer_field_pred = get_tracer_field(bias_terms_eul_pred, bias_vector, n_grid_norm=n_grid_orig)
+            compute_pk(tracer_field_pred, cosmo, box_size,
+                    k_min=k_min, k_max=k_max, n_bins=n_bins,
+                    fn_pk=fn_pk_pred)
+            end = time.time()
+            print(f"Computed P(k) for map2map pred for idx_LH={idx_LH} in time {end-start} s")
     
     
 def displacements_to_bias_fields(dens_lin, disp, n_grid, box_size, 
@@ -280,7 +314,7 @@ def get_cosmo(param_dict):
     # (omega_m = omega_cold if no neutrinos) 
     # Om_cdm = Om_cold - Om_baryon
     if 'omega_m' in param_dict:
-        omega_cdm = param_dict['omega_m']
+        omega_cdm = param_dict['omega_m']-param_dict['omega_baryon']
     elif 'omega_cold' in param_dict:
         omega_cdm = param_dict['omega_cold']-param_dict['omega_baryon']
     else:
