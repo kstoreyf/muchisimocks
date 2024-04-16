@@ -15,13 +15,15 @@ def main():
     
 
 def compute_pks_muchisimocks():
-    tag_mocks = '_HR'
+    #tag_mocks = '_HR'
+    tag_mocks = '_FixedPk'
     dir_mocks = f'../data/cosmolib{tag_mocks}'
     tag_pk = '_b0000'
     dir_pks = f'../data/pks_cosmolib/pks{tag_mocks}{tag_pk}'
-    tag_fields = '_hr'
-    #tag_fields = '_lr'
-    tag_fields_extra = '_2GpcBox'
+    #tag_fields = '_hr'
+    tag_fields = '_lr'
+    #tag_fields_extra = '_2GpcBox'
+    tag_fields_extra = ''
     overwrite = True
     
     Path.mkdir(Path(dir_pks), parents=True, exist_ok=True)
@@ -31,8 +33,8 @@ def compute_pks_muchisimocks():
     np.savetxt(fn_bias_vector, bias_vector)
 
     #n_grid = 128
-    n_grid_orig = None #compute from fields, if we don't know that it's different
-    #n_grid_orig = 512
+    #n_grid_orig = None #compute from fields, if we don't know that it's different
+    n_grid_orig = 512
     if '2Gpc' in tag_fields_extra:
         box_size = 2000.0
     else:

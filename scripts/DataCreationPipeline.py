@@ -63,24 +63,24 @@ for cind in range(start_cosmo,end_cosmo):
                                                         phase_type=1, ngenic_phases=True, return_disp=True, 
                                                         sphere_mode=0)
     
-    # norm=npart**3.
+    norm=npart**3.
 
-    # print("Saving sims and params")
-    # np.save('ZA_disp.npy', disp_field,allow_pickle=True)
-    # np.save('lin_field.npy', sim.linear_field[0]*norm,allow_pickle=True)
-    # #np.save('ZA_vel.npy', sim.sdm['vel'].reshape((3,512,512,512)), allow_pickle=True)
-    # np.savetxt('cosmo_pars.txt', pars_arr.T)
+    print("Saving sims and params")
+    np.save('ZA_disp.npy', disp_field,allow_pickle=True)
+    np.save('lin_field.npy', sim.linear_field[0]*norm,allow_pickle=True)
+    #np.save('ZA_vel.npy', sim.sdm['vel'].reshape((3,512,512,512)), allow_pickle=True)
+    np.savetxt('cosmo_pars.txt', pars_arr.T)
 
-    # # RUN MAP2MAP
-    # print("Running map2map")
-    # ## Positions
-    # # if i don't pass num-threads, it tries to read from slurm, but i'm not running w slurm
+    # RUN MAP2MAP
+    print("Running map2map")
+    ## Positions
+    # if i don't pass num-threads, it tries to read from slurm, but i'm not running w slurm
     
-    # # os.system('python m2m.py test --test-in-patterns "ZA_disp.npy" --test-tgt-patterns "ZA_disp.npy" --in-norms "cosmology.dis" --tgt-norms "cosmology.dis" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "map2map/weights/d2d_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
-    # os.system('python m2m.py test --num-threads 12 --test-in-patterns "ZA_disp.npy" --test-tgt-patterns "ZA_disp.npy" --in-norms "cosmology.dis" --tgt-norms "cosmology.dis" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "map2map/weights/d2d_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
+    # os.system('python m2m.py test --test-in-patterns "ZA_disp.npy" --test-tgt-patterns "ZA_disp.npy" --in-norms "cosmology.dis" --tgt-norms "cosmology.dis" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "map2map/weights/d2d_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
+    os.system('python m2m.py test --num-threads 12 --test-in-patterns "ZA_disp.npy" --test-tgt-patterns "ZA_disp.npy" --in-norms "cosmology.dis" --tgt-norms "cosmology.dis" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "map2map/weights/d2d_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
 
-    # print("Renaming map2map result")
-    # os.system('mv ._out.npy pred_disp.npy')
+    print("Renaming map2map result")
+    os.system('mv ._out.npy pred_disp.npy')
 
     ## Velocities
     #os.system('python m2m.py test --test-in-patterns "ZA_vel.npy" --test-tgt-patterns "ZA_vel.npy" --in-norms "cosmology.vel" --tgt-norms "cosmology.vel" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "v2halov_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
