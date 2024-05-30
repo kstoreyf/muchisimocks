@@ -68,8 +68,8 @@ def setup_cosmo_emu(cosmo='quijote'):
 
 
 def load_emu(emu_name='lbias_2.0'):
-    dir_emus_lbias = '/cosmos_storage/cosmosims/data_share'
-    dir_emus_mpk = '/cosmos_storage/cosmosims/datashare'
+    dir_emus_lbias = '/cosmos_storage/data_sharing/data_share'
+    dir_emus_mpk = '/cosmos_storage/data_sharing/datashare'
     if emu_name=='lbias_public':
         emu = baccoemu.Lbias_expansion(verbose=False)
     elif emu_name=='lbias_2.0':
