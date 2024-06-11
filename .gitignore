@@ -1,6 +1,7 @@
 __pycache__
 *.egg-info
 sbi-logs/
+logs/
 
 *nohup*
 
@@ -9,3 +10,5 @@ plots/
 data/
 data/emuPks/
 data/cosmolib/
+
+.vscode/
