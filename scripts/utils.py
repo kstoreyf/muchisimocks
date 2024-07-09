@@ -180,3 +180,71 @@ def get_samples_dynesty(idx_obs, tag_inf):
 def repeat_arr_rlzs(arr, n_rlzs=1):
     arr_repeat = np.tile(arr, (n_rlzs,1))
     return arr_repeat
+
+
+def get_cosmo(param_dict, a_scale=1, sim_name='quijote'):
+    import bacco
+    
+    param_dict_copy = param_dict.copy()
+    
+    if sim_name=='quijote':
+        if 'tau' not in param_dict:
+            param_dict_copy['tau'] = 0.0561
+        if 'neutrino_mass' not in param_dict:
+            param_dict_copy['neutrino_mass'] = 0.0
+        if 'w0' not in param_dict:
+            param_dict_copy['w0'] = -1.0
+        if 'wa' not in param_dict:
+            param_dict_copy['wa'] = 0.0
+            
+    name_twins = {'h': 'hubble',
+                  'sigma_8': 'sigma8',
+                  'n_s': 'ns'}
+    
+    for name_current, name_bacco in name_twins.items():
+        if name_current in param_dict_copy:
+            param_dict_copy[name_bacco] = param_dict_copy.pop(name_current)
+        
+    # omega_m = omega_cold + omega_neutrinos 
+    # (omega_m = omega_cold if no neutrinos) 
+    # Om_cdm = Om_cold - Om_baryon
+    if 'omega_m' in param_dict_copy:
+        omega_cdm = param_dict_copy['omega_m']-param_dict_copy['omega_baryon']
+    elif 'omega_cold' in param_dict_copy:
+        omega_cdm = param_dict_copy['omega_cold']-param_dict_copy['omega_baryon']
+    else:
+        raise ValueError("param_dict must include omega_m or omega_cold!")
+
+    cosmopars = dict(
+            omega_cdm=omega_cdm,
+            omega_baryon=param_dict_copy['omega_baryon'],
+            hubble=param_dict_copy['hubble'],
+            ns=param_dict_copy['ns'],
+            sigma8=param_dict_copy['sigma8'],
+            tau=param_dict_copy['tau'],
+            #A_s=None,
+            neutrino_mass=param_dict_copy['neutrino_mass'],
+            w0=param_dict_copy['w0'],
+            wa=param_dict_copy['wa'],
+        )
+
+    cosmo = bacco.Cosmology(**cosmopars)
+    cosmo.set_expfactor(a_scale)
+    return cosmo
+
+
+def cosmo_bacco_to_cosmo_baccoemu(cosmo):
+    
+    param_names_emu = ['sigma8_cold', 'omega_cold', 'hubble', 'ns', 'omega_baryon', 
+                       'expfactor', 'neutrino_mass', 'w0', 'wa']
+    cosmo_params_emu = {}
+    for param_name_emu in param_names_emu:
+        if param_name_emu=='sigma8_cold':
+            param_bacco = cosmo.pars['sigma8']
+        elif param_name_emu=='expfactor':
+            param_bacco = cosmo.expfactor
+        else:
+            param_bacco = cosmo.pars[param_name_emu]
+        cosmo_params_emu[param_name_emu] = param_bacco
+        
+    return cosmo_params_emu
