@@ -1,11 +1,11 @@
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 from pathlib import Path
 import pyfftw
 import time
 
 import bacco
+import bacco.probabilistic_bias as pb
 
 import utils
 
@@ -17,32 +17,35 @@ def main():
     ngrid = 512
     ngrid_target = 128
 
+    tag_lib = ''
     box_size = 1000.
     n_threads_bacco = 12
-    n_threads_m2m = 1
-
+    n_threads_m2m = 12
+    deconvolve_lr_field = True
+    
+    save_intermeds = True
+    save_hr_field = True
+    
+    idx_LH_start = 0
+    idx_LH_end = 1
+    
+    #previously was '.'; only works if running script from m2m dir
+    dir_m2m = '/dipc/kstoreyf/external/map2map_emu'
+    #dir_lib = f'/dipc/kstoreyf/muchisimocks/data/cosmolib{tag_lib}'
+    dir_lib = f'/cosmos_storage/cosmosims/muchisimocks_lib{tag_lib}'
+    # for now, copying cosmology from the main cosmolib; TODO change this later!
+    dir_cosmopars = '/dipc/kstoreyf/muchisimocks/data/cosmolib'    
+    
     bacco.configuration.update({'pk':{'boltzmann_solver': 'CLASS'}})
     bacco.configuration.update({'pknbody' : {'ngrid'  :  ngrid}})
     bacco.configuration.update({'scaling' : {'disp_ngrid' : ngrid}})
     bacco.configuration.update({'number_of_threads': n_threads_bacco})
 
-    idx_LH_start = 0
-    idx_LH_end = 1
-
-    save_intermeds = True
-
-    tag_lib = '_ksf'
     #tag_lib = '_FixedPk'
     if 'FixedPk' in tag_lib:
         FixedInitialAmplitude = True
     else:
         FixedInitialAmplitude = False
-
-    #previously was '.'; only works if running script from m2m dir
-    dir_m2m = '/dipc/kstoreyf/external/map2map_emu'
-    dir_lib = f'/dipc/kstoreyf/muchisimocks/data/cosmolib{tag_lib}'
-    # for now, copying cosmology from the main cosmolib; TODO change this later!
-    dir_cosmopars = '/dipc/kstoreyf/muchisimocks/data/cosmolib'    
     
     for idx_LH in range(idx_LH_start, idx_LH_end):
         
@@ -51,6 +54,9 @@ def main():
         dir_lh = f'{dir_lib}/LH{idx_LH}'
         print("dir_lh:", dir_lh)
         Path.mkdir(Path(dir_lh), parents=True, exist_ok=True)
+        # If we want to save the intermediary data products (ZA disp, linear field, 
+        # map2map predicted displacement field, cosmo params used for m2m), then save
+        # them in the LH dir; if not, save them to m2m dir and they'll be overwritten
         if save_intermeds:
             dir_save = dir_lh
         else:
@@ -86,7 +92,9 @@ def main():
                                                             expfactor=1, LPT_order=1, order_by_order=None,
                                                             phase_type=1, ngenic_phases=True, return_disp=True, 
                                                             sphere_mode=0)
-        print(f"time after creating lpt sim: {time.time()-start} s")
+        timeprev = start
+        timenow = time.time()
+        print(f"time to create lpt sim: {timenow-timeprev} s")
 
         print("Saving sims and params")
         np.save(f'{dir_save}/ZA_disp.npy', disp_field,allow_pickle=True)
@@ -113,7 +121,10 @@ def main():
         print("Renaming map2map result")        
         fn_disp = f'{dir_save}/pred_disp.npy'
         os.system(f'mv ._out.npy {fn_disp}')
-        print(f"time after running map2map: {time.time()-start} s")
+        
+        timeprev = timenow
+        timenow = time.time()
+        print(f"time for running map2map: {timenow-timeprev} s")
 
         ## Velocities
         #os.system('python m2m.py test --test-in-patterns "ZA_vel.npy" --test-tgt-patterns "ZA_vel.npy" --in-norms "cosmology.vel" --tgt-norms "cosmology.vel" --crop 128 --crop-step 128 --pad 48 --model d2d.StyledVNet --batches 1 --loader-workers 7 --load-state "v2halov_weights.pt" --callback-at "." --test-style-pattern "cosmo_pars.txt"')
@@ -140,7 +151,9 @@ def main():
                                         vel=None,
                                         vel_factor=0,
                                         verbose=True)[0]
-        print(f"time after adding displacements: {time.time()-start} s")
+        timeprev = timenow
+        timenow = time.time()
+        print(f"time for adding displacements: {timenow-timeprev} s")
 
 
         ## Include RSD
@@ -174,34 +187,60 @@ def main():
                                     interlacing=interlacing)
             bias_terms_eul_pred.append(bias_terms_pred)
         bias_terms_eul_pred = np.array(bias_terms_eul_pred)
+        # shape was (5, 1, ngrid, ngrid, ngrid); this squeezes out the 1 dimension
+        bias_terms_eul_pred = np.squeeze(bias_terms_eul_pred)
         
-        print("Saving full eulerian fields")
-        #np.save(outpath+'/Eulerian_fields_lr_'+str(cind)+'_full.npy', bias_terms_eul_pred, allow_pickle=True)
-        np.save(f'{dir_lh}/Eulerian_fields_hr_{idx_LH}.npy', bias_terms_eul_pred, allow_pickle=True)
-        print(f"time after making eulerian fields: {time.time()-start} s")
+        if save_hr_field:
+            print("Saving full eulerian fields")
+            np.save(f'{dir_lh}/Eulerian_fields_hr_{idx_LH}.npy', bias_terms_eul_pred, allow_pickle=True)
+        timeprev = timenow
+        timenow = time.time()
+        print(f"time for making eulerian fields: {timenow-timeprev} s")
 
         print("Cutting k-modes")
-        bias_terms_eul_pred_kcut = downsample_field(bias_terms_eul_pred, box_size, ngrid_target)
+        bias_terms_eul_pred_kcut = remove_lowk_modes(bias_terms_eul_pred, box_size, ngrid_target)
+        timeprev = timenow
+        timenow = time.time()
+        print(f"time for cutting fields to certain kmode: {timenow-timeprev} s")
+        if save_intermeds:
+            print("Saving k-cut, non-deconvolved eulerian fields")
+            np.save(f'{dir_lh}/Eulerian_fields_lr_{idx_LH}.npy', bias_terms_eul_pred_kcut, allow_pickle=True)
+        
+        print("Deconvolving k-cut bias fields")
+        # Deconvolve bias fields - deconvolving the field with the low-k modes already removed bc much faster.
+        # Showed that it gets essentially same result as deconvolving the HR field and then cutting the low-k-modes
+        if deconvolve_lr_field:
+            bias_terms_eul_pred_kcut_deconvolved = []
+            for bias_term in bias_terms_eul_pred_kcut:
+                bias_term_deconvolved = pb.convolve_linear_interpolation_kernel(bias_term, 
+                                                                                npix=ngrid, mode="deconvolve")
+                bias_terms_eul_pred_kcut_deconvolved.append(bias_term_deconvolved)
+            bias_terms_eul_pred_kcut_deconvolved = np.array(bias_terms_eul_pred_kcut_deconvolved)
+            
+            np.save(f'{dir_lh}/Eulerian_fields_deconvolved_lr_{idx_LH}.npy', 
+                    bias_terms_eul_pred_kcut_deconvolved, allow_pickle=True)
+            timeprev = timenow
+            timenow = time.time()
+            print(f"time for deconvolving k-cut fields: {timenow-timeprev} s")
 
-        ## Save eulerian fields
-        print("Saving cut eulerian fields")
-        np.save(f'{dir_lh}/Eulerian_fields_lr_{idx_LH}.npy', bias_terms_eul_pred_kcut, allow_pickle=True)
-        print(f"time after cutting fields to certain kmode: {time.time()-start} s")
-
-        print(f"time for single LH: {time.time()-start} s")
+        timenow = time.time()
+        print(f"TOTAL TIME for single LH: {timenow-start} s")
 
 
-def downsample_field(bias_terms_eul_pred, box_size, ngrid_target):
+def remove_lowk_modes(bias_terms_eul_pred, box_size, ngrid_target):
+    # updated to squeeze out the extra dim and then alter where needed
+    #bias_terms_eul_pred = np.squeeze(bias_terms_eul_pred)
     ngrid = bias_terms_eul_pred.shape[-1]
     k_nyq = np.pi/box_size*ngrid_target
     kmesh = bacco.visualization.np_get_kmesh( (ngrid, ngrid, ngrid), box_size, real=True)
     mask = (kmesh[:,:,:,0]<=k_nyq) & (kmesh[:,:,:,1]<=k_nyq) & (kmesh[:,:,:,2]<=k_nyq) & (kmesh[:,:,:,0]>-k_nyq) & (kmesh[:,:,:,1]>-k_nyq) & (kmesh[:,:,:,2]>-k_nyq)
     bias_terms_eul_pred_kcut=[]
+    assert ngrid_target%2==0, "ngrid_target must be even!"
     for fid in range(5):
-        field = bias_terms_eul_pred[fid][0]
+        field = bias_terms_eul_pred[fid]
         deltak = pyfftw.builders.rfftn(field, auto_align_input=False, auto_contiguous=False, avoid_copy=True)
         deltakcut = deltak()[mask]
-        deltakcut= deltakcut.reshape(ngrid_target, ngrid_target, ngrid_target/2+1)
+        deltakcut= deltakcut.reshape(ngrid_target, ngrid_target, int(ngrid_target/2)+1)
         delta = pyfftw.builders.irfftn(deltakcut, axes=(0,1,2))()
         bias_terms_eul_pred_kcut.append(delta)
     bias_terms_eul_pred_kcut = np.array(bias_terms_eul_pred_kcut)
