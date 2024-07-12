@@ -18,16 +18,20 @@ def compute_pks_muchisimocks():
     #tag_mocks = '_HR'
     #tag_mocks = '_FixedPk'
     tag_mocks = ''
-    dir_mocks = f'../data/cosmolib{tag_mocks}'
-    tag_pk = '_b0000'
-    dir_pks = f'../data/pks_cosmolib/pks{tag_mocks}{tag_pk}'
+    #dir_mocks = f'../data/cosmolib{tag_mocks}'
+    dir_mocks = f'/cosmos_storage/cosmosims/muchisimocks_lib{tag_mocks}'
+    # tag_pk = '_b0000'
+    # tag_fields = '_deconvolved'
+    tag_pk = '_b0000_zspace'
+    tag_fields = '_zspace_deconvolved'
+    
+    dir_pks = f'../data/pks_mlib/pks{tag_mocks}{tag_pk}'
     #tag_fields = '_hr'
-    tag_fields = '_lr'
     #tag_fields_extra = '_2GpcBox'
     tag_fields_extra = ''
     overwrite = True
     
-    deconvolve_grid = True
+    deconvolve_grid = False # fields already deconvolved
     # NOTE: fields created without interlacing, so need to set it off here
     interlacing = False
     correct_grid = False
@@ -51,11 +55,11 @@ def compute_pks_muchisimocks():
     param_names = ['omega_cold', 'sigma_8', 'h', 'omega_baryon', 'n_s', 'seed']
 
     #n_lib = 1
-    n_lib = 500
+    n_lib = 10
     for idx_LH in range(n_lib):
         if idx_LH%10==0:
             print(idx_LH)
-        fn_fields = f'{dir_mocks}/LH{idx_LH}/Eulerian_fields{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
+        fn_fields = f'{dir_mocks}/LH{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
         fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
         fn_pk = f'{dir_pks}/pk_{idx_LH}{tag_fields_extra}.npy'
         if os.path.exists(fn_pk) and not overwrite:
@@ -294,8 +298,8 @@ def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=512):
 
 def compute_pk(tracer_field, cosmo, box_size,
                k_min=0.01, k_max=1.0, n_bins=50, log_binning=True,
-               normalise_grid=False, deconvolve_grid=True,
-               interlacing=True, deposit_method='cic',
+               normalise_grid=False, deconvolve_grid=False,
+               interlacing=False, deposit_method='cic',
                correct_grid=False,
                n_threads=8, fn_pk=None):
 

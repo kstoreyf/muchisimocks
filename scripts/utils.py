@@ -228,7 +228,7 @@ def get_cosmo(param_dict, a_scale=1, sim_name='quijote'):
             wa=param_dict_copy['wa'],
         )
 
-    cosmo = bacco.Cosmology(**cosmopars)
+    cosmo = bacco.Cosmology(**cosmopars, verbose=False)
     cosmo.set_expfactor(a_scale)
     return cosmo
 
@@ -248,3 +248,19 @@ def cosmo_bacco_to_cosmo_baccoemu(cosmo):
         cosmo_params_emu[param_name_emu] = param_bacco
         
     return cosmo_params_emu
+
+
+def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=None):
+
+    assert len(bias_vector)==bias_fields_eul.shape[0]-1, "bias_vector must length one less than number of bias fields"
+    if n_grid_norm is None:
+        n_grid_norm = bias_fields_eul.shape[-1]
+        
+    def _sum_bias_fields(fields, bias_vector):
+        bias_vector_extended = np.concatenate(([1.0], bias_vector))
+        return np.sum([fields[ii]*bias_vector_extended[ii] for ii in range(len(bias_vector))], axis=0)
+    
+    tracer_field_eul = _sum_bias_fields(bias_fields_eul, bias_vector)
+    tracer_field_eul_norm = tracer_field_eul/n_grid_norm**3
+    
+    return tracer_field_eul_norm
