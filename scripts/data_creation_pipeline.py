@@ -20,15 +20,24 @@ def main():
     tab_mocks = ''
     box_size = 1000.
     n_threads_bacco = 12
-    n_threads_m2m = 12
+    # uses 12 GB, indep of number of threads
+    # 12 threads takes ~9 minutes for each map2map run (pos, vel)
+    # changing n_threads_m2m doesn't seem to do much of anything
+    n_threads_m2m = 4
     deconvolve_lr_field = True
     
-    save_intermeds = True
-    save_hr_field = True
+    save_intermeds = False
+    save_hr_field = False
     run_zspace = False
     
-    idx_LH_start = 3
-    idx_LH_end = 4
+    overwrite_m2m_preds = False
+    #overwrite_ZA_fields = False
+    
+    idx_LH_start = 100
+    idx_LH_end = 500
+    #idxs = range(idx_LH_start, idx_LH_end)
+    #idxs = np.arange(idx_LH_start, idx_LH_end)
+    idxs = np.arange(idx_LH_start, idx_LH_end, 2)
     
     #previously was '.'; only works if running script from m2m dir
     dir_m2m = '/dipc/kstoreyf/external/map2map_emu'
@@ -48,10 +57,11 @@ def main():
     else:
         FixedInitialAmplitude = False
     
-    for idx_LH in range(idx_LH_start, idx_LH_end):
+    for idx_LH in idxs:
         
         print(f"Starting LH {idx_LH}")
         start = time.time()
+        timenow = start
         
         dir_LH = f'{dir_mocks}/LH{idx_LH}'
         print("dir_LH:", dir_LH)
@@ -81,64 +91,75 @@ def main():
 
 
         # CREATE A ZA SIMULATION
+        fn_ZA_disp = f'{dir_LH}/ZA_disp.npy'
+        fn_lin = f'{dir_LH}/lin_field.npy'
+        fn_ZA_vel = f'{dir_LH}/ZA_vel.npy'
+        
+        # need the sim object later on, so for now let's recreate even if have
+        # the ZA fields saved
+        # if overwrite_ZA_fields \
+        #     or not os.path.exists(fn_ZA_disp) \
+        #     or not os.path.exists(fn_lin) \
+        #     or (run_zspace and not os.path.exists(fn_ZA_vel)):
         print("Generating ZA sim")
         sim, disp_field = bacco.utils.create_lpt_simulation(cosmo, box_size, Nmesh=n_grid, Seed=Seed,
                                                             FixedInitialAmplitude=FixedInitialAmplitude,InitialPhase=0, 
                                                             expfactor=1, LPT_order=1, order_by_order=None,
                                                             phase_type=1, ngenic_phases=True, return_disp=True, 
                                                             sphere_mode=0)
-        timeprev = start
+        timeprev = timenow
         timenow = time.time()
         print(f"time to create lpt sim: {timenow-timeprev} s")
 
         print("Saving sims and params")
-        fn_ZA_disp = f'{dir_LH}/ZA_disp.npy'
-        fn_lin = f'{dir_LH}/lin_field.npy'
-        fn_ZA_vel = f'{dir_LH}/ZA_vel.npy'
-        np.save(fn_ZA_disp, disp_field,allow_pickle=True)
+
+        np.save(fn_ZA_disp, disp_field, allow_pickle=True)
         norm=n_grid**3.
         np.save(fn_lin, sim.linear_field[0]*norm,allow_pickle=True)
         if run_zspace:
             np.save(fn_ZA_vel, sim.sdm['vel'].reshape((-1,n_grid,n_grid,n_grid)), allow_pickle=True)
 
         # RUN MAP2MAP
-        print("Running map2map")
-        ## Positions
-        # if i don't pass num-threads, it tries to read from slurm, but i'm not running w slurm
-        os.system(f'python {dir_m2m}/m2m.py test --num-threads {n_threads_m2m} ' 
-                  f'--test-in-patterns "{fn_ZA_disp}" ' 
-                  f'--test-tgt-patterns "{fn_ZA_disp}" '
-                  '--in-norms "cosmology.dis" --tgt-norms "cosmology.dis" '
-                  '--crop 128 --crop-step 128 --pad 48 '
-                  '--model d2d.StyledVNet --batches 1 --loader-workers 7 '
-                  f'--load-state "{dir_m2m}/map2map/weights/d2d_weights.pt" '
-                  f'--callback-at "{dir_m2m}" ' 
-                  f'--test-style-pattern "{dir_LH}/cosmo_pars_m2m.txt"')
         fn_disp = f'{dir_LH}/pred_disp.npy'
-        os.system(f'mv ._out.npy {fn_disp}')
-        
-        timeprev = timenow
-        timenow = time.time()
-        print(f"time for running map2map positions: {timenow-timeprev} s")
-
-        ## Velocities (for RSD)
-        if run_zspace:
+        if overwrite_m2m_preds or not os.path.exists(fn_disp):
+            print("Running map2map")
+            ## Positions
+            # if i don't pass num-threads, it tries to read from slurm, but i'm not running w slurm
             os.system(f'python {dir_m2m}/m2m.py test --num-threads {n_threads_m2m} ' 
-                f'--test-in-patterns "{fn_ZA_vel}" ' 
-                f'--test-tgt-patterns "{fn_ZA_vel}" '
-                '--in-norms "cosmology.vel" --tgt-norms "cosmology.vel" '
-                '--crop 128 --crop-step 128 --pad 48 '
-                '--model d2d.StyledVNet --batches 1 --loader-workers 7 '
-                f'--load-state "{dir_m2m}/map2map/weights/v2halov_weights.pt" '
-                f'--callback-at "{dir_m2m}" ' 
-                f'--test-style-pattern "{dir_LH}/cosmo_pars_m2m.txt"')
-            fn_vel = f'{dir_LH}/pred_vel.npy'
-            os.system(f'mv ._out.npy {fn_vel}')
-
+                    f'--test-in-patterns "{fn_ZA_disp}" ' 
+                    f'--test-tgt-patterns "{fn_ZA_disp}" '
+                    '--in-norms "cosmology.dis" --tgt-norms "cosmology.dis" '
+                    '--crop 128 --crop-step 128 --pad 48 '
+                    '--model d2d.StyledVNet --batches 1 --loader-workers 7 '
+                    f'--load-state "{dir_m2m}/map2map/weights/d2d_weights.pt" '
+                    f'--callback-at "{dir_m2m}" ' 
+                    f'--test-style-pattern "{dir_LH}/cosmo_pars_m2m.txt"')
+            os.system(f'mv ._out.npy {fn_disp}')
+            
             timeprev = timenow
             timenow = time.time()
-            print(f"time for running map2map velocities: {timenow-timeprev} s")
-                        
+            print(f"time for running map2map positions: {timenow-timeprev} s")
+
+        fn_vel = f'{dir_LH}/pred_vel.npy'
+        if overwrite_m2m_preds or not os.path.exists(fn_vel):
+
+            ## Velocities (for RSD)
+            if run_zspace:
+                os.system(f'python {dir_m2m}/m2m.py test --num-threads {n_threads_m2m} ' 
+                    f'--test-in-patterns "{fn_ZA_vel}" ' 
+                    f'--test-tgt-patterns "{fn_ZA_vel}" '
+                    '--in-norms "cosmology.vel" --tgt-norms "cosmology.vel" '
+                    '--crop 128 --crop-step 128 --pad 48 '
+                    '--model d2d.StyledVNet --batches 1 --loader-workers 7 '
+                    f'--load-state "{dir_m2m}/map2map/weights/v2halov_weights.pt" '
+                    f'--callback-at "{dir_m2m}" ' 
+                    f'--test-style-pattern "{dir_LH}/cosmo_pars_m2m.txt"')
+                os.system(f'mv ._out.npy {fn_vel}')
+
+                timeprev = timenow
+                timenow = time.time()
+                print(f"time for running map2map velocities: {timenow-timeprev} s")
+                            
         # COMPUTE BIAS MODEL
         print("Reloading map2map result")
         ## Read displacement, velocities and linear density

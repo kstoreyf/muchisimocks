@@ -10,8 +10,8 @@ import bacco
 
 
 def main():
-    compute_pks_muchisimocks()
-    #compute_pks_quijote_LH()
+    #compute_pks_muchisimocks()
+    compute_pks_quijote_LH()
     
 
 def compute_pks_muchisimocks():
@@ -89,18 +89,19 @@ def compute_pks_muchisimocks():
 
 def compute_pks_quijote_LH():
     dir_mocks = '/cosmos_storage/home/mpelle/Yin_data/Quijote'
-    dir_fields = '../data/quijote_LH'
-    tag_pk = '_b0000'
-    dir_pks_sim = f'../data/pks_quijote_LH/pks_sim{tag_pk}'
-    dir_pks_pred = f'../data/pks_quijote_LH/pks_pred{tag_pk}'
+    tag_fields = '_interlacingfalse'
+    dir_fields = f'/cosmos_storage/home/kstoreyf/data_muchisimocks/quijote_LH{tag_fields}'
+    tag_pk = f'{tag_fields}_b0000'
+
+    #dir_pks_pred = f'../data/pks_quijote_LH/pks_pred{tag_pk}'
     overwrite_fields = False
     overwrite_pks = False
-    compute_sim = False
-    compute_pred = True
+    #compute_sim = True
+    #compute_pred = False
+    tags = ['_sim', '_pred']
     
-    Path.mkdir(Path(dir_pks_sim), parents=True, exist_ok=True)
-    Path.mkdir(Path(dir_pks_pred), parents=True, exist_ok=True)
-    
+    #Path.mkdir(Path(dir_pks_pred), parents=True, exist_ok=True)
+
     bias_vector = [0., 0., 0., 0.]
     n_grid = 512
     n_grid_orig = 512
@@ -111,137 +112,127 @@ def compute_pks_quijote_LH():
     damping_scale = k_nyq
             
     deconvolve_grid = True
-    interlacing = True
+    interlacing = False #True
     correct_grid = False
+    
+    run_zspace = True
     
     # order of saved cosmo param files (via https://quijote-simulations.readthedocs.io/en/latest/LH.html)
     # careful that here it's omega_m, whereas for muchisimocks/cosmolib it's omega_cold
     # (should be handled in get_cosmo() function)
     param_names = ['omega_m', 'omega_baryon', 'h', 'n_s', 'sigma_8']
 
-    fn_bias_vector = f'{dir_pks_sim}/bias_params.txt'
-    np.savetxt(fn_bias_vector, bias_vector)
-    fn_bias_vector = f'{dir_pks_pred}/bias_params.txt'
-    np.savetxt(fn_bias_vector, bias_vector)
-    
-    idxs_LH = np.array([10,29,37,40,70,85,127,158,165,184,208,220,240,254,267,274,293,305,336,374,375,388,433,444,
-                      464,502,534,542,574,598,605,628,652,663,676,700,702,721,737,762,809,822,825,837,853,864,882,
-                      899,901,911,939,948,950,951,964,976,977,1016,1022,1041,1050,1060,1082,1091,1103,1114,1147,
-                      1157,1173,1175,1219,1222,1299,1309,1314,1317,1331,1365,1372,1378,1391,1397,1418,1444,1459,
-                      1510,1512,1513,1515,1517,1533,1553,1567,1568,1599,1622,1642,1657,1659,1667])
+    # idxs_LH = np.array([10,29,37,40,70,85,127,158,165,184,208,220,240,254,267,274,293,305,336,374,375,388,433,444,
+    #                   464,502,534,542,574,598,605,628,652,663,676,700,702,721,737,762,809,822,825,837,853,864,882,
+    #                   899,901,911,939,948,950,951,964,976,977,1016,1022,1041,1050,1060,1082,1091,1103,1114,1147,
+    #                   1157,1173,1175,1219,1222,1299,1309,1314,1317,1331,1365,1372,1378,1391,1397,1418,1444,1459,
+    #                   1510,1512,1513,1515,1517,1533,1553,1567,1568,1599,1622,1642,1657,1659,1667])
     #idxs_LH = idxs_LH[:1]
+    idxs_LH = [663]
 
-    if compute_sim:
-
+    #if compute_sim:
+    for tag in tags:
+    
+        dir_pks = f'../data/pks_quijote_LH/pks{tag}{tag_pk}'
+        dir_pks_zspace = f'../data/pks_quijote_LH/pks_zspace{tag}{tag_pk}'
+        
+        Path.mkdir(Path(dir_pks), parents=True, exist_ok=True)
+        Path.mkdir(Path(dir_pks_zspace), parents=True, exist_ok=True)
+        
+        fn_bias_vector = f'{dir_pks}/bias_params.txt'
+        np.savetxt(fn_bias_vector, bias_vector)
+        fn_bias_vector = f'{dir_pks_zspace}/bias_params.txt'
+        np.savetxt(fn_bias_vector, bias_vector)
+        
         for idx_LH in idxs_LH:
 
             if idx_LH%10==0:
                 print(idx_LH)
             idx_LH_str = f'{idx_LH:04}'
-                
+         
+            # get params
+            fn_params = f'{dir_mocks}/LH{idx_LH_str}/param_{idx_LH_str}.txt'
+            param_vals = np.loadtxt(fn_params)
+            param_dict = dict(zip(param_names, param_vals))
+            cosmo = get_cosmo(param_dict)
+                  
             # check fields existence
-            fn_fields_sim = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields_sim_{idx_LH_str}.npy'
-            if os.path.exists(fn_fields_sim) and not overwrite_fields:
-                print(f"Fields for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite_fields}, loading")
-                bias_terms_eul_sim = np.load(fn_fields_sim, allow_pickle=True)
-            else:        
-                print(f"Computing fields for orig sim for idx_LH={idx_LH}")
-
-                fn_dens_lin = f'{dir_mocks}/LH{idx_LH_str}/lin_den_{idx_LH_str}.npy'
-                dens_lin = np.load(fn_dens_lin)
-                
-                # get fields sim
-                fn_disp_sim = f'{dir_mocks}/LH{idx_LH_str}/dis_{idx_LH_str}.npy'
-                Path.mkdir(Path(f'{dir_fields}/LH{idx_LH_str}'), parents=True, exist_ok=True)
+            fn_fields = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields{tag}_{idx_LH_str}.npy'
+            fn_fields_zspace = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields_zspace{tag}_{idx_LH_str}.npy'
             
-                disp_sim = np.load(fn_disp_sim)
+            Path.mkdir(Path(f'{dir_fields}/LH{idx_LH_str}'), parents=True, exist_ok=True)
+
+            fn_dens_lin = f'{dir_mocks}/LH{idx_LH_str}/lin_den_{idx_LH_str}.npy'
+            dens_lin = np.load(fn_dens_lin)
+            
+            # get fields sim
+            fn_disp = f'{dir_mocks}/LH{idx_LH_str}/dis_{idx_LH_str}.npy'
+            disp = np.load(fn_disp)
+            
+            if (not os.path.exists(fn_fields) or overwrite_fields):
                 start = time.time()
-                bias_terms_eul_sim = displacements_to_bias_fields(dens_lin, disp_sim, n_grid, 
-                                            box_size, damping_scale=damping_scale, interlacing=interlacing, fn_fields=fn_fields_sim)
+                print(f"Computing fields for orig sim for idx_LH={idx_LH}")
+                bias_terms_eul = displacements_to_bias_fields(dens_lin, disp, n_grid, 
+                                            box_size, damping_scale=damping_scale, interlacing=interlacing, fn_fields=fn_fields)
                 end = time.time()
                 print(f"Generated bias fields for orig sim for idx_LH={idx_LH} in time {end-start} s")
+            else:
+                print(f"Fields for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite_fields}, loading")
+                bias_terms_eul = np.load(fn_fields, allow_pickle=True)
+                
+            if run_zspace and (not os.path.exists(fn_fields_zspace) or overwrite_fields):
+                start = time.time()
+                fn_vel = f'{dir_mocks}/LH{idx_LH_str}/nlvel_{idx_LH_str}.npy'
+                vel = np.load(fn_vel)
+                velocities = fv2bro(vel.copy(order='C'))
+                bias_terms_eul_zspace = displacements_to_bias_fields(dens_lin, disp, n_grid, 
+                                            box_size, velocities=velocities, cosmo=cosmo, damping_scale=damping_scale, interlacing=interlacing, fn_fields=fn_fields_zspace)
+                end = time.time()
+                print(f"Generated zspace bias fields for orig sim for idx_LH={idx_LH} in time {end-start} s")
+            else:
+                print(f"Zspace fields for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite_fields}, loading")
+                bias_terms_eul_zspace = np.load(fn_fields_zspace, allow_pickle=True)
                 
             # check pk existence
-            fn_pk_sim = f'{dir_pks_sim}/pk_{idx_LH_str}.npy'
-            if os.path.exists(fn_pk_sim) and not overwrite_pks:
+            fn_pk = f'{dir_pks}/pk_{idx_LH_str}.npy'
+            if os.path.exists(fn_pk) and not overwrite_pks:
                 print(f"P(k) for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite_pks}, continuing")
-                continue
-            
-            # get params
-            fn_params = f'{dir_mocks}/LH{idx_LH_str}/param_{idx_LH_str}.txt'
-            param_vals = np.loadtxt(fn_params)
-            param_dict = dict(zip(param_names, param_vals))
-            cosmo = get_cosmo(param_dict)
-            
-            start = time.time()
-            tracer_field_sim = get_tracer_field(bias_terms_eul_sim, bias_vector, n_grid_norm=n_grid_orig)
-            compute_pk(tracer_field_sim, cosmo, box_size,
-                    k_min=k_min, k_max=k_max, n_bins=n_bins,
-                    deconvolve_grid=deconvolve_grid,
-                    interlacing=interlacing, correct_grid=correct_grid,
-                    fn_pk=fn_pk_sim)
-            end = time.time()
-            print(f"Computed P(k) for orig sim for idx_LH={idx_LH} in time {end-start} s")
-
-    if compute_pred:
-
-        for idx_LH in idxs_LH:
-
-            if idx_LH%10==0:
-                print(idx_LH)
-            idx_LH_str = f'{idx_LH:04}'            
-
-            # check fields existence
-            fn_fields_pred = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields_pred_{idx_LH_str}.npy'
-            if os.path.exists(fn_fields_pred) and not overwrite_fields:
-                print(f"Fields for prediction for idx_LH={idx_LH} exists and overwrite={overwrite_fields}, loading")
-                bias_terms_eul_pred = np.load(fn_fields_pred, allow_pickle=True)
-            else:        
-                print(f"Computing fields for orig sim for idx_LH={idx_LH}")
-                
-                fn_dens_lin = f'{dir_mocks}/LH{idx_LH_str}/lin_den_{idx_LH_str}.npy'
-                dens_lin = np.load(fn_dens_lin)
-                
-                # get fields map2map pred
-                fn_disp_pred = f'{dir_mocks}/LH{idx_LH_str}/pred_pos_{idx_LH_str}.npy'
-                Path.mkdir(Path(f'{dir_fields}/LH{idx_LH_str}'), parents=True, exist_ok=True)
-
-                disp_pred = np.load(fn_disp_pred)
+            else:
                 start = time.time()
-                bias_terms_eul_pred = displacements_to_bias_fields(dens_lin, disp_pred, n_grid, box_size, 
-                                            damping_scale=damping_scale, interlacing=interlacing,
-                                            fn_fields=fn_fields_pred)
+                tracer_field = get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
+                compute_pk(tracer_field, cosmo, box_size,
+                        k_min=k_min, k_max=k_max, n_bins=n_bins,
+                        deconvolve_grid=deconvolve_grid,
+                        interlacing=interlacing, correct_grid=correct_grid,
+                        fn_pk=fn_pk)
                 end = time.time()
-                print(f"Generated bias fields for map2map pred for idx_LH={idx_LH} in time {end-start} s")
-                
-            # PREDICTED
-            fn_pk_pred = f'{dir_pks_pred}/pk_{idx_LH_str}.npy'
-            if os.path.exists(fn_pk_pred) and not overwrite_pks:
-                print(f"P(k) for map2map prediction for idx_LH={idx_LH} exists and overwrite={overwrite_pks}, continuing")
-                continue
-            
-            # get params
-            fn_params = f'{dir_mocks}/LH{idx_LH_str}/param_{idx_LH_str}.txt'
-            param_vals = np.loadtxt(fn_params)
-            param_dict = dict(zip(param_names, param_vals))
-            cosmo = get_cosmo(param_dict)
-            
-            start = time.time()
-            tracer_field_pred = get_tracer_field(bias_terms_eul_pred, bias_vector, n_grid_norm=n_grid_orig)
-            compute_pk(tracer_field_pred, cosmo, box_size,
-                    k_min=k_min, k_max=k_max, n_bins=n_bins,
-                    deconvolve_grid=deconvolve_grid,
-                    interlacing=interlacing, correct_grid=correct_grid,
-                    fn_pk=fn_pk_pred)
-            end = time.time()
-            print(f"Computed P(k) for map2map pred for idx_LH={idx_LH} in time {end-start} s")
+                print(f"Computed P(k) for orig sim for idx_LH={idx_LH} in time {end-start} s")
+
+            fn_pk_zspace = f'{dir_pks_zspace}/pk_{idx_LH_str}.npy'
+            if os.path.exists(fn_pk_zspace) and not overwrite_pks:
+                print(f"P(k) zspace for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite_pks}, continuing")
+            else:
+                start = time.time()
+                tracer_field_zspace = get_tracer_field(bias_terms_eul_zspace, bias_vector, n_grid_norm=n_grid_orig)
+                compute_pk(tracer_field_zspace, cosmo, box_size,
+                        k_min=k_min, k_max=k_max, n_bins=n_bins,
+                        deconvolve_grid=deconvolve_grid,
+                        interlacing=interlacing, correct_grid=correct_grid,
+                        fn_pk=fn_pk_zspace)
+                end = time.time()
+                print(f"Computed P(k) zspace for orig sim for idx_LH={idx_LH} in time {end-start} s")
+
+
+    
+def remove_kmodes_and_downsample_quijote():
+    pass
     
     
 def displacements_to_bias_fields(dens_lin, disp, n_grid, box_size, 
+                                 velocities=None, cosmo=None,
                                  damping_scale=None, n_threads=8,
                                  interlacing=True,
                                  fn_fields=None):
-    
     
     if damping_scale is None:
         k_nyq = np.pi * n_grid / box_size
@@ -269,7 +260,10 @@ def displacements_to_bias_fields(dens_lin, disp, n_grid, box_size,
                             )
 
     bias_fields = bmodel.bias_terms_lag()
-
+    
+    if velocities is not None:
+        assert cosmo is not None, "must also pass cosmo for zspace!"
+        pos = bacco.statistics.compute_zsd(pos, velocities, cosmo, box_size, zspace_axis=2)
     bias_terms_eul = []
     for ii in range(0,len(bias_fields)):
         bias_terms = bacco.statistics.compute_mesh(ngrid=n_grid, box=box_size, pos=pos,
@@ -397,6 +391,10 @@ def get_cosmo(param_dict):
     cosmo.set_expfactor(a_scale)
     return cosmo
 
+
+def fv2bro(t_fv_field) :
+    '''Returns back row ordered array (shape n_grid * n_grid * n_grid, 3) from front vector (shape 3, n_grid, n_grid, n_grid)'''
+    return np.reshape(t_fv_field, (3, int(t_fv_field.size / 3))).T
 
 
 
