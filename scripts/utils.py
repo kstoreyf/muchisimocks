@@ -24,6 +24,18 @@ label_dict_methods = {'mn': 'Moment Network',
                       'emcee': 'MCMC (emcee)',
                       'dynesty': 'MCMC (dynesty)'}
 
+# https://arxiv.org/pdf/1909.05273, Table 1, top row
+cosmo_dict_quijote = {
+                'omega_cold'    :  0.3175,
+                'omega_baryon'  :  0.049,
+                'sigma8_cold'   :  0.834,
+                'ns'            :  0.9624,
+                'hubble'        :  0.6711,
+                'neutrino_mass' :  0.0,
+                'w0'            : -1.0,
+                'wa'            :  0.0,
+                'tau'           :  0.0561, #planck value
+                }   
 
 def idxs_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):
     print(frac_train, frac_val, frac_test)
@@ -50,21 +62,10 @@ def split_train_val_test(arr, idxs_train, idxs_val, idxs_test):
 def setup_cosmo_emu(cosmo='quijote'):
     print("Setting up emulator cosmology")
     if cosmo=='quijote':
-        cosmo_params = {
-            'omega_cold'    :  0.3175,
-            'sigma8_cold'   :  0.834,
-            'omega_baryon'  :  0.049,
-            'ns'            :  0.9624,
-            'hubble'        :  0.6711,
-            'neutrino_mass' :  0.0,
-            'w0'            : -1.0,
-            'wa'            :  0.0,
-            'expfactor'     :  1.0
-        }
+        cosmo_params = cosmo_dict_quijote
     else:
         raise ValueError(f'Cosmo {cosmo} not recognized!')
     return cosmo_params
-
 
 
 def load_emu(emu_name='lbias_2.0'):
@@ -188,30 +189,31 @@ def get_cosmo(param_dict, a_scale=1, sim_name='quijote'):
     param_dict_copy = param_dict.copy()
     
     if sim_name=='quijote':
-        if 'tau' not in param_dict:
-            param_dict_copy['tau'] = 0.0561
-        if 'neutrino_mass' not in param_dict:
-            param_dict_copy['neutrino_mass'] = 0.0
-        if 'w0' not in param_dict:
-            param_dict_copy['w0'] = -1.0
-        if 'wa' not in param_dict:
-            param_dict_copy['wa'] = 0.0
+        param_names_fid = cosmo_dict_quijote.keys()
+        for pn in param_names_fid:
+            if pn not in param_dict:
+                param_dict_copy[pn] = cosmo_dict_quijote[pn]
+    else:
+        raise ValueError(f'Simulation {sim_name} not recognized!')
             
     name_twins = {'h': 'hubble',
                   'sigma_8': 'sigma8',
+                  'sigma8_cold': 'sigma8',
                   'n_s': 'ns'}
     
     for name_current, name_bacco in name_twins.items():
         if name_current in param_dict_copy:
             param_dict_copy[name_bacco] = param_dict_copy.pop(name_current)
-        
+    
+    assert param_dict_copy['neutrino_mass']==0.0, 'not implemented for nonzero neutrino_mass'
+    
     # omega_m = omega_cold + omega_neutrinos 
     # (omega_m = omega_cold if no neutrinos) 
     # Om_cdm = Om_cold - Om_baryon
-    if 'omega_m' in param_dict_copy:
-        omega_cdm = param_dict_copy['omega_m']-param_dict_copy['omega_baryon']
-    elif 'omega_cold' in param_dict_copy:
+    if 'omega_cold' in param_dict_copy:
         omega_cdm = param_dict_copy['omega_cold']-param_dict_copy['omega_baryon']
+    elif 'omega_m' in param_dict_copy:
+        omega_cdm = param_dict_copy['omega_m']-param_dict_copy['omega_baryon']
     else:
         raise ValueError("param_dict must include omega_m or omega_cold!")
 
@@ -231,6 +233,11 @@ def get_cosmo(param_dict, a_scale=1, sim_name='quijote'):
     cosmo = bacco.Cosmology(**cosmopars, verbose=False)
     cosmo.set_expfactor(a_scale)
     return cosmo
+
+
+def get_cosmo_emu(param_dict, a_scale=1, sim_name='quijote'):
+    cosmo = get_cosmo(param_dict, a_scale=a_scale, sim_name=sim_name)
+    return cosmo_bacco_to_cosmo_baccoemu(cosmo)
 
 
 def cosmo_bacco_to_cosmo_baccoemu(cosmo):

@@ -2,10 +2,13 @@ import os
 os.environ["OMP_NUM_THREADS"] = str(1)
 
 import numpy as np
+import pandas as pd
 from pathlib import Path
 import time
 
 import bacco
+
+import utils
 
 
 
@@ -15,9 +18,12 @@ def main():
     
 
 def compute_pks_muchisimocks():
+    
+    idxs_LH = [0]
     #tag_mocks = '_HR'
     #tag_mocks = '_FixedPk'
-    tag_mocks = ''
+    tag_params = '_p3_n500'
+    tag_mocks = tag_params
     #dir_mocks = f'../data/cosmolib{tag_mocks}'
     dir_mocks = f'/cosmos_storage/cosmosims/muchisimocks_lib{tag_mocks}'
     # tag_pk = '_b0000'
@@ -51,15 +57,18 @@ def compute_pks_muchisimocks():
     else:
         box_size = 1000.0
     
+    fn_params = f'{dir_mocks}/params_lh{tag_params}.txt'
+    fn_params_fixed = f'{dir_mocks}/params_fixed{tag_params}.txt'
+    params_df = pd.read_csv(fn_params, index_col=0)
+    param_dict_fixed = pd.read_csv(fn_params_fixed).loc[0].to_dict()
     # order of saved cosmo param files
-    param_names = ['omega_cold', 'sigma_8', 'h', 'omega_baryon', 'n_s', 'seed']
-
-    idxs_LH = [0]
+    #param_names = ['omega_cold', 'sigma_8', 'h', 'omega_baryon', 'n_s', 'seed']
+    
     for idx_LH in idxs_LH:
-        if idx_LH%10==0:
-            print(f"Comping Pk for LH{idx_LH}")
+        #if idx_LH%10==0:
+        print(f"Comping Pk for LH{idx_LH}")
         fn_fields = f'{dir_mocks}/LH{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
-        fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
+        #fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
         fn_pk = f'{dir_pks}/pk_{idx_LH}{tag_fields_extra}.npy'
         if os.path.exists(fn_pk) and not overwrite:
             print(f"P(k) for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing")
@@ -73,9 +82,12 @@ def compute_pks_muchisimocks():
         print(f"n_grid_orig = {n_grid_orig}")
         tracer_field = get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
         
-        param_vals = np.loadtxt(fn_params)
-        param_dict = dict(zip(param_names, param_vals))
-        cosmo = get_cosmo(param_dict)
+        #param_vals = np.loadtxt(fn_params)
+        #param_dict = dict(zip(param_names, param_vals))
+        param_dict = params_df.loc[idx_LH].to_dict()
+        param_dict.update(param_dict_fixed)
+        print(param_dict)
+        cosmo = utils.get_cosmo(param_dict)
         
         compute_pk(tracer_field, cosmo, box_size,
                     k_min=k_min, k_max=k_max, n_bins=n_bins,
@@ -118,7 +130,7 @@ def compute_pks_quijote_LH():
     
     # order of saved cosmo param files (via https://quijote-simulations.readthedocs.io/en/latest/LH.html)
     # careful that here it's omega_m, whereas for muchisimocks/cosmolib it's omega_cold
-    # (should be handled in get_cosmo() function)
+    # (should be handled in utils.get_cosmo() function)
     param_names = ['omega_m', 'omega_baryon', 'h', 'n_s', 'sigma_8']
 
     # idxs_LH = np.array([10,29,37,40,70,85,127,158,165,184,208,220,240,254,267,274,293,305,336,374,375,388,433,444,
@@ -153,7 +165,7 @@ def compute_pks_quijote_LH():
             fn_params = f'{dir_mocks}/LH{idx_LH_str}/param_{idx_LH_str}.txt'
             param_vals = np.loadtxt(fn_params)
             param_dict = dict(zip(param_names, param_vals))
-            cosmo = get_cosmo(param_dict)
+            cosmo = utils.get_cosmo(param_dict)
                   
             # check fields existence
             fn_fields = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields{tag}_{idx_LH_str}.npy'
@@ -359,36 +371,6 @@ def compute_pk(tracer_field, cosmo, box_size,
     if fn_pk is not None:
         np.save(fn_pk, pk)
     return pk
-
-
-def get_cosmo(param_dict):
-    a_scale = 1
-    # omega_m = omega_cold + omega_neutrinos 
-    # (omega_m = omega_cold if no neutrinos) 
-    # Om_cdm = Om_cold - Om_baryon
-    if 'omega_m' in param_dict:
-        omega_cdm = param_dict['omega_m']-param_dict['omega_baryon']
-    elif 'omega_cold' in param_dict:
-        omega_cdm = param_dict['omega_cold']-param_dict['omega_baryon']
-    else:
-        raise ValueError("param_dict must include omega_m or omega_cold!")
-
-    cosmopars = dict(
-            omega_cdm=omega_cdm,
-            omega_baryon=param_dict['omega_baryon'],
-            hubble=param_dict['h'],
-            ns=param_dict['n_s'],
-            sigma8=param_dict['sigma_8'],
-            tau=0.0561,
-            A_s=None,
-            neutrino_mass=0.,
-            w0=-1,
-            wa=0,
-        )
-
-    cosmo = bacco.Cosmology(**cosmopars)
-    cosmo.set_expfactor(a_scale)
-    return cosmo
 
 
 def fv2bro(t_fv_field) :

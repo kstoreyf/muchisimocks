@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 from pathlib import Path
 import pyfftw
 import time
@@ -14,28 +15,33 @@ os.environ["MKL_SERVICE_FORCE_INTEL"] = str(1)
 
 
 def main():
+    
     n_grid = 512
     n_grid_target = 128
 
-    tag_mocks = ''
+    tag_params = f'_p3_n500'
+    tag_mocks = tag_params
     box_size = 1000.
-    n_threads_bacco = 12
+
     # uses 12 GB, indep of number of threads
     # 7 threads (workers) takes ~9 minutes for each map2map run (pos, vel)
     # 16 workers takes 4 minutes; no change in memory usage 
-    n_threads_m2m = 16 #7
+    # 32 workers also takes 4 minutes...?
+    n_threads_m2m = 24 #7
+    n_threads_bacco = 12
+
     deconvolve_lr_field = True
-    
-    save_intermeds = True
-    save_hr_field = True
     run_zspace = True
     
+    save_intermeds = False
+    save_hr_field = False
+    
     overwrite_m2m_disp = False
-    overwrite_m2m_vel = True
+    overwrite_m2m_vel = False
     #overwrite_ZA_fields = False
     
-    idx_LH_start = 0
-    idx_LH_end = 1
+    idx_LH_start = 2
+    idx_LH_end = 500
     #idxs = range(idx_LH_start, idx_LH_end)
     #idxs = np.arange(idx_LH_start, idx_LH_end)
     idxs = np.arange(idx_LH_start, idx_LH_end, 2)
@@ -44,9 +50,25 @@ def main():
     dir_m2m = '/dipc/kstoreyf/external/map2map_emu'
     #dir_mocks = f'/dipc/kstoreyf/muchisimocks/data/cosmolib{tag_mocks}'
     dir_mocks = f'/cosmos_storage/cosmosims/muchisimocks_lib{tag_mocks}'
-    # for now, copying cosmology from the main cosmolib; TODO change this later!
-    dir_cosmopars = '/dipc/kstoreyf/muchisimocks/data/cosmolib'    
+    # need to make mock dir now so we can move param files into it
+    Path.mkdir(Path(dir_mocks), parents=True, exist_ok=True)
     
+    # Deal with cosmological parameters
+    
+    # for now, copying cosmology from the main cosmolib; TODO change this later!
+    #dir_cosmopars = '/dipc/kstoreyf/muchisimocks/data/cosmolib'    
+    
+    dir_params = '../data/params'
+    fn_params_orig = f'{dir_params}/params_lh{tag_params}.txt'
+    fn_params_fixed_orig = f'{dir_params}/params_fixed{tag_params}.txt'
+    # copy parameters to mocks folder to make sure we know which params were used
+    fn_params = f'{dir_mocks}/params_lh{tag_params}.txt'
+    fn_params_fixed = f'{dir_mocks}/params_fixed{tag_params}.txt'
+    os.system(f'cp {fn_params_orig} {fn_params}')
+    os.system(f'cp {fn_params_fixed_orig} {fn_params_fixed}')
+    params_df = pd.read_csv(fn_params, index_col=0)
+    param_dict_fixed = pd.read_csv(fn_params_fixed).loc[0].to_dict()
+
     bacco.configuration.update({'pk':{'boltzmann_solver': 'CLASS'}})
     bacco.configuration.update({'pknbody' : {'ngrid'  :  n_grid}})
     bacco.configuration.update({'scaling' : {'disp_ngrid' : n_grid}})
@@ -69,27 +91,33 @@ def main():
         Path.mkdir(Path(dir_LH), parents=True, exist_ok=True)
             
         # get cosmology
-        fn_cosmopars_orig = f'{dir_cosmopars}/LH{idx_LH}/cosmo_{idx_LH}.txt'
-        fn_cosmopars = f'{dir_LH}/cosmo_{idx_LH}.txt'
-        os.system(f'cp {fn_cosmopars_orig} {fn_cosmopars}')
-        cospars = np.loadtxt(fn_cosmopars)
-        Omega0, sigma8, HubbleParam, OmegaBaryon,ns, Seed = cospars
-        Seed = int(Seed)                
-
+        #fn_cosmopars_orig = f'{dir_cosmopars}/LH{idx_LH}/cosmo_{idx_LH}.txt'
+        #fn_cosmopars = f'{dir_LH}/cosmo_{idx_LH}.txt'
+        #os.system(f'cp {fn_cosmopars_orig} {fn_cosmopars}')
+        #cospars = np.loadtxt(fn_cosmopars)
+        # param_dict = {'omega_m':Omega0, 
+        #     'omega_baryon':OmegaBaryon, 
+        #     'hubble':HubbleParam, 
+        #     'neutrino_mass':0.0, 
+        #     'sigma8':sigma8, 
+        #     'ns':ns}
+        # Omega0, sigma8, HubbleParam, OmegaBaryon,ns, Seed = cospars
+        # Seed = int(Seed)             
+        
+        param_dict = params_df.loc[idx_LH].to_dict()
+        param_dict.update(param_dict_fixed)
+        seed = idx_LH
+        print("param_dict:", param_dict)
+   
         ## Start cosmology class
-        param_dict = {'omega_m':Omega0, 
-                'omega_baryon':OmegaBaryon, 
-                'hubble':HubbleParam, 
-                'neutrino_mass':0.0, 
-                'sigma8':sigma8, 
-                'ns':ns}
         cosmo = utils.get_cosmo(param_dict, a_scale=1.0, sim_name='quijote')
         print(cosmo)
     
         # We also need the parameters in this order in a text file for m2m
-        pars_arr = np.array([Omega0, OmegaBaryon, HubbleParam, ns, sigma8])
+        #pars_arr = np.array([Omega0, OmegaBaryon, HubbleParam, ns, sigma8])
+        param_names_m2m_ordered = ['omega_cold', 'omega_baryon', 'hubble', 'ns', 'sigma8_cold']
+        pars_arr = np.array([param_dict[pn] for pn in param_names_m2m_ordered])
         np.savetxt(f'{dir_LH}/cosmo_pars_m2m.txt', pars_arr.T)
-
 
         # CREATE A ZA SIMULATION
         fn_ZA_disp = f'{dir_LH}/ZA_disp.npy'
@@ -103,7 +131,7 @@ def main():
         #     or not os.path.exists(fn_lin) \
         #     or (run_zspace and not os.path.exists(fn_ZA_vel)):
         print("Generating ZA sim")
-        sim, disp_field = bacco.utils.create_lpt_simulation(cosmo, box_size, Nmesh=n_grid, Seed=Seed,
+        sim, disp_field = bacco.utils.create_lpt_simulation(cosmo, box_size, Nmesh=n_grid, Seed=seed,
                                                             FixedInitialAmplitude=FixedInitialAmplitude,InitialPhase=0, 
                                                             expfactor=1, LPT_order=1, order_by_order=None,
                                                             phase_type=1, ngenic_phases=True, return_disp=True, 
