@@ -10,8 +10,8 @@ import bacco
 
 
 def main():
-    #compute_pks_muchisimocks()
-    compute_pks_quijote_LH()
+    compute_pks_muchisimocks()
+    #compute_pks_quijote_LH()
     
 
 def compute_pks_muchisimocks():
@@ -54,11 +54,10 @@ def compute_pks_muchisimocks():
     # order of saved cosmo param files
     param_names = ['omega_cold', 'sigma_8', 'h', 'omega_baryon', 'n_s', 'seed']
 
-    #n_lib = 1
-    n_lib = 10
-    for idx_LH in range(n_lib):
+    idxs_LH = [0]
+    for idx_LH in idxs_LH:
         if idx_LH%10==0:
-            print(idx_LH)
+            print(f"Comping Pk for LH{idx_LH}")
         fn_fields = f'{dir_mocks}/LH{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
         fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
         fn_pk = f'{dir_pks}/pk_{idx_LH}{tag_fields_extra}.npy'

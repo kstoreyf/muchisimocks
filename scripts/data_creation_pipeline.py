@@ -17,32 +17,33 @@ def main():
     n_grid = 512
     n_grid_target = 128
 
-    tab_mocks = ''
+    tag_mocks = ''
     box_size = 1000.
     n_threads_bacco = 12
     # uses 12 GB, indep of number of threads
-    # 12 threads takes ~9 minutes for each map2map run (pos, vel)
-    # changing n_threads_m2m doesn't seem to do much of anything
-    n_threads_m2m = 4
+    # 7 threads (workers) takes ~9 minutes for each map2map run (pos, vel)
+    # 16 workers takes 4 minutes; no change in memory usage 
+    n_threads_m2m = 16 #7
     deconvolve_lr_field = True
     
-    save_intermeds = False
-    save_hr_field = False
-    run_zspace = False
+    save_intermeds = True
+    save_hr_field = True
+    run_zspace = True
     
-    overwrite_m2m_preds = False
+    overwrite_m2m_disp = False
+    overwrite_m2m_vel = True
     #overwrite_ZA_fields = False
     
-    idx_LH_start = 100
-    idx_LH_end = 500
+    idx_LH_start = 0
+    idx_LH_end = 1
     #idxs = range(idx_LH_start, idx_LH_end)
     #idxs = np.arange(idx_LH_start, idx_LH_end)
     idxs = np.arange(idx_LH_start, idx_LH_end, 2)
     
     #previously was '.'; only works if running script from m2m dir
     dir_m2m = '/dipc/kstoreyf/external/map2map_emu'
-    #dir_mocks = f'/dipc/kstoreyf/muchisimocks/data/cosmolib{tab_mocks}'
-    dir_mocks = f'/cosmos_storage/cosmosims/muchisimocks_lib{tab_mocks}'
+    #dir_mocks = f'/dipc/kstoreyf/muchisimocks/data/cosmolib{tag_mocks}'
+    dir_mocks = f'/cosmos_storage/cosmosims/muchisimocks_lib{tag_mocks}'
     # for now, copying cosmology from the main cosmolib; TODO change this later!
     dir_cosmopars = '/dipc/kstoreyf/muchisimocks/data/cosmolib'    
     
@@ -51,8 +52,8 @@ def main():
     bacco.configuration.update({'scaling' : {'disp_ngrid' : n_grid}})
     bacco.configuration.update({'number_of_threads': n_threads_bacco})
 
-    #tab_mocks = '_FixedPk'
-    if 'FixedPk' in tab_mocks:
+    #tag_mocks = '_FixedPk'
+    if 'FixedPk' in tag_mocks:
         FixedInitialAmplitude = True
     else:
         FixedInitialAmplitude = False
@@ -95,8 +96,8 @@ def main():
         fn_lin = f'{dir_LH}/lin_field.npy'
         fn_ZA_vel = f'{dir_LH}/ZA_vel.npy'
         
-        # need the sim object later on, so for now let's recreate even if have
-        # the ZA fields saved
+        # need the sim object later on, so for now let's recreate even if 
+        # we have the ZA fields saved
         # if overwrite_ZA_fields \
         #     or not os.path.exists(fn_ZA_disp) \
         #     or not os.path.exists(fn_lin) \
@@ -117,20 +118,26 @@ def main():
         norm=n_grid**3.
         np.save(fn_lin, sim.linear_field[0]*norm,allow_pickle=True)
         if run_zspace:
-            np.save(fn_ZA_vel, sim.sdm['vel'].reshape((-1,n_grid,n_grid,n_grid)), allow_pickle=True)
+            #np.save(fn_ZA_vel, sim.sdm['vel'].reshape((-1,n_grid,n_grid,n_grid)), allow_pickle=True)
+            # Changed the above line to the following, which corrected the dimension ordering of vel field
+            velocities = sim.sdm['vel']
+            vel_field = velocities.reshape((n_grid,n_grid,n_grid,-1))
+            vel_field = vel_field.transpose(3,0,1,2)
+            np.save(fn_ZA_vel, vel_field, allow_pickle=True)
 
         # RUN MAP2MAP
         fn_disp = f'{dir_LH}/pred_disp.npy'
-        if overwrite_m2m_preds or not os.path.exists(fn_disp):
+        if overwrite_m2m_disp or not os.path.exists(fn_disp):
             print("Running map2map")
             ## Positions
             # if i don't pass num-threads, it tries to read from slurm, but i'm not running w slurm
-            os.system(f'python {dir_m2m}/m2m.py test --num-threads {n_threads_m2m} ' 
+            # num-threads only for when on CPU, not if we have cuda/GPU
+            os.system(f'python {dir_m2m}/m2m.py test --num-threads 1 ' 
                     f'--test-in-patterns "{fn_ZA_disp}" ' 
                     f'--test-tgt-patterns "{fn_ZA_disp}" '
                     '--in-norms "cosmology.dis" --tgt-norms "cosmology.dis" '
                     '--crop 128 --crop-step 128 --pad 48 '
-                    '--model d2d.StyledVNet --batches 1 --loader-workers 7 '
+                    f'--model d2d.StyledVNet --batches 1 --loader-workers {n_threads_m2m} '
                     f'--load-state "{dir_m2m}/map2map/weights/d2d_weights.pt" '
                     f'--callback-at "{dir_m2m}" ' 
                     f'--test-style-pattern "{dir_LH}/cosmo_pars_m2m.txt"')
@@ -141,16 +148,16 @@ def main():
             print(f"time for running map2map positions: {timenow-timeprev} s")
 
         fn_vel = f'{dir_LH}/pred_vel.npy'
-        if overwrite_m2m_preds or not os.path.exists(fn_vel):
+        if overwrite_m2m_vel or not os.path.exists(fn_vel):
 
             ## Velocities (for RSD)
             if run_zspace:
-                os.system(f'python {dir_m2m}/m2m.py test --num-threads {n_threads_m2m} ' 
+                os.system(f'python {dir_m2m}/m2m.py test --num-threads 1 ' 
                     f'--test-in-patterns "{fn_ZA_vel}" ' 
                     f'--test-tgt-patterns "{fn_ZA_vel}" '
                     '--in-norms "cosmology.vel" --tgt-norms "cosmology.vel" '
                     '--crop 128 --crop-step 128 --pad 48 '
-                    '--model d2d.StyledVNet --batches 1 --loader-workers 7 '
+                    f'--model d2d.StyledVNet --batches 1 --loader-workers {n_threads_m2m} '
                     f'--load-state "{dir_m2m}/map2map/weights/v2halov_weights.pt" '
                     f'--callback-at "{dir_m2m}" ' 
                     f'--test-style-pattern "{dir_LH}/cosmo_pars_m2m.txt"')
@@ -183,6 +190,8 @@ def main():
         print(f"time for adding displacements: {timenow-timeprev} s")
 
         print("Generating bias fields from particle positions")
+        
+        # Choose 0.7 as damping scale
         #k_nyq = np.pi * n_grid / box_size
         damping_scale = 0.7 #k_nyq
         predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim, 
@@ -290,8 +299,6 @@ def deconvolve_bias_field(bias_terms, n_grid_orig):
 
 
 def remove_lowk_modes(bias_terms_eul_pred, box_size, n_grid_target):
-    # updated to squeeze out the extra dim and then alter where needed
-    #bias_terms_eul_pred = np.squeeze(bias_terms_eul_pred)
     n_grid = bias_terms_eul_pred.shape[-1]
     k_nyq = np.pi/box_size*n_grid_target
     kmesh = bacco.visualization.np_get_kmesh( (n_grid, n_grid, n_grid), box_size, real=True)
