@@ -27,7 +27,8 @@ def main():
     # 7 threads (workers) takes ~9 minutes for each map2map run (pos, vel)
     # 16 workers takes 4 minutes; no change in memory usage 
     # 32 workers also takes 4 minutes...?
-    n_threads_m2m = 24 #7
+    # 24 takes 5-6 minutes for disp, 6-8 min for vel
+    n_threads_m2m = 16 #7
     n_threads_bacco = 12
 
     deconvolve_lr_field = True
@@ -40,8 +41,8 @@ def main():
     overwrite_m2m_vel = False
     #overwrite_ZA_fields = False
     
-    idx_LH_start = 2
-    idx_LH_end = 500
+    idx_LH_start = 43
+    idx_LH_end = 44
     #idxs = range(idx_LH_start, idx_LH_end)
     #idxs = np.arange(idx_LH_start, idx_LH_end)
     idxs = np.arange(idx_LH_start, idx_LH_end, 2)
@@ -298,10 +299,10 @@ def predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim,
         print(f"Saving k-cut, non-deconvolved eulerian fields {tag_bfields}")
         np.save(f'{dir_LH}/bias_fields_eul{tag_bfields}_{idx_LH}.npy', bias_terms_eul_pred_kcut, allow_pickle=True)
     
-    print(f"Deconvolving k-cut bias fields {tag_bfields}")
     # Deconvolve bias fields - deconvolving the field with the low-k modes already removed bc much faster.
     # Showed that it gets essentially same result as deconvolving the HR field and then cutting the low-k-modes
     if deconvolve_lr_field:
+        print(f"Deconvolving k-cut bias fields {tag_bfields}")
         bias_terms_eul_pred_kcut_deconvolved = deconvolve_bias_field(bias_terms_eul_pred_kcut,
                                                                      n_grid)
         # for some reason this pb function turns our float32 array into float64, 
@@ -313,6 +314,7 @@ def predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim,
         timeprev = timenow
         timenow = time.time()
         print(f"time for deconvolving k-cut fields {tag_bfields}: {timenow-timeprev} s")
+
 
 
 def deconvolve_bias_field(bias_terms, n_grid_orig):

@@ -83,12 +83,13 @@ def load_emu(emu_name='lbias_2.0'):
     elif emu_name=='mpk':
         standardspace_folder = f'{dir_emus_mpk}/mpk_baccoemu_new/mpk_oldsims_standard_emu_npca7_neurons_400_400_dropout_0.0_bn_False/'
         emu = baccoemu.Matter_powerspectrum(nonlinear_emu_path=standardspace_folder, 
-                                                     nonlinear_emu_details='details.pickle')
+                                                     nonlinear_emu_details='details.pickle',
+                                                     verbose=False,)
     elif emu_name=='mpk_extended':
         extendedspace_folder = f'{dir_emus_mpk}/mpk_baccoemu_new/mpk_extended_emu_npca_20_batch_size_256_nodes_400_400_dropout_0.0_batch_norm_False/'
         emu = baccoemu.Matter_powerspectrum(nonlinear_emu_path=extendedspace_folder, 
-                                            nonlinear_emu_details='details.pickle')
-        
+                                            nonlinear_emu_details='details.pickle',
+                                            verbose=False,)
     else:
         raise ValueError(f'Emulator {emu_name} not recognized!')
     emu_param_names = emu.emulator['nonlinear']['keys']

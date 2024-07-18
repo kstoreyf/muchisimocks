@@ -4,6 +4,7 @@ os.environ["OMP_NUM_THREADS"] = str(1)
 import numpy as np
 import pandas as pd
 from pathlib import Path
+import re
 import time
 
 import bacco
@@ -13,13 +14,12 @@ import utils
 
 
 def main():
-    compute_pks_muchisimocks()
-    #compute_pks_quijote_LH()
+    #compute_pks_muchisimocks()
+    compute_pks_quijote_LH()
     
 
 def compute_pks_muchisimocks():
     
-    idxs_LH = [0]
     #tag_mocks = '_HR'
     #tag_mocks = '_FixedPk'
     tag_params = '_p3_n500'
@@ -28,14 +28,23 @@ def compute_pks_muchisimocks():
     dir_mocks = f'/cosmos_storage/cosmosims/muchisimocks_lib{tag_mocks}'
     # tag_pk = '_b0000'
     # tag_fields = '_deconvolved'
-    tag_pk = '_b0000_zspace'
-    tag_fields = '_zspace_deconvolved'
+    # tag_pk = '_b0000_zspace'
+    # tag_fields = '_zspace_deconvolved'
     
-    dir_pks = f'../data/pks_mlib/pks{tag_mocks}{tag_pk}'
+    bias_vector = [1., 0., 0., 0.]    
+    tags_pk = ['_b1000', '_b1000_zspace']
+    tags_fields = ['_deconvolved', '_zspace_deconvolved']
+        
+    #idxs_LH = [0]
+    idxs_LH = np.sort([int(re.search(r'^LH(\d+)$', dir_mocks).group(1)) \
+        for dir_mocks in os.listdir(dir_mocks) \
+        if re.search(r'^LH\d+$', dir_mocks)])
+    #idxs_LH = [43]
+    
     #tag_fields = '_hr'
     #tag_fields_extra = '_2GpcBox'
     tag_fields_extra = ''
-    overwrite = True
+    overwrite = False
     
     deconvolve_grid = False # fields already deconvolved
     # NOTE: fields created without interlacing, so need to set it off here
@@ -43,11 +52,6 @@ def compute_pks_muchisimocks():
     correct_grid = False
     k_min, k_max, n_bins = 0.01, 0.4, 30
 
-    Path.mkdir(Path(dir_pks), parents=True, exist_ok=True)
-
-    bias_vector = [0., 0., 0., 0.]    
-    fn_bias_vector = f'{dir_pks}/bias_params.txt'
-    np.savetxt(fn_bias_vector, bias_vector)
 
     #n_grid = 128
     #n_grid_orig = None #compute from fields, if we don't know that it's different
@@ -64,38 +68,49 @@ def compute_pks_muchisimocks():
     # order of saved cosmo param files
     #param_names = ['omega_cold', 'sigma_8', 'h', 'omega_baryon', 'n_s', 'seed']
     
-    for idx_LH in idxs_LH:
-        #if idx_LH%10==0:
-        print(f"Comping Pk for LH{idx_LH}")
-        fn_fields = f'{dir_mocks}/LH{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
-        #fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
-        fn_pk = f'{dir_pks}/pk_{idx_LH}{tag_fields_extra}.npy'
-        if os.path.exists(fn_pk) and not overwrite:
-            print(f"P(k) for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing")
-            continue
-        
-        start = time.time()
-        # normalize by 512 because that's the original ngrid size
-        bias_terms_eul = np.load(fn_fields)
-        if n_grid_orig is None:
-            n_grid_orig = bias_terms_eul.shape[-1]
-        print(f"n_grid_orig = {n_grid_orig}")
-        tracer_field = get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
-        
-        #param_vals = np.loadtxt(fn_params)
-        #param_dict = dict(zip(param_names, param_vals))
-        param_dict = params_df.loc[idx_LH].to_dict()
-        param_dict.update(param_dict_fixed)
-        print(param_dict)
-        cosmo = utils.get_cosmo(param_dict)
-        
-        compute_pk(tracer_field, cosmo, box_size,
-                    k_min=k_min, k_max=k_max, n_bins=n_bins,
-                    deconvolve_grid=deconvolve_grid,
-                    interlacing=interlacing, correct_grid=correct_grid,
-                    fn_pk=fn_pk)
-        end = time.time()
-        print(f"Computed P(k) for idx_LH={idx_LH} in time {end-start} s")
+    for tag_pk, tag_fields in zip(tags_pk, tags_fields):
+        dir_pks = f'../data/pks_mlib/pks{tag_mocks}{tag_pk}'
+        Path.mkdir(Path(dir_pks), parents=True, exist_ok=True)
+        fn_bias_vector = f'{dir_pks}/bias_params.txt'
+        np.savetxt(fn_bias_vector, bias_vector)
+    
+        print("tag_pk:", tag_pk)
+        for idx_LH in idxs_LH:
+            #if idx_LH%10==0:
+            print(f"Comping Pk for LH{idx_LH} ({tag_pk})")
+            fn_fields = f'{dir_mocks}/LH{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
+            #fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
+            fn_pk = f'{dir_pks}/pk_{idx_LH}{tag_fields_extra}.npy'
+            if os.path.exists(fn_pk) and not overwrite:
+                print(f"P(k) for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing")
+                continue
+            
+            start = time.time()
+            # normalize by 512 because that's the original ngrid size
+            try:
+                bias_terms_eul = np.load(fn_fields)
+            except FileNotFoundError:
+                print(f"File {fn_fields} not found, continuing")
+                continue
+            if n_grid_orig is None:
+                n_grid_orig = bias_terms_eul.shape[-1]
+            print(f"n_grid_orig = {n_grid_orig}")
+            tracer_field = get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
+            
+            #param_vals = np.loadtxt(fn_params)
+            #param_dict = dict(zip(param_names, param_vals))
+            param_dict = params_df.loc[idx_LH].to_dict()
+            param_dict.update(param_dict_fixed)
+            print(param_dict)
+            cosmo = utils.get_cosmo(param_dict)
+            
+            compute_pk(tracer_field, cosmo, box_size,
+                        k_min=k_min, k_max=k_max, n_bins=n_bins,
+                        deconvolve_grid=deconvolve_grid,
+                        interlacing=interlacing, correct_grid=correct_grid,
+                        fn_pk=fn_pk)
+            end = time.time()
+            print(f"Computed P(k) for idx_LH={idx_LH} ({tag_pk}) in time {end-start} s")
     
 
 def compute_pks_quijote_LH():
@@ -109,7 +124,8 @@ def compute_pks_quijote_LH():
     overwrite_pks = False
     #compute_sim = True
     #compute_pred = False
-    tags = ['_sim', '_pred']
+    #tags = ['_sim', '_pred']
+    tags = ['_pred']
     
     #Path.mkdir(Path(dir_pks_pred), parents=True, exist_ok=True)
 
