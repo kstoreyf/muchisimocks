@@ -184,52 +184,70 @@ def repeat_arr_rlzs(arr, n_rlzs=1):
     return arr_repeat
 
 
+def param_dict_to_bacco_param_dict(param_dict, neutrino_mass=None):
+    
+    if neutrino_mass is None:
+        assert 'neutrino_mass' in param_dict, "must pass neutrino mass in param dict or separately!"
+        neutrino_mass = param_dict['neutrino_mass']
+        
+    names_to_bacco = {'h': 'hubble',
+                      'sigma_8': 'sigma8',
+                      'sigma8_cold': 'sigma8',
+                      'n_s': 'ns'}
+    param_dict_bacco = {}
+    for name_orig in param_dict:
+        if name_orig in names_to_bacco:
+            name_bacco = names_to_bacco[name_orig]
+        else:
+            name_bacco = name_orig
+        param_dict_bacco[name_bacco] = param_dict[name_orig] 
+        
+    pn_oms = ['omega_m', 'omega_cdm', 'omega_cold']
+    n_oms = np.sum([1 if pn_om in param_dict_bacco else 0 for pn_om in pn_oms])        
+    assert n_oms==1, f"should pass exactly one of {pn_oms}!"     
+              
+    if 'omega_cdm' in param_dict_bacco:
+        pass      
+    elif 'omega_cold' in param_dict_bacco:                   
+        param_dict_bacco['omega_cdm'] = param_dict_bacco['omega_cold']-param_dict_bacco['omega_baryon']
+    elif 'omega_m' in param_dict_bacco:
+        param_dict_bacco['omega_cold'] = param_dict_bacco['omega_m'] - neutrino_mass
+        param_dict_bacco['omega_cdm'] = param_dict_bacco['omega_cold']-param_dict_bacco['omega_baryon']
+        
+    return param_dict_bacco
+
+
 def get_cosmo(param_dict, a_scale=1, sim_name='quijote'):
     import bacco
     
-    param_dict_copy = param_dict.copy()
-    
+    param_names_bacco = ['omega_cdm', 'omega_baryon', 'hubble', 'ns', 'sigma8', 
+                        'tau', 'neutrino_mass', 'w0', 'wa']
+
     if sim_name=='quijote':
-        param_names_fid = cosmo_dict_quijote.keys()
-        for pn in param_names_fid:
-            if pn not in param_dict:
-                param_dict_copy[pn] = cosmo_dict_quijote[pn]
+        param_dict_bacco_fid = param_dict_to_bacco_param_dict(cosmo_dict_quijote)
     else:
         raise ValueError(f'Simulation {sim_name} not recognized!')
-            
-    name_twins = {'h': 'hubble',
-                  'sigma_8': 'sigma8',
-                  'sigma8_cold': 'sigma8',
-                  'n_s': 'ns'}
-    
-    for name_current, name_bacco in name_twins.items():
-        if name_current in param_dict_copy:
-            param_dict_copy[name_bacco] = param_dict_copy.pop(name_current)
-    
-    assert param_dict_copy['neutrino_mass']==0.0, 'not implemented for nonzero neutrino_mass'
-    
+
     # omega_m = omega_cold + omega_neutrinos 
     # (omega_m = omega_cold if no neutrinos) 
     # Om_cdm = Om_cold - Om_baryon
-    if 'omega_cold' in param_dict_copy:
-        omega_cdm = param_dict_copy['omega_cold']-param_dict_copy['omega_baryon']
-    elif 'omega_m' in param_dict_copy:
-        omega_cdm = param_dict_copy['omega_m']-param_dict_copy['omega_baryon']
-    else:
-        raise ValueError("param_dict must include omega_m or omega_cold!")
+                                   
+    # Ωm = Ωcdm + Ωb + Ων
+    # (Ωcold = Ωcdm + Ωb)
+    # (Ωm = Ωcold + Ων)              
+    # Ωcdm = Ωcold - Ωb
+    neutrino_mass = param_dict['neutrino_mass'] if 'neutrino_mass' in param_dict \
+                                                else param_dict_bacco_fid['neutrino_mass']     
 
-    cosmopars = dict(
-            omega_cdm=omega_cdm,
-            omega_baryon=param_dict_copy['omega_baryon'],
-            hubble=param_dict_copy['hubble'],
-            ns=param_dict_copy['ns'],
-            sigma8=param_dict_copy['sigma8'],
-            tau=param_dict_copy['tau'],
-            #A_s=None,
-            neutrino_mass=param_dict_copy['neutrino_mass'],
-            w0=param_dict_copy['w0'],
-            wa=param_dict_copy['wa'],
-        )
+    param_dict_bacco = param_dict_to_bacco_param_dict(param_dict, neutrino_mass=neutrino_mass)
+
+    cosmopars = {}
+    for pn in param_names_bacco:
+        if pn in param_dict_bacco:
+            cosmopars[pn] = param_dict_bacco[pn]
+        else:
+            print(f"Param {pn} not in param dict, adding {sim_name} value")
+            cosmopars[pn] = param_dict_bacco_fid[pn]
 
     cosmo = bacco.Cosmology(**cosmopars, verbose=False)
     cosmo.set_expfactor(a_scale)
@@ -266,7 +284,7 @@ def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=None):
         
     def _sum_bias_fields(fields, bias_vector):
         bias_vector_extended = np.concatenate(([1.0], bias_vector))
-        return np.sum([fields[ii]*bias_vector_extended[ii] for ii in range(len(bias_vector))], axis=0)
+        return np.sum([fields[ii]*bias_vector_extended[ii] for ii in range(len(bias_vector_extended))], axis=0)
     
     tracer_field_eul = _sum_bias_fields(bias_fields_eul, bias_vector)
     tracer_field_eul_norm = tracer_field_eul/n_grid_norm**3

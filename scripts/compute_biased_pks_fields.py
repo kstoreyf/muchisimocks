@@ -193,7 +193,12 @@ def compute_pks_quijote_LH():
             dens_lin = np.load(fn_dens_lin)
             
             # get fields sim
-            fn_disp = f'{dir_mocks}/LH{idx_LH_str}/dis_{idx_LH_str}.npy'
+            if 'sim' in tag:
+                fn_disp = f'{dir_mocks}/LH{idx_LH_str}/dis_{idx_LH_str}.npy'
+            elif 'pred' in tag:
+                fn_disp = f'{dir_mocks}/LH{idx_LH_str}/pred_pos_{idx_LH_str}.npy'
+            else:
+                raise ValueError("tag must be 'sim' or 'pred'")
             disp = np.load(fn_disp)
             
             if (not os.path.exists(fn_fields) or overwrite_fields):
@@ -209,11 +214,17 @@ def compute_pks_quijote_LH():
                 
             if run_zspace and (not os.path.exists(fn_fields_zspace) or overwrite_fields):
                 start = time.time()
-                fn_vel = f'{dir_mocks}/LH{idx_LH_str}/nlvel_{idx_LH_str}.npy'
+                if 'sim' in tag:
+                    fn_vel = f'{dir_mocks}/LH{idx_LH_str}/nlvel_{idx_LH_str}.npy'
+                elif 'pred' in tag:
+                    fn_vel = f'{dir_mocks}/LH{idx_LH_str}/pred_vel_{idx_LH_str}.npy'
+                else:
+                    raise ValueError("tag must be 'sim' or 'pred'")
                 vel = np.load(fn_vel)
                 velocities = fv2bro(vel.copy(order='C'))
                 bias_terms_eul_zspace = displacements_to_bias_fields(dens_lin, disp, n_grid, 
-                                            box_size, velocities=velocities, cosmo=cosmo, damping_scale=damping_scale, interlacing=interlacing, fn_fields=fn_fields_zspace)
+                                            box_size, velocities=velocities, cosmo=cosmo, damping_scale=damping_scale, 
+                                            interlacing=interlacing, fn_fields=fn_fields_zspace)
                 end = time.time()
                 print(f"Generated zspace bias fields for orig sim for idx_LH={idx_LH} in time {end-start} s")
             else:
@@ -279,7 +290,9 @@ def displacements_to_bias_fields(dens_lin, disp, n_grid, box_size,
                                         vel_factor=0,
                                         verbose=False)[0]
 
-    bmodel = bacco.BiasModel(sim=None, linear_delta=dens_lin[0], ngrid=n_grid, ngrid1=None,
+    n_grid_orig = dens_lin.shape[-1]
+    print(f"n_grid_orig = {n_grid_orig}")
+    bmodel = bacco.BiasModel(sim=None, linear_delta=dens_lin[0], ngrid=n_grid_orig, ngrid1=None,
                             sdm=False, mode="dm", BoxSize=box_size,
                             npart_for_fake_sim=n_grid, damping_scale=damping_scale,
                             bias_model='expansion', deposit_method="cic",
