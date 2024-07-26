@@ -115,7 +115,7 @@ def compute_pks_muchisimocks():
 
 def compute_pks_quijote_LH():
     dir_mocks = '/cosmos_storage/home/mpelle/Yin_data/Quijote'
-    tag_fields = '_interlacingfalse'
+    tag_fields = '_interlacingfalse_fixdamp'
     dir_fields = f'/cosmos_storage/home/kstoreyf/data_muchisimocks/quijote_LH{tag_fields}'
     tag_pk = f'{tag_fields}_b0000'
 
@@ -124,12 +124,12 @@ def compute_pks_quijote_LH():
     overwrite_pks = False
     #compute_sim = True
     #compute_pred = False
-    #tags = ['_sim', '_pred']
-    tags = ['_pred']
+    tags = ['_sim', '_pred']
+    #tags = ['_pred']
     
     #Path.mkdir(Path(dir_pks_pred), parents=True, exist_ok=True)
 
-    bias_vector = [0., 0., 0., 0.]
+    bias_vector = [1., 0., 0., 0.]
     n_grid = 512
     n_grid_orig = 512
     box_size = 1000.0

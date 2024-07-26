@@ -24,6 +24,23 @@ label_dict_methods = {'mn': 'Moment Network',
                       'emcee': 'MCMC (emcee)',
                       'dynesty': 'MCMC (dynesty)'}
 
+labels_pnn = ['$1 1$',
+            '$1 \\delta$',
+            '$1 \\delta^2$',
+            '$1 s^2$',
+            '$ 1 \\nabla^2\\delta$',
+            '$\\delta \\delta$',
+            '$\\delta \\delta^2$',
+            '$\\delta s^2$',
+            '$\\delta \\nabla^2\\delta$',
+            '$\\delta^2 \\delta^2$',
+            '$\\delta^2 s^2$',
+            '$\\delta^2 \\nabla^2\\delta$',
+            '$s^2 s^2$',
+            '$s^2 \\nabla^2\\delta$',
+            '$\\nabla^2\\delta \\nabla^2\\delta$'
+            ]
+
 # https://arxiv.org/pdf/1909.05273, Table 1, top row
 cosmo_dict_quijote = {
                 'omega_cold'    :  0.3175,

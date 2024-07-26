@@ -14,13 +14,17 @@ import utils
 os.environ["MKL_SERVICE_FORCE_INTEL"] = str(1)
 
 
+### 
+# Run with e.g. nohup nice -n 10 python data_creation_pipeline.py &> logs/datagen_LH0.out &
+###
+
 def main():
     
     n_grid = 512
     n_grid_target = 128
 
     tag_params = f'_p3_n500'
-    tag_mocks = tag_params
+    tag_mocks = f'{tag_params}_fixdamp'
     box_size = 1000.
 
     # uses 12 GB, indep of number of threads
@@ -32,17 +36,17 @@ def main():
     n_threads_bacco = 12
 
     deconvolve_lr_field = True
-    run_zspace = True
+    run_zspace = False
     
-    save_intermeds = False
-    save_hr_field = False
+    save_intermeds = True
+    save_hr_field = True
     
     overwrite_m2m_disp = False
     overwrite_m2m_vel = False
     #overwrite_ZA_fields = False
     
-    idx_LH_start = 43
-    idx_LH_end = 44
+    idx_LH_start = 1
+    idx_LH_end = 2
     #idxs = range(idx_LH_start, idx_LH_end)
     #idxs = np.arange(idx_LH_start, idx_LH_end)
     idxs = np.arange(idx_LH_start, idx_LH_end, 2)
@@ -90,20 +94,6 @@ def main():
         dir_LH = f'{dir_mocks}/LH{idx_LH}'
         print("dir_LH:", dir_LH)
         Path.mkdir(Path(dir_LH), parents=True, exist_ok=True)
-            
-        # get cosmology
-        #fn_cosmopars_orig = f'{dir_cosmopars}/LH{idx_LH}/cosmo_{idx_LH}.txt'
-        #fn_cosmopars = f'{dir_LH}/cosmo_{idx_LH}.txt'
-        #os.system(f'cp {fn_cosmopars_orig} {fn_cosmopars}')
-        #cospars = np.loadtxt(fn_cosmopars)
-        # param_dict = {'omega_m':Omega0, 
-        #     'omega_baryon':OmegaBaryon, 
-        #     'hubble':HubbleParam, 
-        #     'neutrino_mass':0.0, 
-        #     'sigma8':sigma8, 
-        #     'ns':ns}
-        # Omega0, sigma8, HubbleParam, OmegaBaryon,ns, Seed = cospars
-        # Seed = int(Seed)             
         
         param_dict = params_df.loc[idx_LH].to_dict()
         param_dict.update(param_dict_fixed)
@@ -111,8 +101,9 @@ def main():
         print("param_dict:", param_dict)
    
         ## Start cosmology class
-        cosmo = utils.get_cosmo(param_dict, a_scale=1.0, sim_name='quijote')
-        print(cosmo)
+        expfactor = 1.0
+        cosmo = utils.get_cosmo(param_dict, a_scale=expfactor, sim_name='quijote')
+        print(cosmo.pars)
     
         # We also need the parameters in this order in a text file for m2m
         #pars_arr = np.array([Omega0, OmegaBaryon, HubbleParam, ns, sigma8])
@@ -134,7 +125,7 @@ def main():
         print("Generating ZA sim")
         sim, disp_field = bacco.utils.create_lpt_simulation(cosmo, box_size, Nmesh=n_grid, Seed=seed,
                                                             FixedInitialAmplitude=FixedInitialAmplitude,InitialPhase=0, 
-                                                            expfactor=1, LPT_order=1, order_by_order=None,
+                                                            expfactor=expfactor, LPT_order=1, order_by_order=None,
                                                             phase_type=1, ngenic_phases=True, return_disp=True, 
                                                             sphere_mode=0)
         timeprev = timenow
@@ -145,7 +136,7 @@ def main():
 
         np.save(fn_ZA_disp, disp_field, allow_pickle=True)
         norm=n_grid**3.
-        np.save(fn_lin, sim.linear_field[0]*norm,allow_pickle=True)
+        np.save(fn_lin, sim.linear_field[0]*norm, allow_pickle=True)
         if run_zspace:
             #np.save(fn_ZA_vel, sim.sdm['vel'].reshape((-1,n_grid,n_grid,n_grid)), allow_pickle=True)
             # Changed the above line to the following, which corrected the dimension ordering of vel field
@@ -220,9 +211,10 @@ def main():
 
         print("Generating bias fields from particle positions")
         
-        # Choose 0.7 as damping scale
+        # Choose 0.75 as damping scale to match emulator
         #k_nyq = np.pi * n_grid / box_size
-        damping_scale = 0.7 #k_nyq
+        #damping_scale = k_nyq
+        damping_scale = 0.75
         predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim, 
                                            dens_lin, pred_pos, damping_scale,
                                            save_hr_field, deconvolve_lr_field, save_intermeds,
@@ -246,7 +238,7 @@ def main():
                     os.system(f'rm {fn_to_remove}')   
             
         timenow = time.time()
-        print(f"TOTAL TIME for LH {idx_LH}: {timenow-start} s")
+        print(f"TOTAL TIME for LH {idx_LH}: {timenow-start} s", flush=True)
 
     
 
@@ -260,7 +252,8 @@ def predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim,
     ## Start bias model class
     interlacing = False
     print("Setting up bias model")
-    bmodel = bacco.BiasModel(sim=sim, linear_delta=dens_lin, ngrid=n_grid, ngrid1=None, 
+    bmodel = bacco.BiasModel(sim=sim, #linear_delta=dens_lin, 
+                            ngrid=n_grid, ngrid1=None, 
                             sdm=False, mode="dm",
                             npart_for_fake_sim=n_grid, damping_scale=damping_scale, 
                             bias_model='expansion', deposit_method="cic", 
