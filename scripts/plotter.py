@@ -204,11 +204,20 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     plot_contours(samples_arr, labels, colors, param_names, utils.param_label_dict, 
                         smooth_arr=smooth_arr, bins_arr=bins_arr,
                         truth_loc=truth_loc, title=title, extents={}, fn_save=None)
-
+ # for backwards compatibility
 
 def plot_overdensity_field(tracer_field, normalize=False, vmax=None, 
                       title=None, show_labels=True, show_colorbar=True,
                       slice_width=1, figsize=(6,6), symlog=False):
+   
+    plot_field(tracer_field, normalize=normalize, vmax=vmax, 
+                      title=title, show_labels=show_labels, show_colorbar=show_colorbar,
+                      slice_width=slice_width, figsize=figsize, symlog=symlog)
+                    
+
+def plot_field(tracer_field, normalize=False, vmin=None, vmax=None, 
+                title=None, show_labels=True, show_colorbar=True,
+                slice_width=1, figsize=(6,6), log=False, symlog=False):
 
         print(np.min(tracer_field), np.max(tracer_field))
 
@@ -217,10 +226,11 @@ def plot_overdensity_field(tracer_field, normalize=False, vmax=None,
         print(np.min(tracer_field), np.max(tracer_field))
         
         if vmax is None:
-            #vmax = np.max(np.abs(tracer_field))
             vmax = 3*np.std(tracer_field)
-
+       
+        print(tracer_field.shape)
         field_2d = np.mean(tracer_field[0:slice_width,:,:], axis=0)
+        print(field_2d.shape)
 
         plt.figure(figsize=figsize, facecolor=(1,1,1,0))
         plt.title(title, fontsize=16)
@@ -229,12 +239,20 @@ def plot_overdensity_field(tracer_field, normalize=False, vmax=None,
             from matplotlib.colors import SymLogNorm
             linthresh = 0.1*vmax
             linscale = 1.0
+            if vmin is None:
+                vmin = -vmax
             norm = SymLogNorm(
                     linthresh=linthresh, linscale=linscale,
-                    vmin=-vmax, vmax=vmax
+                    vmin=vmin, vmax=vmax
                     )
+        elif log:
+            if vmin is None:
+                vmin = np.min(tracer_field[tracer_field>0])
+            norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax)
         else:
-            norm = mpl.colors.Normalize(vmin=-vmax, vmax=vmax)
+            if vmin is None:
+                vmin = -vmax
+            norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
 
         im = plt.imshow(field_2d, norm=norm, cmap='RdBu')
         ax = plt.gca()        
