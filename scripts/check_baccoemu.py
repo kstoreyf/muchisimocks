@@ -21,7 +21,9 @@ def main():
 
     n_grid = 512
     #n_grid = 64
-    tag_extra = '_posfromweb'
+    #tag_extra = '_posfromweb'
+    #tag_extra = '_createlpt_posmarcos'
+    tag_extra = '_fromweb_idcorr'
 
     #sim_type = 'bacco'
     sim_type = 'quijote'
@@ -87,12 +89,17 @@ def load_data_bacco(sim_name, n_grid):
 
 
 
-def load_data_quijote(idx_LH_str):
+def load_data_quijote(idx_LH_str, n_grid=512):
     
     print("Loading quijote data...")
 
-    #data_source = 'marcos'
-    data_source = 'website'
+    #source_dens_lin = 'marcos'
+    #source_dens_lin = 'create_lpt'
+    source_dens_lin = 'website'
+    
+    #source_pos = 'create_lpt'
+    #source_pos = 'marcos'
+    source_pos = 'website'
 
     dir_data = '/cosmos_storage/home/mpelle/Yin_data/Quijote'
     param_names = ['omega_m', 'omega_baryon', 'h', 'n_s', 'sigma_8']
@@ -102,12 +109,56 @@ def load_data_quijote(idx_LH_str):
     param_vals = np.loadtxt(fn_params)
     param_dict = dict(zip(param_names, param_vals))
     cosmo_quijote = utils.get_cosmo(param_dict)
-    
-    fn_dens_lin = f'{dir_data}/LH{idx_LH_str}/lin_den_{idx_LH_str}.npy'
-    dens_lin = np.load(fn_dens_lin)[0]
-    print('dens_lin.shape:', dens_lin.shape)
 
-    if data_source == 'marcos':
+    sim = None
+    if source_dens_lin == 'marcos':    
+        fn_dens_lin = f'{dir_data}/LH{idx_LH_str}/lin_den_{idx_LH_str}.npy'
+        dens_lin = np.load(fn_dens_lin)[0]
+        print('dens_lin.shape:', dens_lin.shape)
+
+    elif source_dens_lin == 'create_lpt':
+        ngenic_phases = False
+        phase_type = 0
+
+        seed = int(idx_LH_str)
+        expfactor = 1.0
+        FixedInitialAmplitude = False
+
+        sim, disp_fromlpt = bacco.utils.create_lpt_simulation(cosmo_quijote, box_size, Nmesh=n_grid, Seed=seed,
+                                                            FixedInitialAmplitude=FixedInitialAmplitude,InitialPhase=0, 
+                                                            expfactor=expfactor, LPT_order=2, order_by_order=None,
+                                                            phase_type=phase_type, ngenic_phases=ngenic_phases, return_disp=True, 
+                                                            sphere_mode=0)
+        
+        dens_lin = sim.get_linear_field(ngrid=n_grid, quantity='delta')
+
+    elif source_dens_lin == 'website':
+        
+        import readgadget
+
+        # input files
+        snapshot_ics = '/dipc/kstoreyf/Quijote_simulations/Snapshots/latin_hypercube/663/ICs/ics'
+        ptype    = [1] #[1](CDM), [2](neutrinos) or [1,2](CDM+neutrinos)
+
+        # read positions, velocities and IDs of the particles
+        pos_ics_raw = readgadget.read_block(snapshot_ics, "POS ", ptype)/1e3 #positions in Mpc/h
+        #ids_ics = readgadget.read_block(snapshot_ics, "ID  ", ptype)-1   #IDs starting from 0
+        
+        n_grid = 512
+        pos_ics_mesh = bacco.statistics.compute_mesh(ngrid=n_grid, box=box_size, pos=pos_ics_raw, 
+                                                deposit_method='cic', interlacing=False)
+        pos_ics_mesh = np.squeeze(pos_ics_mesh)
+        
+        dens_lin_ics_mesh = pos_ics_mesh/np.mean(pos_ics_mesh) - 1.0
+        
+        # tranform to z=0
+        dens_lin = dens_lin_ics_mesh / cosmo_quijote.get_growth_z(1/(1+127))
+
+    else:
+        raise ValueError(f"source_dens_lin not recognized!")
+
+
+    if source_pos == 'marcos':
         fn_disp = f'{dir_data}/LH{idx_LH_str}/dis_{idx_LH_str}.npy'
         disp = np.load(fn_disp) # sim
         n_grid = disp.shape[-1]
@@ -121,14 +172,36 @@ def load_data_quijote(idx_LH_str):
                                         vel=None,
                                         vel_factor=0,
                                         verbose=False)[0]
+    
+    # elif source_pos == 'create_lpt':
+    #     if disp_fromlpt is None:
+    #         raise ValueError("Must also have source_dens_lin=='create_lpt'!")
         
-    elif data_source == 'website':
+    #     grid = bacco.visualization.uniform_grid(npix=n_grid, L=box_size, ndim=3, bounds=False)
+
+    #     pos = bacco.scaler.add_displacement(None,
+    #                                     disp_fromlpt,
+    #                                     box=box_size,
+    #                                     pos=grid.reshape(-1,3),
+    #                                     vel=None,
+    #                                     vel_factor=0,
+    #                                     verbose=False)[0]
+        
+    elif source_pos == 'website':
         
         import readgadget
         snapshot = '/dipc/kstoreyf/Quijote_simulations/Snapshots/latin_hypercube/663/snapdir_004/snap_004'
         ptype    = [1] #[1](CDM), [2](neutrinos) or [1,2](CDM+neutrinos)
         # read positions, velocities and IDs of the particles
-        pos = readgadget.read_block(snapshot, "POS ", ptype)/1e3 #positions in Mpc/h
+        pos_raw = readgadget.read_block(snapshot, "POS ", ptype)/1e3 #positions in Mpc/h
+    
+        # ics
+        snapshot_ics = '/dipc/kstoreyf/Quijote_simulations/Snapshots/latin_hypercube/663/ICs/ics'
+        ids_ics = readgadget.read_block(snapshot_ics, "ID  ", ptype)-1   #IDs starting from 0
+        pos = pos_raw[ids_ics]
+    
+    else: 
+        raise ValueError(f"source_pos not recognized")
         
     print('pos.shape:', pos.shape)
 

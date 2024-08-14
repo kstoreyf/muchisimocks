@@ -217,7 +217,8 @@ def plot_overdensity_field(tracer_field, normalize=False, vmax=None,
 
 def plot_field(tracer_field, normalize=False, vmin=None, vmax=None, 
                 title=None, show_labels=True, show_colorbar=True,
-                slice_width=1, figsize=(6,6), log=False, symlog=False):
+                zslice_min=0, zslice_max=1, figsize=(6,6), log=False, symlog=False, 
+                overdensity=True):
 
         print(np.min(tracer_field), np.max(tracer_field))
 
@@ -229,7 +230,12 @@ def plot_field(tracer_field, normalize=False, vmin=None, vmax=None,
             vmax = 3*np.std(tracer_field)
        
         print(tracer_field.shape)
-        field_2d = np.mean(tracer_field[0:slice_width,:,:], axis=0)
+        if tracer_field.ndim==3:
+            field_2d = np.mean(tracer_field[:,:,zslice_min:zslice_max], axis=-1)
+        elif tracer_field.ndim==2:
+            field_2d = tracer_field
+        else:
+            raise ValueError("field must be 2d or 3d!")
         print(field_2d.shape)
 
         plt.figure(figsize=figsize, facecolor=(1,1,1,0))
@@ -251,14 +257,26 @@ def plot_field(tracer_field, normalize=False, vmin=None, vmax=None,
             norm = mpl.colors.LogNorm(vmin=vmin, vmax=vmax)
         else:
             if vmin is None:
-                vmin = -vmax
+                if overdensity:
+                    vmin = -vmax
+                else:
+                    vmin = np.min(tracer_field[tracer_field>0])
             norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
 
-        im = plt.imshow(field_2d, norm=norm, cmap='RdBu')
+        if overdensity:
+            cmap = 'RdBu'
+        else:
+            cmap = 'Blues'
+                
+        im = plt.imshow(field_2d, norm=norm, cmap=cmap)
         ax = plt.gca()        
         
         if show_colorbar:
-            cbar = plt.colorbar(im, label=r'overdensity $\delta$', fraction=0.046, pad=0.04)
+            if overdensity:
+                label = r'overdensity $\delta$'
+            else:
+                label = r'density'
+            cbar = plt.colorbar(im, label=label, fraction=0.046, pad=0.04)
             cbar.ax.tick_params(labelsize=12) 
             
         if not show_labels:    
