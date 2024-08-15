@@ -19,11 +19,12 @@ import utils
 def main():
     start = time.time()
 
-    n_grid = 512
-    #n_grid = 64
+    #n_grid = 512
+    n_grid = 64
     #tag_extra = '_posfromweb'
     #tag_extra = '_createlpt_posmarcos'
-    tag_extra = '_fromweb_idcorr'
+    #tag_extra = '_fromweb_idcorr'
+    tag_extra = f'_ngrid{n_grid}'
 
     #sim_type = 'bacco'
     sim_type = 'quijote'
@@ -93,13 +94,13 @@ def load_data_quijote(idx_LH_str, n_grid=512):
     
     print("Loading quijote data...")
 
-    #source_dens_lin = 'marcos'
+    source_dens_lin = 'marcos'
     #source_dens_lin = 'create_lpt'
     source_dens_lin = 'website'
     
     #source_pos = 'create_lpt'
-    #source_pos = 'marcos'
-    source_pos = 'website'
+    source_pos = 'marcos'
+    #source_pos = 'website'
 
     dir_data = '/cosmos_storage/home/mpelle/Yin_data/Quijote'
     param_names = ['omega_m', 'omega_baryon', 'h', 'n_s', 'sigma_8']
