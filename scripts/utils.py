@@ -2,7 +2,6 @@ import getdist
 import numpy as np 
 import os
 
-import baccoemu
 
 
 param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
@@ -86,6 +85,7 @@ def setup_cosmo_emu(cosmo='quijote'):
 
 
 def load_emu(emu_name='lbias_2.0'):
+    import baccoemu
     dir_emus_lbias = '/cosmos_storage/data_sharing/data_share'
     dir_emus_mpk = '/cosmos_storage/data_sharing/datashare'
     if emu_name=='lbias_public':
