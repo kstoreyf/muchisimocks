@@ -8,6 +8,8 @@ from scipy.stats import qmc
 import utils
 
 
+seed = 42
+
 n_samples = 500
 param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble']
 tag_params = f'_p3_n{n_samples}'
@@ -36,7 +38,7 @@ fiducial_dict = utils.cosmo_dict_quijote
 param_names_fixed = [pn for pn in param_names_ordered if pn not in param_names_vary]
 
 n_params = len(param_names_vary)
-sampler = qmc.LatinHypercube(d=n_params)
+sampler = qmc.LatinHypercube(d=n_params, seed=seed)
 sample = sampler.random(n=n_samples)
 
 l_bounds = [bounds_dict[pn][0] for pn in param_names_vary]

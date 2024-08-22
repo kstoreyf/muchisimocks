@@ -11,6 +11,8 @@ import bacco.probabilistic_bias as pb
 import utils
 
 
+pyfftw.config.NUM_THREADS = 16
+
 os.environ["MKL_SERVICE_FORCE_INTEL"] = str(1)
 #os.environ["CUDA_VISIBLE_DEVICES"]=""
 
@@ -38,17 +40,17 @@ def main():
     # 1 job: ~200s = ~3 min each for pos / vel
     # 2 jobs: ~400s = ~7 min each for pos / vel
     # 3 jobs: ~400-500s = ~8 min each for pos / vel
-    n_threads_m2m = 8 #7
-    n_threads_bacco = 8
+    n_threads_m2m = 1 #7
+    n_threads_bacco = 16
     print(f"n_threads_m2m = {n_threads_m2m}, n_threads_bacco = {n_threads_bacco}", flush=True)
     deconvolve_lr_field = True
-    run_zspace = True
+    run_zspace = False
     
     save_intermeds = True
     save_hr_field = True
     
-    overwrite_m2m_disp = True
-    overwrite_m2m_vel = True
+    overwrite_m2m_disp = False
+    overwrite_m2m_vel = False
     #overwrite_ZA_fields = False
     
     idx_LH_start = 0
