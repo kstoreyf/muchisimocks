@@ -57,7 +57,7 @@ def run(idx_LH):
     n_threads_bacco = 8
     print(f"n_workers_m2m = {n_workers_m2m}, n_threads_bacco = {n_threads_bacco}", flush=True)
     deconvolve_lr_field = True
-    run_zspace = True
+    run_zspace = False
     
     save_intermeds = False
     save_hr_field = False
@@ -383,3 +383,4 @@ def fv2bro(t_fv_field) :
 
 if __name__=='__main__':
     main()
+
