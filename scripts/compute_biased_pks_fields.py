@@ -14,18 +14,28 @@ import utils
 
 
 def main():
-    #compute_pks_muchisimocks()
-    compute_pks_quijote_LH()
+    compute_pks_muchisimocks()
+    #compute_pks_quijote_LH()
     
 
 def compute_pks_muchisimocks():
     
     #tag_mocks = '_HR'
     #tag_mocks = '_FixedPk'
-    tag_params = '_p3_n500'
-    tag_mocks = tag_params
+    
+    #tag_params = '_p3_n10'
     #dir_mocks = f'../data/cosmolib{tag_mocks}'
-    dir_mocks = f'/cosmos_storage/cosmosims/muchisimocks_lib{tag_mocks}'
+    #dir_mocks = f'/cosmos_storage/cosmosims/muchisimocks_lib{tag_mocks}'
+    
+    # p5_n50 is in data, bc contains full fields as checks so needs more space
+    #tag_params = '_p5_n50'
+    #tag_mocks = tag_params
+    #dir_mocks = f'/data/kstoreyf/muchisimocks/muchisimocks_lib{tag_mocks}'
+
+    tag_params = '_p5_n10000'
+    tag_mocks = tag_params
+    dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_mocks}'
+    
     # tag_pk = '_b0000'
     # tag_fields = '_deconvolved'
     # tag_pk = '_b0000_zspace'

@@ -1,4 +1,3 @@
-import getdist
 import numpy as np 
 import os
 
@@ -84,10 +83,13 @@ def setup_cosmo_emu(cosmo='quijote'):
     return cosmo_params
 
 
-def load_emu(emu_name='lbias_2.0'):
+def load_emu(emu_name='lbias_2.0', dir_emus_lbias=None, dir_emus_mpk=None):
     import baccoemu
-    dir_emus_lbias = '/cosmos_storage/data_sharing/data_share'
-    dir_emus_mpk = '/cosmos_storage/data_sharing/datashare'
+    if dir_emus_lbias is None:
+        dir_emus_lbias = '/cosmos_storage/data_sharing/data_share'
+    if dir_emus_mpk is None:
+        dir_emus_mpk = '/cosmos_storage/data_sharing/datashare'
+    
     if emu_name=='lbias_public':
         emu = baccoemu.Lbias_expansion(verbose=False)
     elif emu_name=='lbias_2.0':
@@ -116,6 +118,7 @@ def load_emu(emu_name='lbias_2.0'):
 
 
 def get_posterior_maxes(samples_equal, param_names):
+    import getdist
     samps = getdist.MCSamples(names=param_names)
     samps.setSamples(samples_equal)
     maxes = []
