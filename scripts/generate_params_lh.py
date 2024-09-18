@@ -10,9 +10,10 @@ import utils
 
 seed = 42
 
-n_samples = 500
-param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble']
-tag_params = f'_p3_n{n_samples}'
+n_samples = 10000
+#param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble']
+param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
+tag_params = f'_p{len(param_names_vary)}_n{n_samples}'
 dir_params = '../data/params'
 fn_params = f'{dir_params}/params_lh{tag_params}.txt'
 fn_params_fixed = f'{dir_params}/params_fixed{tag_params}.txt'
