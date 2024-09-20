@@ -43,21 +43,22 @@ def run(idx_LH):
     n_grid = 512
     n_grid_target = 128
 
-    #tag_params = f'_p3_n500'
+    #tag_params = f'_p3_n50'
     #tag_params = f'_p3_n10'
     tag_params = f'_p5_n10000'
     tag_mocks = f'{tag_params}'
+    #tag_mocks = f'{tag_params}_timetests'
     box_size = 1000.
 
     # uses 12 GB, indep of number of threads
     # 1 job: ~200s = ~3 min each for pos / vel
     # 2 jobs: ~400s = ~7 min each for pos / vel
     # 3 jobs: ~400-500s = ~8 min each for pos / vel
-    n_workers_m2m = 8 #0 disables multiprocessing
+    n_workers_m2m = 0 #0 disables multiprocessing
     n_threads_bacco = 8
     print(f"n_workers_m2m = {n_workers_m2m}, n_threads_bacco = {n_threads_bacco}", flush=True)
     deconvolve_lr_field = True
-    run_zspace = False
+    run_zspace = True
     
     save_intermeds = False
     save_hr_field = False
@@ -119,12 +120,13 @@ def run(idx_LH):
             return
         
     print(f"Starting LH {idx_LH}", flush=True)
-    ### ADDING FOR NOW AS FIX
     fn_disp = f'{dir_LH}/pred_disp.npy'
     fn_vel = f'{dir_LH}/pred_vel.npy'
-    if not (os.path.exists(fn_disp) and os.path.exists(fn_vel)):
-        print("Don't have the disp and vel fields for this LH, skipping", flush=True)
-        return 
+
+    ### ADDING FOR NOW AS FIX
+    # if not (os.path.exists(fn_disp) and os.path.exists(fn_vel)):
+    #     print("Don't have the disp and vel fields for this LH, skipping", flush=True)
+    #     return 
     
     start = time.time()
     timenow = start
@@ -146,7 +148,8 @@ def run(idx_LH):
     #pars_arr = np.array([Omega0, OmegaBaryon, HubbleParam, ns, sigma8])
     param_names_m2m_ordered = ['omega_cold', 'omega_baryon', 'hubble', 'ns', 'sigma8_cold']
     pars_arr = np.array([param_dict[pn] for pn in param_names_m2m_ordered])
-    np.savetxt(f'{dir_LH}/cosmo_pars_m2m.txt', pars_arr.T)
+    fn_params_m2m = f'{dir_LH}/cosmo_pars_m2m.txt'
+    np.savetxt(fn_params_m2m, pars_arr.T)
 
     # CREATE A ZA SIMULATION
     fn_ZA_disp = f'{dir_LH}/ZA_disp.npy'
@@ -183,7 +186,6 @@ def run(idx_LH):
         np.save(fn_ZA_vel, vel_field, allow_pickle=True)
 
     # RUN MAP2MAP
-    print(overwrite_m2m_disp, os.path.exists(fn_disp))
     if overwrite_m2m_disp or not os.path.exists(fn_disp):
         print("Running map2map", flush=True)
         ## Positions
@@ -198,13 +200,16 @@ def run(idx_LH):
                 f'--load-state "{dir_m2m}/map2map/weights/d2d_weights.pt" '
                 f'--callback-at "{dir_m2m}" ' 
                 f'--test-style-pattern "{dir_LH}/cosmo_pars_m2m.txt"')
-        os.system(f'mv ._out.npy {fn_disp}')
+        # hacked m2m to get this to work - takes output name from --test-tgt-patterns,
+        # so it's already in proper directory; m2m adds "_out", so it's a diff name;
+        # copied from fields.py in map2map
+        fn_disp_m2m = '_out'.join(os.path.splitext(fn_ZA_disp)) 
+        os.system(f'mv {fn_disp_m2m} {fn_disp}')
         
         timeprev = timenow
         timenow = time.time()
         print(f"TIME for running map2map positions: {timenow-timeprev:.2f} s ({(timenow-timeprev)/60:.2f} min)", flush=True)
 
-    print(overwrite_m2m_vel, os.path.exists(fn_vel))
     if overwrite_m2m_vel or not os.path.exists(fn_vel):
 
         ## Velocities (for RSD)
@@ -218,7 +223,11 @@ def run(idx_LH):
                 f'--load-state "{dir_m2m}/map2map/weights/v2halov_weights.pt" '
                 f'--callback-at "{dir_m2m}" ' 
                 f'--test-style-pattern "{dir_LH}/cosmo_pars_m2m.txt"')
-            os.system(f'mv ._out.npy {fn_vel}')
+            # hacked m2m to get this to work - takes output name from --test-tgt-patterns,
+            # so it's already in proper directory; m2m adds "_out", so it's a diff name;
+            # copied from fields.py in map2map
+            fn_vel_m2m = '_out'.join(os.path.splitext(fn_ZA_vel)) 
+            os.system(f'mv {fn_vel_m2m} {fn_vel}')
 
             timeprev = timenow
             timenow = time.time()

@@ -39,7 +39,8 @@ labels_pnn = ['$1 1$',
             '$\\nabla^2\\delta \\nabla^2\\delta$'
             ]
 
-# https://arxiv.org/pdf/1909.05273, Table 1, top row
+# Quijote: https://arxiv.org/pdf/1909.05273, Table 1, top row
+# for tau, via raul: "0.0952 is the value we have in the Planck13 cosmo dictionary (in cosmo_parameters.py). It comes from the best fit of Planck+WP+highL+BAO"
 cosmo_dict_quijote = {
                 'omega_cold'    :  0.3175,
                 'omega_baryon'  :  0.049,
@@ -49,7 +50,7 @@ cosmo_dict_quijote = {
                 'neutrino_mass' :  0.0,
                 'w0'            : -1.0,
                 'wa'            :  0.0,
-                'tau'           :  0.0561, #planck value
+                'tau'           :  0.0952,
                 }   
 
 def idxs_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):

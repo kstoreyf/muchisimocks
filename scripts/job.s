@@ -10,6 +10,7 @@
 #SBATCH --output=logs/%x.out
 
 
+echo "Current date and time: $(date)"
 echo "Slurm job id is ${SLURM_JOB_ID}"
 echo "Running on node ${SLURMD_NODENAME}"
 echo "SLURM_CPUS_ON_NODE = ${SLURM_CPUS_ON_NODE}"
@@ -28,3 +29,4 @@ idx_LH_end=9994
 echo "idx_LH_start=${idx_LH_start}, idx_LH_end=${idx_LH_end}"
 python data_creation_pipeline.py ${idx_LH_start} ${idx_LH_end}
 #python cuda_minimal.py
+#python compute_biased_pks_fields.py

@@ -32,6 +32,8 @@ def compute_pks_muchisimocks():
     #tag_mocks = tag_params
     #dir_mocks = f'/data/kstoreyf/muchisimocks/muchisimocks_lib{tag_mocks}'
 
+    n_threads = 16
+    
     tag_params = '_p5_n10000'
     tag_mocks = tag_params
     dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_mocks}'
@@ -45,16 +47,16 @@ def compute_pks_muchisimocks():
     tags_pk = ['_b1000', '_b1000_zspace']
     tags_fields = ['_deconvolved', '_zspace_deconvolved']
         
-    #idxs_LH = [0]
-    idxs_LH = np.sort([int(re.search(r'^LH(\d+)$', dir_mocks).group(1)) \
-        for dir_mocks in os.listdir(dir_mocks) \
-        if re.search(r'^LH\d+$', dir_mocks)])
+    idxs_LH = [0]
+    # idxs_LH = np.sort([int(re.search(r'^LH(\d+)$', dir_mocks).group(1)) \
+    #     for dir_mocks in os.listdir(dir_mocks) \
+    #     if re.search(r'^LH\d+$', dir_mocks)])
     #idxs_LH = [43]
     
     #tag_fields = '_hr'
     #tag_fields_extra = '_2GpcBox'
     tag_fields_extra = ''
-    overwrite = False
+    overwrite = True
     
     deconvolve_grid = False # fields already deconvolved
     # NOTE: fields created without interlacing, so need to set it off here
@@ -118,12 +120,16 @@ def compute_pks_muchisimocks():
                         k_min=k_min, k_max=k_max, n_bins=n_bins,
                         deconvolve_grid=deconvolve_grid,
                         interlacing=interlacing, correct_grid=correct_grid,
-                        fn_pk=fn_pk)
+                        fn_pk=fn_pk,
+                        n_threads=n_threads)
             end = time.time()
             print(f"Computed P(k) for idx_LH={idx_LH} ({tag_pk}) in time {end-start} s")
     
 
 def compute_pks_quijote_LH():
+    
+    n_threads = 8
+    
     dir_mocks = '/cosmos_storage/home/mpelle/Yin_data/Quijote'
     tag_fields = '_interlacingfalse_fixdamp'
     dir_fields = f'/cosmos_storage/home/kstoreyf/data_muchisimocks/quijote_LH{tag_fields}'
@@ -215,7 +221,8 @@ def compute_pks_quijote_LH():
                 start = time.time()
                 print(f"Computing fields for orig sim for idx_LH={idx_LH}")
                 bias_terms_eul = displacements_to_bias_fields(dens_lin, disp, n_grid, 
-                                            box_size, damping_scale=damping_scale, interlacing=interlacing, fn_fields=fn_fields)
+                                            box_size, damping_scale=damping_scale, interlacing=interlacing, fn_fields=fn_fields,
+                                            n_threads=n_threads)
                 end = time.time()
                 print(f"Generated bias fields for orig sim for idx_LH={idx_LH} in time {end-start} s")
             else:
@@ -234,7 +241,8 @@ def compute_pks_quijote_LH():
                 velocities = fv2bro(vel.copy(order='C'))
                 bias_terms_eul_zspace = displacements_to_bias_fields(dens_lin, disp, n_grid, 
                                             box_size, velocities=velocities, cosmo=cosmo, damping_scale=damping_scale, 
-                                            interlacing=interlacing, fn_fields=fn_fields_zspace)
+                                            interlacing=interlacing, fn_fields=fn_fields_zspace,
+                                            n_threads=n_threads)
                 end = time.time()
                 print(f"Generated zspace bias fields for orig sim for idx_LH={idx_LH} in time {end-start} s")
             else:
