@@ -124,9 +124,9 @@ def run(idx_LH):
     fn_vel = f'{dir_LH}/pred_vel.npy'
 
     ### ADDING FOR NOW AS FIX
-    # if not (os.path.exists(fn_disp) and os.path.exists(fn_vel)):
-    #     print("Don't have the disp and vel fields for this LH, skipping", flush=True)
-    #     return 
+    # if not (os.path.exists(fn_disp) or os.path.exists(fn_vel)):
+    #    print("Don't have the disp and vel fields for this LH, skipping", flush=True)
+    #    return 
     
     start = time.time()
     timenow = start

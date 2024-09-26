@@ -267,7 +267,7 @@ def get_cosmo(param_dict, a_scale=1, sim_name='quijote'):
         if pn in param_dict_bacco:
             cosmopars[pn] = param_dict_bacco[pn]
         else:
-            print(f"Param {pn} not in param dict, adding {sim_name} value")
+            #print(f"Param {pn} not in param dict, adding {sim_name} value")
             cosmopars[pn] = param_dict_bacco_fid[pn]
 
     cosmo = bacco.Cosmology(**cosmopars, verbose=False)
@@ -311,3 +311,30 @@ def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=None):
     tracer_field_eul_norm = tracer_field_eul/n_grid_norm**3
     
     return tracer_field_eul_norm
+
+
+
+#Compute the predicted galaxy auto pk and galaxy-matter cross pk \
+#given a set of bias parameters
+
+# copied from https://bitbucket.org/rangulo/baccoemu/src/master/baccoemu/lbias_expansion.py
+def pnn_to_pk(pnn, bias_params):
+    
+    message = 'Please, pass a valid bias array, with' \
+            + 'b1, b2, bs2, blaplacian'
+    assert len(bias_params) == 4, message
+
+    import itertools
+    #k, pnn = self.get_nonlinear_pnn(**kwargs)
+    bias_params = np.concatenate(([1], bias_params))
+    prod = np.array(
+        list(itertools.combinations_with_replacement(np.arange(len(bias_params)),
+                                                    r=2)))
+
+    pgal_auto = 0
+    for i in range(len(pnn)):
+        fac = 2 if prod[i, 0] != prod[i, 1] else 1
+        pgal_auto += bias_params[prod[i, 0]] * bias_params[prod[i, 1]] * fac * pnn[i]
+    pgal_cross = np.dot(bias_params, pnn[:5])
+
+    return pgal_auto, pgal_cross

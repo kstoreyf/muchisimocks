@@ -1,8 +1,7 @@
 #!/bin/bash
 #SBATCH --qos=regular
-#SBATCH --job-name=datagen_p5_n10000_step10_round3
-##SBATCH --job-name=cuda_testgpu
-#SBATCH --time=00:30:00
+#SBATCH --job-name=datagen_p5_n10000_step10_round7
+#SBATCH --time=01:30:00
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1

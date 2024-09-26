@@ -16,15 +16,17 @@ import utils
 
 
 def main():
-    identify_bad_mocks()
-    #remove_bad_mocks()
+    #identify_bad_mocks()
+    #identify_mismatched_zspace()
+    remove_bad_mocks()
     
 def remove_bad_mocks():
     dry_run = False
     tag_params = '_p5_n10000'
     tag_mocks = tag_params
     dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_mocks}'
-    fn_idxs_bad = f'../data/idxs_LH_bad{tag_params}.txt'    
+    fn_idxs_bad = f'../data/idxs_LH_bad{tag_params}_mismatched.txt'    
+    #fn_idxs_bad = f'../data/idxs_LH_bad{tag_params}.txt'    
     idxs_LH_bad = np.loadtxt(fn_idxs_bad, dtype=int)
     print(idxs_LH_bad)
     
@@ -178,6 +180,62 @@ def identify_bad_mocks():
             else:
                 print(f"GOOD! {idx_LH} (zspace)", flush=True)
         
+        
+        
+def identify_mismatched_zspace():
+    
+    tag_params = '_p5_n10000'
+    tag_mocks = tag_params
+    
+    fn_idxs_bad = f'../data/idxs_LH_bad{tag_params}_mismatched.txt'
+    with open(fn_idxs_bad, 'w') as file:
+        # just create file
+        pass
+
+    tag_pk = '_b1000'
+    tag_pk_zspace = '_b1000_zspace'
+    dir_pks = f'../data/pks_mlib/pks{tag_mocks}{tag_pk}'
+    dir_pks_zspace = f'../data/pks_mlib/pks{tag_mocks}{tag_pk_zspace}'
+
+    # idxs_LH_all = np.array([int(re.search(r'pk_(\d+)\.npy', f).group(1)) for f in glob.glob(f'{dir_pks_zspace}/pk_*.npy')])
+    idxs_LH_all = np.array([int(re.search(r'pk_(\d+)\.npy', f).group(1)) 
+                        for f in glob.glob(f'{dir_pks_zspace}/pk_*.npy') 
+                        if os.path.basename(f) in {os.path.basename(f) for f in glob.glob(f'{dir_pks}/pk_*.npy')}])
+    idxs_LH_all = np.sort(idxs_LH_all)
+    idxs_LH = idxs_LH_all
+    print('N idxs looking thru:', len(idxs_LH))
+
+    Pk = []
+    Pk_zspace = []
+
+    for idx_LH in idxs_LH:
+        #fn_fields = f'{dir_mocks}/LH{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}.npy'
+        #fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
+        fn_pk = f'{dir_pks}/pk_{idx_LH}.npy'
+        fn_pk_zspace = f'{dir_pks_zspace}/pk_{idx_LH}.npy'
+        
+        pk_obj = np.load(fn_pk, allow_pickle=True).item()
+        Pk.append(pk_obj['pk'])
+        
+        pk_obj_zspace = np.load(fn_pk_zspace, allow_pickle=True).item()
+        Pk_zspace.append(pk_obj_zspace['pk'])
+    
+    ratios = []
+    for i, idx_LH in enumerate(idxs_LH):
+        ratio = (Pk_zspace[i] - Pk[i])/Pk[i]
+        ratios.append(ratio)
+        
+    k = pk_obj['k']
+    ratios_k = np.array(ratios)[:,np.argmin(np.abs(k-0.1))]
+    i_bad = ratios_k<0.05
+    idxs_LH_bad = idxs_LH[i_bad]
+    print(idxs_LH_bad)
+    print('N bad:', len(idxs_LH_bad))
+    for idx_LH_bad in idxs_LH_bad:
+        with open(fn_idxs_bad, 'a') as file:
+            file.write(f"{idx_LH_bad}\n")
+
+
         
 if __name__ == '__main__':
     main()

@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --qos=regular
-#SBATCH --job-name=test_datagen_p5_n10000
+#SBATCH --job-name=datagen_p5_n10000_idx1004
 #SBATCH --time=00:30:00
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --gres=gpu:1
@@ -24,8 +24,8 @@ echo "Instance index is ${SLURM_ARRAY_TASK_ID}."
 source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile.d/conda.sh
 conda activate benv
 
-idx_LH_start=9993
-idx_LH_end=9994
+idx_LH_start=1004
+idx_LH_end=$((idx_LH_start+1))
 echo "idx_LH_start=${idx_LH_start}, idx_LH_end=${idx_LH_end}"
 python data_creation_pipeline.py ${idx_LH_start} ${idx_LH_end}
 #python cuda_minimal.py

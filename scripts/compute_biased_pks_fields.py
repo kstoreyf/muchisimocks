@@ -43,20 +43,22 @@ def compute_pks_muchisimocks():
     # tag_pk = '_b0000_zspace'
     # tag_fields = '_zspace_deconvolved'
     
-    bias_vector = [1., 0., 0., 0.]    
-    tags_pk = ['_b1000', '_b1000_zspace']
+    #bias_vector = [1., 0., 0., 0.]    
+    #tags_pk = ['_b1000', '_b1000_zspace']
+    bias_vector = [0., 0., 0., 0.]    
+    tags_pk = ['_b0000', '_b0000_zspace']
     tags_fields = ['_deconvolved', '_zspace_deconvolved']
         
-    idxs_LH = [0]
-    # idxs_LH = np.sort([int(re.search(r'^LH(\d+)$', dir_mocks).group(1)) \
-    #     for dir_mocks in os.listdir(dir_mocks) \
-    #     if re.search(r'^LH\d+$', dir_mocks)])
+    #idxs_LH = [0]
+    idxs_LH = np.sort([int(re.search(r'^LH(\d+)$', dir_mocks).group(1)) \
+        for dir_mocks in os.listdir(dir_mocks) \
+        if re.search(r'^LH\d+$', dir_mocks)])
     #idxs_LH = [43]
     
     #tag_fields = '_hr'
     #tag_fields_extra = '_2GpcBox'
     tag_fields_extra = ''
-    overwrite = True
+    overwrite = False
     
     deconvolve_grid = False # fields already deconvolved
     # NOTE: fields created without interlacing, so need to set it off here
@@ -86,15 +88,15 @@ def compute_pks_muchisimocks():
         fn_bias_vector = f'{dir_pks}/bias_params.txt'
         np.savetxt(fn_bias_vector, bias_vector)
     
-        print("tag_pk:", tag_pk)
+        print("tag_pk:", tag_pk, flush=True)
         for idx_LH in idxs_LH:
             #if idx_LH%10==0:
-            print(f"Comping Pk for LH{idx_LH} ({tag_pk})")
+            print(f"Computing Pk for LH{idx_LH} ({tag_pk})", flush=True)
             fn_fields = f'{dir_mocks}/LH{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
             #fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
             fn_pk = f'{dir_pks}/pk_{idx_LH}{tag_fields_extra}.npy'
             if os.path.exists(fn_pk) and not overwrite:
-                print(f"P(k) for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing")
+                print(f"P(k) for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing", flush=True)
                 continue
             
             start = time.time()
@@ -106,14 +108,14 @@ def compute_pks_muchisimocks():
                 continue
             if n_grid_orig is None:
                 n_grid_orig = bias_terms_eul.shape[-1]
-            print(f"n_grid_orig = {n_grid_orig}")
+            print(f"n_grid_orig = {n_grid_orig}", flush=True)
             tracer_field = get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
             
             #param_vals = np.loadtxt(fn_params)
             #param_dict = dict(zip(param_names, param_vals))
             param_dict = params_df.loc[idx_LH].to_dict()
             param_dict.update(param_dict_fixed)
-            print(param_dict)
+            print(param_dict, flush=True)
             cosmo = utils.get_cosmo(param_dict)
             
             compute_pk(tracer_field, cosmo, box_size,
@@ -123,7 +125,7 @@ def compute_pks_muchisimocks():
                         fn_pk=fn_pk,
                         n_threads=n_threads)
             end = time.time()
-            print(f"Computed P(k) for idx_LH={idx_LH} ({tag_pk}) in time {end-start} s")
+            print(f"Computed P(k) for idx_LH={idx_LH} ({tag_pk}) in time {end-start} s", flush=True)
     
 
 def compute_pks_quijote_LH():
@@ -359,7 +361,7 @@ def compute_pk(tracer_field, cosmo, box_size,
 
     # n_grid has to match the tracer field size for this compuation!
     n_grid = tracer_field.shape[-1]
-    print("Computing pk, using n_grid = ", n_grid)
+    print("Computing pk, using n_grid = ", n_grid, flush=True)
 
     # defaults from bacco.statistics.compute_crossspectrum_twogrids
     # unless passed or otherwise denoted
