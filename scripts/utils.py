@@ -144,7 +144,7 @@ def get_samples(idx_obs, inf_method, tag_inf):
         
         
 def get_moments_test_mn(tag_inf):
-    dir_mn = f'../data/results_moment_network/mn{tag_inf}'
+    dir_mn = f'../results/results_moment_network/mn{tag_inf}'
     theta_test_pred = np.load(f'{dir_mn}/theta_test_pred.npy')
     covs_test_pred = np.load(f'{dir_mn}/covs_test_pred.npy')
     return theta_test_pred, covs_test_pred
@@ -152,15 +152,16 @@ def get_moments_test_mn(tag_inf):
         
 def get_samples_mn(idx_obs, tag_inf):
     rng = np.random.default_rng(42)
-    dir_mn = f'../data/results_moment_network/mn{tag_inf}'
+    dir_mn = f'../results/results_moment_network/mn{tag_inf}'
     theta_test_pred = np.load(f'{dir_mn}/theta_test_pred.npy')
     covs_test_pred = np.load(f'{dir_mn}/covs_test_pred.npy')
+    
     try:
         samples = rng.multivariate_normal(theta_test_pred[idx_obs], 
                                             covs_test_pred[idx_obs], int(1e6),
                                             check_valid='raise')
     except ValueError:
-        title += f' [$C$ not PSD!]'
+        print("Covariance matrix not PSD! (sampling anyway)")
         samples = rng.multivariate_normal(theta_test_pred[idx_obs], 
                                             covs_test_pred[idx_obs], int(1e6),
                                             check_valid='ignore')
@@ -169,7 +170,7 @@ def get_samples_mn(idx_obs, tag_inf):
 
 def get_samples_emcee(idx_obs, tag_inf):
     import emcee
-    dir_emcee =  f'../data/results_emcee/samplers{tag_inf}'
+    dir_emcee =  f'../results/results_emcee/samplers{tag_inf}'
     fn_emcee = f'{dir_emcee}/sampler_idxtest{idx_obs}.npy'
     if not os.path.exists(fn_emcee):
         print(f'File {fn_emcee} not found')
@@ -185,7 +186,7 @@ def get_samples_emcee(idx_obs, tag_inf):
 
 
 def get_samples_dynesty(idx_obs, tag_inf):
-    dir_dynesty =  f'../data/results_dynesty/samplers{tag_inf}'
+    dir_dynesty =  f'../results/results_dynesty/samplers{tag_inf}'
     fn_dynesty = f'{dir_dynesty}/sampler_results_idxtest{idx_obs}.npy'
     results_dynesty = np.load(fn_dynesty, allow_pickle=True).item()
     
@@ -338,3 +339,21 @@ def pnn_to_pk(pnn, bias_params):
     pgal_cross = np.dot(bias_params, pnn[:5])
 
     return pgal_auto, pgal_cross
+
+# used by scripts/generate_emuPks.py, generate_params_lh()
+def generate_randints(n_samples, fn_rands, rng=None, overwrite=False):
+    
+    if os.path.exists(fn_rands) and not overwrite:
+        print(f"Loading from {fn_rands} (already exists)")
+        random_ints = np.load(fn_rands, allow_pickle=True)
+        return random_ints
+    
+    if rng is None:
+        rng = np.random.default_rng(42)
+    
+    # save random ints for later train/val/test split
+    random_ints = np.arange(n_samples)
+    rng.shuffle(random_ints) #in-place
+    np.save(fn_rands, random_ints)
+    print(f"Saved random ints to {fn_rands}")
+    return random_ints

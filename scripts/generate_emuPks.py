@@ -3,19 +3,18 @@ import os
 from scipy.stats import qmc
 
 import bacco
-import baccoemu
 
 import utils
 
 
 def main():
 
-    tag_emuPk = '_2param'
     n_emuPk = 10000
+    tag_emuPk = f'_5param_n{n_emuPk}'
 
     box_size = 500.
     tag_errG = f'_boxsize{int(box_size)}'
-    n_rlzs_per_cosmo = 9
+    n_rlzs_per_cosmo = 1
     tag_datagen = f'{tag_emuPk}{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
 
     fn_emuPk = f'../data/emuPks/emuPks{tag_emuPk}.npy'
@@ -37,35 +36,20 @@ def main():
     else:
         raise KeyError('define parameters!')
     
-    emu, emu_bounds, emu_param_names = utils.load_emu()
+    dir_emus_lbias = '/home/kstoreyf/external'
+    emu, emu_bounds, emu_param_names = utils.load_emu(dir_emus_lbias=dir_emus_lbias)
     param_bounds = {name: emu_bounds[emu_param_names.index(name)] for name in param_names}
     
     theta = latin_hypercube(param_names, param_bounds, n_emuPk,
                             fn_emuPk_params=fn_emuPk_params)
+    print(theta.shape)
     k, Pk_noiseless = generate_pks(theta, bias_params, param_names, emu, 
                          fn_emuk=fn_emuk, fn_emuPk=fn_emuPk)
     gaussian_error_pk = compute_noise(k, Pk_noiseless, box_size, fn_emuPkerrG=fn_emuPkerrG)
     draw_noisy_pk_realizations(Pk_noiseless, theta, gaussian_error_pk, 
                                n_rlzs_per_cosmo=n_rlzs_per_cosmo,
                                fn_emuPk_noisy=fn_emuPk_noisy)
-    generate_randints(n_emuPk, fn_rands=fn_rands)
-
-
-def generate_randints(n_emuPk, rng=None, fn_rands=None, overwrite=False):
-    
-    if os.path.exists(fn_rands) and not overwrite:
-        print(f"Loading from {fn_rands} (already exists)")
-        random_ints = np.load(fn_rands, allow_pickle=True)
-        return random_ints
-    
-    if rng is None:
-        rng = np.random.default_rng(42)
-    
-    # save random ints for later train/val/test split
-    random_ints = np.arange(n_emuPk)
-    rng.shuffle(random_ints) #in-place
-    np.save(fn_rands, random_ints)
-    return random_ints
+    utils.generate_randints(n_emuPk, fn_rands)
 
     
 def generate_pks(theta, bias_params, param_names, emu,
@@ -79,6 +63,7 @@ def generate_pks(theta, bias_params, param_names, emu,
     
     print(f"Generating emuPks for {fn_emuPk}...")
     cosmo_params = utils.setup_cosmo_emu()
+    cosmo_params['expfactor'] = 1
     k = np.logspace(-2, np.log10(0.75), 30)
 
     Pk = []
@@ -129,7 +114,7 @@ def compute_noise(k, Pk, box_size, fn_emuPkerrG=None, overwrite=False):
     for i in range(Pk.shape[0]):
         if i%100==0:
             print(i)
-        g_err = bacco.statistics.approx_pk_gaussian_error(kk, Pk[i], box_size)
+        g_err = bacco.statistics.approx_pk_gaussian_error(k, Pk[i], box_size)
         gaussian_error_pk.append(g_err)
     gaussian_error_pk = np.array(gaussian_error_pk)
 

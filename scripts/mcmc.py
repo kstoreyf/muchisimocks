@@ -54,7 +54,7 @@ def evaluate_dynesty(idx_test, pk_data, cov_inv, scaler,
                      dict_bounds, param_names, emu_param_names,
                      tag_inf='', n_threads=10):
     
-    dir_dynesty =  f'../data/results_dynesty/samplers{tag_inf}'
+    dir_dynesty =  f'../results/results_dynesty/samplers{tag_inf}'
     p = pathlib.Path(dir_dynesty)
     p.mkdir(parents=True, exist_ok=True)
     fn_dynesty = f'{dir_dynesty}/sampler_results_idxtest{idx_test}.npy'
@@ -105,7 +105,7 @@ def evaluate_emcee(idx_test, pk_data, cov_inv, scaler,
     n_steps = 4000 # 50000
     n_walkers = 4 * n_params
 
-    dir_emcee =  f'../data/results_emcee/samplers{tag_inf}'
+    dir_emcee =  f'../results/results_emcee/samplers{tag_inf}'
     p = pathlib.Path(dir_emcee)
     p.mkdir(parents=True, exist_ok=True)
     fn_emcee = f'{dir_emcee}/sampler_idxtest{idx_test}.npy'

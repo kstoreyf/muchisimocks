@@ -1,14 +1,13 @@
 #!/bin/bash
 #SBATCH --qos=regular
-#SBATCH --job-name=datagen_p5_n10000_step10_round7
-#SBATCH --time=01:30:00
+#SBATCH --job-name=datagen_p5_n10000_step10_round8
+#SBATCH --time=02:30:00
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=8             # tasks per instance
 ##x-y%z; start x, end y INCLUSIVE, z tasks at a time max
 #SBATCH --array=0-999%5
-##SBATCH --array=3000-3999%5
 #SBATCH --mem=35G 	       # 30 hit OOM error
 #SBATCH --output=logs/%x-%a.out
 

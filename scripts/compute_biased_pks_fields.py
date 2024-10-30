@@ -43,16 +43,17 @@ def compute_pks_muchisimocks():
     # tag_pk = '_b0000_zspace'
     # tag_fields = '_zspace_deconvolved'
     
-    #bias_vector = [1., 0., 0., 0.]    
-    #tags_pk = ['_b1000', '_b1000_zspace']
     bias_vector = [0., 0., 0., 0.]    
     tags_pk = ['_b0000', '_b0000_zspace']
+    # bias_vector = [1., 0., 0., 0.]    
+    # tags_pk = ['_b1000', '_b1000_zspace']
     tags_fields = ['_deconvolved', '_zspace_deconvolved']
         
     #idxs_LH = [0]
     idxs_LH = np.sort([int(re.search(r'^LH(\d+)$', dir_mocks).group(1)) \
         for dir_mocks in os.listdir(dir_mocks) \
         if re.search(r'^LH\d+$', dir_mocks)])
+    #idxs_LH = idxs_LH[:1000] # for now!
     #idxs_LH = [43]
     
     #tag_fields = '_hr'

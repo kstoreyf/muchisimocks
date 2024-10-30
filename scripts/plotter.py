@@ -69,7 +69,7 @@ def plot_hists_mean(fracdiffs_arr, param_labels, label_arr=None,
 
 
 def plot_hists_cov(theta_true_arr, theta_pred_arr, covs_pred_arr, param_labels,
-                   label_arr=None, color_arr=['salmon'], nbins=20, xlim_auto=True,
+                   label_arr=None, color_arr=None, nbins=20, xlim_auto=True,
                    alpha=0.5, histtype='bar', lw=2):
     
     if theta_true_arr.ndim==2:
@@ -77,6 +77,11 @@ def plot_hists_cov(theta_true_arr, theta_pred_arr, covs_pred_arr, param_labels,
         theta_pred_arr = np.array([theta_pred_arr])
         covs_pred_arr = np.array([covs_pred_arr])
     n_params = theta_true_arr.shape[-1]
+    
+    if label_arr is None:
+        label_arr = [None] * len(theta_true_arr)
+    if color_arr is None:
+        color_arr = ['salmon'] * len(theta_true_arr)
     
     # compute stats
     diffs_arr = theta_pred_arr - theta_true_arr
@@ -173,7 +178,8 @@ def plot_contours(samples_arr, labels, colors, param_names, param_label_dict,
     fig = c.plotter.plot(figsize = (5,4) )
     #ax = fig.gca()
     #ax.set_title(title)
-    fig.suptitle(title)
+    if title is not None:
+        fig.suptitle(title)
     if fn_save is not None:
         plt.savefig(fn_save)
         

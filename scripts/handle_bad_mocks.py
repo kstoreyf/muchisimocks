@@ -198,6 +198,7 @@ def identify_mismatched_zspace():
     dir_pks_zspace = f'../data/pks_mlib/pks{tag_mocks}{tag_pk_zspace}'
 
     # idxs_LH_all = np.array([int(re.search(r'pk_(\d+)\.npy', f).group(1)) for f in glob.glob(f'{dir_pks_zspace}/pk_*.npy')])
+    # gets pks that have both real and zspace; credit to chatgpt
     idxs_LH_all = np.array([int(re.search(r'pk_(\d+)\.npy', f).group(1)) 
                         for f in glob.glob(f'{dir_pks_zspace}/pk_*.npy') 
                         if os.path.basename(f) in {os.path.basename(f) for f in glob.glob(f'{dir_pks}/pk_*.npy')}])
