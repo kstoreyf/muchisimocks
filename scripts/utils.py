@@ -53,13 +53,17 @@ cosmo_dict_quijote = {
                 'tau'           :  0.0952,
                 }   
 
-def idxs_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15):
+def idxs_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15,
+                        N_tot=None):
     print(frac_train, frac_val, frac_test)
     tol = 1e-6
     assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!" 
-    N_tot = len(random_ints)
+    if N_tot is None:
+        print("Assuming N_tot is the length of random_ints")
+        N_tot = len(random_ints)
     int_train = int(frac_train*N_tot)
     int_test = int((1-frac_test)*N_tot)
+    print(int_train, int_test)
 
     idxs_train = np.where(random_ints < int_train)[0]
     idxs_test = np.where(random_ints >= int_test)[0]
@@ -299,14 +303,13 @@ def cosmo_bacco_to_cosmo_baccoemu(cosmo):
 
 
 def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=None):
-
     assert len(bias_vector)==bias_fields_eul.shape[0]-1, "bias_vector must length one less than number of bias fields"
     if n_grid_norm is None:
         n_grid_norm = bias_fields_eul.shape[-1]
         
     def _sum_bias_fields(fields, bias_vector):
         bias_vector_extended = np.concatenate(([1.0], bias_vector))
-        return np.sum([fields[ii]*bias_vector_extended[ii] for ii in range(len(bias_vector_extended))], axis=0)
+        return np.sum([fields[ii]*bias_vector_extended[ii] for ii in range(len(fields))], axis=0)
     
     tracer_field_eul = _sum_bias_fields(bias_fields_eul, bias_vector)
     tracer_field_eul_norm = tracer_field_eul/n_grid_norm**3
@@ -339,6 +342,7 @@ def pnn_to_pk(pnn, bias_params):
     pgal_cross = np.dot(bias_params, pnn[:5])
 
     return pgal_auto, pgal_cross
+
 
 # used by scripts/generate_emuPks.py, generate_params_lh()
 def generate_randints(n_samples, fn_rands, rng=None, overwrite=False):

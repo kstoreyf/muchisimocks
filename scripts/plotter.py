@@ -147,7 +147,8 @@ def plot_hists_cov(theta_true_arr, theta_pred_arr, covs_pred_arr, param_labels,
 
 def plot_contours(samples_arr, labels, colors, param_names, param_label_dict, 
                   smooth_arr=None, bins_arr=None,
-                  truth_loc={}, title=None, extents={}, fn_save=None):
+                  truth_loc={}, title=None, extents={}, 
+                  figsize=(7,7), fn_save=None):
 
     import chainconsumer
     c = chainconsumer.ChainConsumer()
@@ -175,7 +176,7 @@ def plot_contours(samples_arr, labels, colors, param_names, param_label_dict,
 
     c.add_truth(chainconsumer.Truth(location=truth_loc))
 
-    fig = c.plotter.plot(figsize = (5,4) )
+    fig = c.plotter.plot(figsize=figsize)
     #ax = fig.gca()
     #ax.set_title(title)
     if title is not None:

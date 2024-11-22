@@ -12,13 +12,68 @@ import sys
 sys.path.append('/dipc/kstoreyf/muchisimocks/scripts')
 import utils
 import moment_network as mn
+import moment_network_dataloader as mndl
 import scaler_custom as scl
+import data_loader
 
 import generate_emuPks as genP
 
 
-
 def main():
+    #run_3D_inference()
+    run_pk_inference()
+
+
+def run_3D_inference():
+    run_moment = True
+    run_sbi = False
+    
+    n_threads = 1
+
+    # train test split
+    n_train = 6500
+    n_val = 1000
+    #n_train = 100
+    #n_val = 250
+    n_test = 1000
+
+    ### Load data
+    data_mode = 'muchisimocks3D'
+    #data_mode = 'emuPk'
+    assert data_mode in ['muchisimocks3D']
+    
+    if data_mode == 'muchisimocks3D':
+        tag_mocks = '_p5_n10000'
+        tag_datagen = f'{tag_mocks}'
+        dataset_train, dataset_val, dataset_test, param_names = data_loader.load_data_muchisimocks3D(tag_mocks,
+                                                                                                     n_train, n_val, n_test,
+                                                                                                     n_threads=n_threads)
+               
+    tag_data = '_'+data_mode + tag_datagen
+
+    # TODO figure out what to do with scaling here!!
+    ### Scale data
+    # ys_scaled = scale_y_data(y_train, y_val, y_test,
+    #                        y_err_train=y_err_train, y_err_val=y_err_val, y_err_test=y_err_test,
+    #                        return_scaler=True)
+    # y_train_scaled, y_val_scaled, y_test_scaled, \
+    #            y_err_train_scaled, y_err_val_scaled, y_err_test_scaled, scaler = ys_scaled
+    
+    ### Run inference
+    if run_moment:
+        #tag_inf = f'{tag_data}_ntrain{n_train}_scalecovminmax'
+        #tag_inf = f'{tag_data}_ntrain{n_train}_eigs'
+        tag_inf = f'{tag_data}_ntrain{n_train}_direct'
+        moment_network = mndl.MomentNetworkDL(dataset_train, dataset_val, dataset_test,
+                            tag_mn=tag_inf)
+        #moment_network.run(max_epochs_mean=5, max_epochs_cov=5)
+        moment_network.run(max_epochs_mean=2000, max_epochs_cov=2000)
+        moment_network.evaluate_test_set()
+        print(f"Saved results to {moment_network.dir_mn}")
+        
+
+
+def run_pk_inference():
     run_moment = True
     run_sbi = False
     run_emcee = False
@@ -28,11 +83,12 @@ def main():
     idxs_obs = np.arange(1)
 
     # train test split, and number of rlzs per cosmo
-    n_train = 8000
-    n_val = 1000
+    #n_train = 6500
+    n_train = 3500
+    n_val = 400
     #n_train = 100
     #n_val = 250
-    n_test = 1000
+    n_test = 400
 
     ### Load data
     data_mode = 'muchisimocksPk'
@@ -52,10 +108,15 @@ def main():
                                                         n_rlzs_per_cosmo=n_rlzs_per_cosmo)
     elif data_mode == 'muchisimocksPk':
         tag_mocks = '_p5_n10000'
-        tag_pk = '_b1000'
+        # tag_pk = '_b1000'
+        # mode_bias_vector = 'single'
+        tag_pk = '_biaszen_p4_n10000'
+        mode_bias_vector = 'LH'
         tag_datagen = f'{tag_mocks}{tag_pk}'
         theta, y, y_err, k, param_names, bias_params, random_ints = load_data_muchisimocksPk(tag_mocks,
-                                                                                             tag_pk)
+                                                                                             tag_pk,
+                                                                                             mode_bias_vector=mode_bias_vector
+                                                                                             )
     elif data_mode == 'muchisimocks3D':
         tag_mocks = '_p5_n10000'
         tag_datagen = f'{tag_mocks}'
@@ -78,12 +139,20 @@ def main():
         frac_val=0.1
         frac_test=0.1
         
+    print(len(random_ints))
     idxs_train, idxs_val, idxs_test = utils.idxs_train_val_test(random_ints, 
-                                   frac_train=frac_train, frac_val=frac_val, frac_test=frac_test)
+                                   frac_train=frac_train, frac_val=frac_val, frac_test=frac_test,
+                                   N_tot=10000)
+    print(len(idxs_train), len(idxs_val), len(idxs_test))
     
+    # CAUTION the subsamples will be very overlapping! this is ok for directly checking
+    # for size dependence (less variability), but in a robust trend test would want to
+    # do multiple random subsamples of a given size.
+    # IF WANT TO DO RANDOM, make sure to set seed / do something smart to get same 
+    # subsample back for testing!
     idxs_train = idxs_train[:n_train]
-    idxs_val = idxs_val[:n_val]
     idxs_test = idxs_test[:n_test]
+    idxs_val = idxs_val[:n_val]
     
     n_emuPk = len(random_ints)
     idxs_train_orig = idxs_train.copy()
@@ -114,18 +183,37 @@ def main():
     if run_moment:
         #tag_inf = f'{tag_data}_ntrain{n_train}_scalecovminmax'
         #tag_inf = f'{tag_data}_ntrain{n_train}_eigs'
-        tag_inf = f'{tag_data}_ntrain{n_train}_direct'
+        
+        run_mode_mean = 'best'
+        sweep_name_mean = 'rand10'
+        run_mode_cov = 'single'
+        sweep_name_cov = None
+        if run_mode_mean == 'sweep':
+            tag_run = f'_sweep-{sweep_name_mean}'
+        elif run_mode_mean == 'best':
+            tag_run = f'_best-{sweep_name_mean}'
+        tag_inf = f'{tag_data}_ntrain{n_train}_direct{tag_run}'
+        
+        # run_mode_mean = 'single'
+        # sweep_name_mean = None
+        # run_mode_cov = None
+        # sweep_name_cov = None
+        # tag_inf = f'{tag_data}_ntrain{n_train}_direct'
+        
         moment_network = mn.MomentNetwork(theta_train=theta_train, y_train=y_train_scaled, y_err_train=y_err_train_scaled,
                             theta_val=theta_val, y_val=y_val_scaled, y_err_val=y_err_val_scaled,
                             theta_test=theta_test, y_test=y_test_scaled, y_err_test=y_err_test_scaled,
-                            tag_mn=tag_inf)
+                            tag_mn=tag_inf,
+                            run_mode_mean=run_mode_mean, run_mode_cov=run_mode_cov,
+                            sweep_name_mean=sweep_name_mean, sweep_name_cov=sweep_name_cov)
         #moment_network.run(max_epochs_mean=5, max_epochs_cov=5)
         moment_network.run(max_epochs_mean=2000, max_epochs_cov=2000)
         moment_network.evaluate_test_set()
         print(f"Saved results to {moment_network.dir_mn}")
-        
+    
+
     if run_emcee:
-        
+        # TODO deal with how bias_params are handled now that they might be a vector
         import mcmc
         emu, emu_bounds, emu_param_names = utils.load_emu()
         dict_bounds = {name: emu_bounds[emu_param_names.index(name)] for name in param_names}
@@ -171,20 +259,27 @@ def main():
                         tag_inf=tag_inf)
         
 
-def load_data_muchisimocksPk(tag_mocks, tag_pk):       
+def load_data_muchisimocksPk(tag_mocks, tag_pk, mode_bias_vector='single'):       
      
     dir_params = '../data/params'
     fn_params = f'{dir_params}/params_lh{tag_mocks}.txt'
     params_df = pd.read_csv(fn_params, index_col=0)
     param_names = params_df.columns.tolist()
-    idxs_LH = params_df.index.tolist()
-
+    #idxs_LH = params_df.index.tolist()
     dir_pks = f'../data/pks_mlib/pks{tag_mocks}{tag_pk}'
-    fn_bias_vector = f'{dir_pks}/bias_params.txt'
-    bias_vector = np.loadtxt(fn_bias_vector)
+    idxs_LH = np.array([idx_LH for idx_LH in params_df.index.values 
+                        if os.path.exists(f"{dir_pks}/pk_{idx_LH}.npy")])
+    
+    if mode_bias_vector == 'single':
+        fn_bias_vector = f'{dir_pks}/bias_params.txt'
+        bias_vector = np.loadtxt(fn_bias_vector)
+    else:
+        # TODO update as needed
+        bias_vector = None
 
     fn_rands = f'{dir_params}/randints{tag_mocks}.npy'
     random_ints = np.load(fn_rands)
+    random_ints = random_ints[idxs_LH]
 
     theta, Pk, gaussian_error_pk = [], [], []
     for idx_LH in idxs_LH:
@@ -209,6 +304,44 @@ def load_data_muchisimocksPk(tag_mocks, tag_pk):
     k = k[mask]
     
     return theta, Pk, gaussian_error_pk, k, param_names, bias_vector, random_ints
+
+        
+def load_data_muchisimocks3D(tag_mocks):       
+     
+    print("Loading 3D data")
+    dir_params = '../data/params'
+    fn_params = f'{dir_params}/params_lh{tag_mocks}.txt'
+    params_df = pd.read_csv(fn_params, index_col=0)
+    param_names = params_df.columns.tolist()
+    idxs_LH = params_df.index.tolist()
+
+    dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_mocks}'
+    tag_fields = '_deconvolved'
+    tag_fields_extra = ''
+    n_grid_orig = 512
+    # TODO deal with bias vector better!
+    bias_vector = np.array([1.,0.,0.,0.])
+
+    fn_rands = f'{dir_params}/randints{tag_mocks}.npy'
+    random_ints = np.load(fn_rands)
+
+    theta, fields, errors = [], [], []
+    for idx_LH in idxs_LH:
+        fn_fields = f'{dir_mocks}/LH{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
+        bias_terms_eul = np.load(fn_fields)
+        tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
+        fields.append(tracer_field)
+        # TODO what is my error??
+        param_vals = params_df.loc[idx_LH].values
+        theta.append(param_vals)
+
+    fields = np.array(fields)
+    theta = np.array(theta)
+    errors = np.ones_like(fields) # not ideal but just for now
+    
+    # None is where k is for Pk
+    return theta, fields, errors, None, param_names, bias_vector, random_ints
+
 
         
 def load_data_emuPk(tag_emuPk, tag_errG, tag_datagen, 
@@ -251,50 +384,6 @@ def load_data_emuPk(tag_emuPk, tag_errG, tag_datagen,
     
     else:
         return theta, Pk, gaussian_error_pk, k, param_names, bias_vector, random_ints
-
-
-# def load_data_emuPk(dir_data, tag_datagen, tag_errG, rng=None,
-#                     n_rlzs_per_cosmo=1):
-
-#     if rng is None:
-#         rng = np.random.default_rng(42)
-
-#     fn_emuPk = f'{dir_data}/emuPks{tag_datagen}.npy'
-#     fn_emuPk_params = f'{dir_data}/emuPks_params{tag_datagen}.txt'
-#     fn_emuk = f'{dir_data}/emuPks_k{tag_datagen}.txt'
-#     fn_emuPkerrG = f'{dir_data}/emuPks_errgaussian{tag_datagen}{tag_errG}.npy'
-
-#     Pk_noiseless = np.load(fn_emuPk)
-#     gaussian_error_pk = np.load(fn_emuPkerrG)
-#     theta = np.genfromtxt(fn_emuPk_params, delimiter=',', names=True)
-#     param_names = theta.dtype.names
-#     # from tuples to 2d array
-#     theta = np.array([list(tup) for tup in theta])
-#     k = np.genfromtxt(fn_emuk)
-#     print(theta.shape, Pk_noiseless.shape, k.shape, gaussian_error_pk.shape)
-    
-#     # add noise
-#     #Pk = rng.normal(Pk_noiseless, gaussian_error_pk)    
-#     # generate more shape- doing this hackily for now to keep same realizations as mcmc for first set
-#     #Pk = np.empty(Pk_noiseless.shape)
-#     Pk = rng.normal(Pk_noiseless, gaussian_error_pk)    
-#     for _ in range(n_rlzs_per_cosmo-1):
-#         # i think first set should be equiv to orig?
-#         Pk_wnoise = rng.normal(Pk_noiseless, gaussian_error_pk)    
-#         Pk = np.vstack((Pk, Pk_wnoise))
-#     # repeat theta, err arrs
-#     theta = np.repeat(theta, n_rlzs_per_cosmo, axis=0)
-#     gaussian_error_pk = np.repeat(gaussian_error_pk, n_rlzs_per_cosmo, axis=0)
-    
-#     print('After rlzs:', theta.shape, Pk.shape, k.shape, gaussian_error_pk.shape)
-#     # should really do this mask just on training set, but for now have some bad test data for some reason
-#     mask = np.all(Pk>0, axis=0)
-#     Pk = Pk[:,mask]
-#     gaussian_error_pk = gaussian_error_pk[:,mask]
-#     k = k[mask]
-    
-#     return theta, Pk, gaussian_error_pk, k, param_names
-
 
 
 def scale_y_data(y_train, y_val, y_test,

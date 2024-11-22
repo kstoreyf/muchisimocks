@@ -1,6 +1,9 @@
 import numpy as np
 import pathlib
 import tensorflow as tf
+import wandb
+
+from tensorflow.keras.callbacks import ModelCheckpoint
 
 import neural_network as nn
 import scaler_custom as scl
@@ -14,11 +17,14 @@ class MomentNetwork():
                        theta_val=None, y_val=None, y_err_val=None,
                        theta_test=None, y_test=None, y_err_test=None,
                        tag_mn='', n_threads=8, cov_mode='direct',
+                       run_mode_mean='best', run_mode_cov=None,
+                       sweep_name_mean=None, sweep_name_cov=None,
                        ):
         
         if n_threads is not None:
             tf.config.threading.set_inter_op_parallelism_threads(n_threads)
             tf.config.threading.set_intra_op_parallelism_threads(n_threads)
+        # TODO error not being used!!! ack! write custom loss func
 
         self.theta_train = theta_train
         self.y_train = y_train
@@ -34,8 +40,11 @@ class MomentNetwork():
         
         if self.y_train is not None:
             self.n_dim = self.y_train.shape[1]
+            #self.n_dim = self.y_train.shape[1:]
+            print(self.n_dim)
         elif self.y_test is not None:
             self.n_dim = self.y_test.shape[1]
+            #self.n_dim = self.y_test.shape[1:]
         if self.theta_train is not None:
             self.n_params = self.theta_train.shape[1]
         elif self.theta_test is not None:
@@ -43,6 +52,10 @@ class MomentNetwork():
         
         self.cov_mode = cov_mode
         self.include_covariances = True
+        self.run_mode_mean = run_mode_mean
+        self.run_mode_cov = run_mode_cov
+        self.sweep_name_mean = sweep_name_mean
+        self.sweep_name_cov = sweep_name_cov
         
         self.dir_mn = f'../results/results_moment_network/mn{tag_mn}'
         p = pathlib.Path(self.dir_mn)
@@ -51,9 +64,82 @@ class MomentNetwork():
 
     def run(self, max_epochs_mean=1500, max_epochs_cov=1000):
         
-        self.fit_network_mean(max_epochs=max_epochs_mean)
-        self.setup_scaler()
-        self.fit_network_covariances(max_epochs=max_epochs_cov)
+
+        ### Mean model ###
+        
+        project_name_mean = 'muchisimocks-mn-mean'
+        
+        if self.run_mode_mean == 'sweep':
+            sweep_config = {
+                'name': self.sweep_name_mean,
+                #'method': 'grid',
+                'method': 'random',
+                'metric': {
+                    'name': 'val_loss',
+                    'goal': 'minimize'
+                },
+                'parameters': {
+                    'learning_rate': {'values': [1e-2, 1e-3, 1e-4, 1e-5]},
+                    'hidden_size': {'values': [32, 64, 128]},
+                    'batch_size': {'values': [32, 64, 128]},
+                    'max_epochs_mean': {'value': max_epochs_mean},
+                }
+            }
+            sweep_id = wandb.sweep(sweep_config, project=project_name_mean)
+            def _fit_network_mean_wandb():
+                wandb.init()
+                self.fit_network_mean(wandb.config, save_model=False)
+            # count = number of runs in sweep for random
+            wandb.agent(sweep_id, function=_fit_network_mean_wandb, count=10)
+        
+        elif self.run_mode_mean == 'best':
+            wandb.login()
+            api = wandb.Api()
+            # get sweep name
+            #sweeps = api.sweeps("kstoreyf-stanford-university", project_name_mean)
+            sweeps = api.project(project_name_mean).sweeps()
+
+            self.sweep = next((s for s in sweeps if s.name == self.sweep_name_mean), None)
+            assert self.sweep is not None, f"Sweep {self.sweep_name_mean} not found"
+            #self.sweep = api.sweep(f"kstoreyf-stanford-university/{project_name_mean}/sweeps/{sweep_id}")
+            # Get best run parameters
+            best_run = self.sweep.best_run()
+            print(f"Using hyperparameters from best run from sweep {self.sweep_name_mean}: {best_run.config}")
+            wandb.init(project=project_name_mean, config=best_run.config)
+            self.fit_network_mean(wandb.config, save_model=True)
+            
+        elif self.run_mode_mean == 'single':
+            # do not use 'parameters' keyword here, flat dict! 
+            # that's the issue if get AttributeError that the parameter names aren't recognized
+            config = {
+                'learning_rate': {'value': 1e-3},
+                'hidden_size': {'value': 64},
+                'batch_size': {'value': 32},
+                'max_epochs_mean': {'value': max_epochs_mean},
+            }
+            wandb.init(project=project_name_mean, config=config)
+            self.fit_network_mean(wandb.config, save_model=True)
+        
+        elif self.run_mode_mean is None:
+            print("self.run_mode_mean is None, continuing")
+            pass
+        
+        else:
+            raise ValueError(f'Invalid run_mode_mean: {self.run_mode_mean}')
+        
+        ### Cov model ###
+
+        if self.run_mode_cov is not None:
+            self.setup_scaler()
+        
+        if self.run_mode_cov == 'single':
+            self.fit_network_covariances(max_epochs=max_epochs_cov)
+        elif self.run_mode_cov is None:
+            print("self.run_mode_cov is None, continuing")
+            pass
+        else:
+            raise ValueError(f'Invalid run_mode_mean: {self.run_mode_mean}')
+           
 
 
     def setup_scaler(self):
@@ -81,31 +167,52 @@ class MomentNetwork():
     def load_model_cov(self):
         self.model_cov = tf.keras.models.load_model(f'{self.dir_mn}/model_cov.keras')
 
+
         
+    def fit_network_mean(self, config, save_model=True):
+
+        #wandb.init()
         
-    def fit_network_mean(self, max_epochs=1500):
-        
+        print("wandb.config:", config)
+        max_epochs = config.max_epochs_mean
+
         # Set up mean model
-        model_instance = nn.NeuralNetwork(self.n_dim, self.n_params, 
-                                    hidden_size=64,
-                                    learning_rate=1e-3) 
+        print("n_dim:", self.n_dim)
+        #if len(self.n_dim) == 1:
+        if isinstance(self.n_dim, int):
+            model_instance = nn.NeuralNetwork(self.n_dim, self.n_params, 
+                                        hidden_size=config.hidden_size,
+                                        learning_rate=config.learning_rate) 
+        elif len(self.n_dim) == 3:
+            model_instance = nn.ConvolutionalNeuralNetwork(self.n_dim, self.n_params, 
+                                        hidden_size=config.hidden_size,
+                                        learning_rate=config.learning_rate)
+        else:
+            raise ValueError("Other dimensions not implemented!")
         self.model_mean = model_instance.model() 
         
         # Train mean model
         start_from_epoch = 200
         if max_epochs < start_from_epoch:
             start_from_epoch = 0
-        callback = tf.keras.callbacks.EarlyStopping(patience=25,
+            
+        callback_earlystop = tf.keras.callbacks.EarlyStopping(patience=25,
                                     restore_best_weights=True,
-                                    start_from_epoch=start_from_epoch)
+                                    start_from_epoch=start_from_epoch
+        )
+        
+        callback_wandb = wandb.keras.WandbCallback()
         
         hist = self.model_mean.fit(self.y_train, self.theta_train,
-                                epochs=max_epochs, batch_size=64, shuffle=True,
-                                callbacks=[callback],
+                                epochs=max_epochs, batch_size=config.batch_size, shuffle=True,
+                                callbacks=[callback_earlystop, callback_wandb],
                                 validation_data=(self.y_val, self.theta_val))
         
-        np.save(f'{self.dir_mn}/model_mean_history.npy', hist.history)
-        self.model_mean.save(f'{self.dir_mn}/model_mean.keras')
+        # if a sweep has a single run, let's save the model
+        if save_model:
+            np.save(f'{self.dir_mn}/model_mean_history.npy', hist.history)
+            self.model_mean.save(f'{self.dir_mn}/model_mean.keras')
+        
 
 
     def fit_network_covariances(self, max_epochs=1000):
@@ -355,3 +462,7 @@ class MomentNetwork():
                                                 cov_mode=self.cov_mode)
                 covs_test.append(covmat)
             np.save(f'{self.dir_mn}/covs_test.npy', covs_test)
+
+
+
+

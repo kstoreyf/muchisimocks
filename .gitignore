@@ -14,3 +14,5 @@ data/cosmolib/
 results/
 
 .vscode/
+
+wandb/
