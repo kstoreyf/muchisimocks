@@ -126,7 +126,8 @@ def generate_LH(param_names_vary, param_names_ordered, bounds_dict,
     param_df.to_csv(fn_params)
     print(f'Saved LH to {fn_params}')
 
-    if fiducial_dict is not None:
+    if len(param_names_fixed)>0:
+        assert fiducial_dict is not None, "fiducial_dict must be provided if have some fixed params!"
         param_df_fixed = pd.DataFrame()    
         for param_name in param_names_fixed:
             param_df_fixed[param_name] = [fiducial_dict[param_name]]

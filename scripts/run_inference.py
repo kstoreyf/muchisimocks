@@ -83,12 +83,9 @@ def run_pk_inference():
     idxs_obs = np.arange(1)
 
     # train test split, and number of rlzs per cosmo
-    #n_train = 6500
-    n_train = 3500
-    n_val = 400
-    #n_train = 100
-    #n_val = 250
-    n_test = 400
+    n_train = 8000
+    n_val = 1000
+    n_test = 1000
 
     ### Load data
     data_mode = 'muchisimocksPk'
@@ -108,10 +105,10 @@ def run_pk_inference():
                                                         n_rlzs_per_cosmo=n_rlzs_per_cosmo)
     elif data_mode == 'muchisimocksPk':
         tag_mocks = '_p5_n10000'
-        # tag_pk = '_b1000'
-        # mode_bias_vector = 'single'
-        tag_pk = '_biaszen_p4_n10000'
-        mode_bias_vector = 'LH'
+        tag_pk = '_b1000'
+        mode_bias_vector = 'single'
+        #tag_pk = '_biaszen_p4_n10000'
+        #mode_bias_vector = 'LH'
         tag_datagen = f'{tag_mocks}{tag_pk}'
         theta, y, y_err, k, param_names, bias_params, random_ints = load_data_muchisimocksPk(tag_mocks,
                                                                                              tag_pk,
@@ -183,17 +180,33 @@ def run_pk_inference():
     if run_moment:
         #tag_inf = f'{tag_data}_ntrain{n_train}_scalecovminmax'
         #tag_inf = f'{tag_data}_ntrain{n_train}_eigs'
+        tag_run = ''
         
-        run_mode_mean = 'best'
-        sweep_name_mean = 'rand10'
-        run_mode_cov = 'single'
-        sweep_name_cov = None
+        # run_mode_mean = 'best'
+        # sweep_name_mean = 'rand10'
+        #run_mode_mean = 'sweep'
+        #sweep_name_mean = 'biaszenp4rand10'
+        run_mode_mean = 'load'
+        tag_run += '_best-rand10'
+        sweep_name_mean = None
+        
+        #run_mode_cov = 'single'
+        #sweep_name_cov = None
+        run_mode_cov = 'sweep'
+        sweep_name_cov = 'rand10'
+        
         if run_mode_mean == 'sweep':
-            tag_run = f'_sweep-{sweep_name_mean}'
+            tag_run += f'_sweep-{sweep_name_mean}'
         elif run_mode_mean == 'best':
-            tag_run = f'_best-{sweep_name_mean}'
+            tag_run += f'_best-{sweep_name_mean}'
+
+        if run_mode_cov == 'sweep':
+            tag_run += f'_sweepcov-{sweep_name_cov}'
+        elif run_mode_cov == 'best':
+            tag_run += f'_bestcov-{sweep_name_cov}'
+            
         tag_inf = f'{tag_data}_ntrain{n_train}_direct{tag_run}'
-        
+        print("tag_inf", tag_inf)
         # run_mode_mean = 'single'
         # sweep_name_mean = None
         # run_mode_cov = None
@@ -266,9 +279,10 @@ def load_data_muchisimocksPk(tag_mocks, tag_pk, mode_bias_vector='single'):
     params_df = pd.read_csv(fn_params, index_col=0)
     param_names = params_df.columns.tolist()
     #idxs_LH = params_df.index.tolist()
-    dir_pks = f'../data/pks_mlib/pks{tag_mocks}{tag_pk}'
+    dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}'
     idxs_LH = np.array([idx_LH for idx_LH in params_df.index.values 
                         if os.path.exists(f"{dir_pks}/pk_{idx_LH}.npy")])
+    assert len(idxs_LH) > 0, f"No pks found in {dir_pks}!"
     
     if mode_bias_vector == 'single':
         fn_bias_vector = f'{dir_pks}/bias_params.txt'

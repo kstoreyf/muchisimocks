@@ -190,7 +190,8 @@ bins_dict = {'mn': None, 'emcee': 10, 'dynesty': 7}
 
 def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       inf_methods, tags_inf, 
-                      colors=None, labels=None, labels_extra=None):
+                      colors=None, labels=None, labels_extra=None,
+                      extents={}):
     title = f'test model {idx_obs}'
     truth_loc = dict(zip(param_names, theta_obs_true))
 
@@ -210,7 +211,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
 
     plot_contours(samples_arr, labels, colors, param_names, utils.param_label_dict, 
                         smooth_arr=smooth_arr, bins_arr=bins_arr,
-                        truth_loc=truth_loc, title=title, extents={}, fn_save=None)
+                        truth_loc=truth_loc, title=title, extents=extents, fn_save=None)
  # for backwards compatibility
 
 def plot_overdensity_field(tracer_field, normalize=False, vmax=None, 

@@ -59,7 +59,7 @@ def compute_pnn_emus(idxs_LH, params_df, param_dict_fixed, tag_mocks):
     # TO TEST
     #idxs_LH = idxs_LH[:1]
 
-    dir_pnns = f'../data/pnns_mlib/pnns{tag_mocks}'
+    dir_pnns = f'../data/pnns_mlib/pnns_emu{tag_mocks}'
     Path.mkdir(Path(dir_pnns), parents=True, exist_ok=True)
 
     # grab k from the first p(k)
