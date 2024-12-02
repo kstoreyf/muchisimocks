@@ -189,15 +189,16 @@ smooth_dict = {'mn': 1, 'emcee': 2, 'dynesty': 2}
 bins_dict = {'mn': None, 'emcee': 10, 'dynesty': 7}
 
 def plot_contours_inf(param_names, idx_obs, theta_obs_true,
-                      inf_methods, tags_inf, 
+                      inf_methods, tags_inf, tag_test='',
                       colors=None, labels=None, labels_extra=None,
-                      extents={}):
-    title = f'test model {idx_obs}'
+                      extents={}, title=None):
+    if title is None:
+        title = f'test model {idx_obs}'
     truth_loc = dict(zip(param_names, theta_obs_true))
 
     samples_arr = []
     for i, inf_method in enumerate(inf_methods):
-        samples = utils.get_samples(idx_obs, inf_method, tags_inf[i])
+        samples = utils.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
         samples_arr.append(samples)
 
     smooth_arr = [smooth_dict[method] for method in inf_methods]

@@ -15,7 +15,7 @@ def main():
     seed = 42
     overwrite = False
 
-    n_samples = 10000
+    n_samples = 1000
     
     pset = 'biaszen'
     #pset = 'cosmo'
@@ -25,8 +25,8 @@ def main():
         param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
         param_names_ordered, bounds_dict, fiducial_dict = define_LH_cosmo()
     elif 'bias' in pset:
-        #param_names_vary = ['b1', 'b2', 'bs2', 'bl']
-        param_names_vary = ['b1']
+        param_names_vary = ['b1', 'b2', 'bs2', 'bl']
+        #param_names_vary = ['b1']
         param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(bounds=pset)
     else:
         raise ValueError("pset must be 'cosmo' or 'bias'")

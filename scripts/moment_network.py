@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import pathlib
+import pickle
 import tensorflow as tf
 import wandb
 
@@ -14,9 +15,9 @@ import scaler_custom as scl
 
 class MomentNetwork(): 
 
-    def __init__(self, theta_train=None, y_train=None, y_err_train=None,
-                       theta_val=None, y_val=None, y_err_val=None,
-                       theta_test=None, y_test=None, y_err_test=None,
+    def __init__(self, theta_train=None, y_train_unscaled=None, y_err_train_unscaled=None,
+                       theta_val=None, y_val_unscaled=None, y_err_val_unscaled=None,
+                       theta_test=None, y_test_unscaled=None, y_err_test_unscaled=None,
                        tag_mn='', n_threads=8, cov_mode='direct',
                        run_mode_mean='best', run_mode_cov=None,
                        sweep_name_mean=None, sweep_name_cov=None,
@@ -27,25 +28,36 @@ class MomentNetwork():
             tf.config.threading.set_intra_op_parallelism_threads(n_threads)
         # TODO error not being used!!! ack! write custom loss func
 
+        self.dir_mn = f'../results/results_moment_network/mn{tag_mn}'
+        p = pathlib.Path(self.dir_mn)
+        p.mkdir(parents=True, exist_ok=True)
+        
         self.theta_train = theta_train
-        self.y_train = y_train
-        self.y_err_train = y_err_train
+        self.y_train_unscaled = y_train_unscaled
+        self.y_err_train_unscaled = y_err_train_unscaled
 
         self.theta_val = theta_val
-        self.y_val = y_val
-        self.y_err_val = y_err_val
+        self.y_val_unscaled = y_val_unscaled
+        self.y_err_val_unscaled = y_err_val_unscaled
 
         self.theta_test = theta_test
-        self.y_test = y_test
-        self.y_err_test = y_err_test
+        self.y_test_unscaled = y_test_unscaled
+        self.y_err_test_unscaled = y_err_test_unscaled
         
-        if self.y_train is not None:
+        if self.y_train_unscaled is not None:
+            self.setup_scaler_y()
             self.n_dim = self.y_train.shape[1]
             #self.n_dim = self.y_train.shape[1:]
             print(self.n_dim)
-        elif self.y_test is not None:
-            self.n_dim = self.y_test.shape[1]
+        elif self.y_test_unscaled is not None:
+            self.n_dim = self.y_test_unscaled.shape[1]
             #self.n_dim = self.y_test.shape[1:]
+            
+        # If we don't have training data, we'll probs want the scale
+        # (but maybe there's a better place for this...?)
+        if self.y_train_unscaled is None:
+            self.load_scaler_y()
+            
         if self.theta_train is not None:
             self.n_params = self.theta_train.shape[1]
         elif self.theta_test is not None:
@@ -58,9 +70,6 @@ class MomentNetwork():
         self.sweep_name_mean = sweep_name_mean
         self.sweep_name_cov = sweep_name_cov
         
-        self.dir_mn = f'../results/results_moment_network/mn{tag_mn}'
-        p = pathlib.Path(self.dir_mn)
-        p.mkdir(parents=True, exist_ok=True)
 
 
     def run(self, max_epochs_mean=1500, max_epochs_cov=1000):
@@ -98,7 +107,8 @@ class MomentNetwork():
                 self.fit_network_mean(wandb.config, save_model=False)
             # count = number of runs in sweep for random
             wandb.agent(sweep_id, function=_fit_network_mean_wandb, count=count)
-        
+            wandb.finish()
+            
         elif self.run_mode_mean == 'best':
             wandb.login()
             api = wandb.Api()
@@ -114,6 +124,7 @@ class MomentNetwork():
             print(f"Using hyperparameters from best run from sweep {self.sweep_name_mean}: {best_run.config}")
             wandb.init(project=project_name_mean, config=best_run.config)
             self.fit_network_mean(wandb.config, save_model=True)
+            wandb.finish()
             
         elif self.run_mode_mean == 'single':
             # do not use 'parameters' keyword here, flat dict! 
@@ -126,9 +137,12 @@ class MomentNetwork():
             }
             wandb.init(project=project_name_mean, config=config)
             self.fit_network_mean(wandb.config, save_model=True)
+            wandb.finish()
             
         elif self.run_mode_mean == 'load':
             self.load_model_mean()
+            self.n_params = self.model_mean.output_shape[-1]
+            print("n_params from saved model:", self.n_params)
         
         elif self.run_mode_mean is None:
             print("self.run_mode_mean is None, continuing")
@@ -142,7 +156,7 @@ class MomentNetwork():
         project_name_cov = 'muchisimocks-mn-cov'
         
         if self.run_mode_cov == 'sweep':
-            self.setup_scaler()
+            self.setup_scaler_cov()
             count = 10 #if random
             sweep_config = {
                 'name': self.sweep_name_cov,
@@ -167,7 +181,8 @@ class MomentNetwork():
             wandb.agent(sweep_id, function=_fit_network_cov_wandb, count=count)
         
         elif self.run_mode_cov == 'best':
-            self.setup_scaler()
+            print("Running run_mode_cov == 'best'")
+            self.setup_scaler_cov()
             wandb.login()
             api = wandb.Api()
             # get sweep name
@@ -180,9 +195,10 @@ class MomentNetwork():
             print(f"Using hyperparameters from best run from sweep {self.sweep_name_cov}: {best_run.config}")
             wandb.init(project=project_name_cov, config=best_run.config)
             self.fit_network_covariances(wandb.config, save_model=True)
+            #self.fit_network_covariances(best_run.config, save_model=True)
             
         elif self.run_mode_cov == 'single':
-            self.setup_scaler()
+            self.setup_scaler_cov()
             # do not use 'parameters' keyword here, flat dict! 
             # that's the issue if get AttributeError that the parameter names aren't recognized
             config = {
@@ -196,7 +212,9 @@ class MomentNetwork():
             
         elif self.run_mode_cov == 'load':
             self.load_model_cov()
-            self.load_scaler()
+            self.load_scaler_cov()
+            fn_cov_dict = f'{self.dir_mn}/cov_dict.npy'
+            self.cov_dict = np.load(fn_cov_dict, allow_pickle=True).item()
         
         elif self.run_mode_cov is None:
             print("self.run_mode_cov is None, continuing")
@@ -206,7 +224,7 @@ class MomentNetwork():
             raise ValueError(f'Invalid run_mode_cov: {self.run_mode_cov}')
 
         # if self.run_mode_cov is not None:
-        #     self.setup_scaler()
+        #     self.setup_scaler_cov()
         
         # if self.run_mode_cov == 'single':
         #     self.fit_network_covariances(max_epochs=max_epochs_cov)
@@ -215,10 +233,9 @@ class MomentNetwork():
         #     pass
         # else:
         #     raise ValueError(f'Invalid run_mode_mean: {self.run_mode_mean}')
-           
 
 
-    def setup_scaler(self):
+    def setup_scaler_cov(self):
         theta_pred_train = self.model_mean.predict(self.y_train)
         covariances_train = self.get_covariances(self.theta_train, theta_pred_train,
                                                  include_covariances=self.include_covariances)
@@ -227,13 +244,41 @@ class MomentNetwork():
         #self.scaler_cov = scl.Scaler(func='log_minmax_const')
         #self.scaler_cov = scl.Scaler(func='log_minmax')
         self.scaler_cov.fit(covariances_train)
-        fn_scaler_cov = f'{self.dir_mn}/scaler_cov.npy'
-        np.save(fn_scaler_cov, self.scaler_cov)
+        fn_scaler_cov = f'{self.dir_mn}/scaler_cov.p'
+        # need pickle for custom object!!
+        with open(fn_scaler_cov, "wb") as f:
+            pickle.dump(self.scaler_cov, f)
+        #np.save(fn_scaler_cov, self.scaler_cov)
         
         
-    def load_scaler(self):
-        fn_scaler_cov = f'{self.dir_mn}/scaler_cov.npy'
-        self.scaler_cov = np.save(fn_scaler_cov)
+    def load_scaler_cov(self):
+        fn_scaler_cov = f'{self.dir_mn}/scaler_cov.p'
+        #self.scaler_cov = np.load(fn_scaler_cov, allow_pickle=True)
+        with open(fn_scaler_cov, "rb") as f:
+            self.scaler_cov = pickle.load(f)
+        
+    
+    def setup_scaler_y(self):
+        self.scaler_y = scl.Scaler()
+        self.scaler_y.fit(self.y_train_unscaled)
+        
+        self.y_train = self.scaler_y.scale(self.y_train_unscaled)
+        self.y_val = self.scaler_y.scale(self.y_val_unscaled)
+        if self.y_test_unscaled is not None:
+            self.y_test = self.scaler_y.scale(self.y_test_unscaled)
+        
+        fn_scaler_y = f'{self.dir_mn}/scaler_y.p'
+        
+        # need pickle for custom object!!
+        with open(fn_scaler_y, "wb") as f:
+            pickle.dump(self.scaler_y, f)
+
+
+    def load_scaler_y(self):
+        fn_scaler_y = f'{self.dir_mn}/scaler_y.p'
+        #self.scaler_cov = np.load(fn_scaler_cov, allow_pickle=True)
+        with open(fn_scaler_y, "rb") as f:
+            self.scaler_y = pickle.load(f)
         
     
     def load_model_mean(self):
@@ -295,6 +340,7 @@ class MomentNetwork():
 
 
     def fit_network_covariances(self, config, save_model=True):
+        print("Covariance config:", config)
 
         theta_pred_train = self.model_mean.predict(self.y_train)
         theta_pred_val = self.model_mean.predict(self.y_val)
@@ -401,6 +447,8 @@ class MomentNetwork():
             covdatas.append(covdata)
         covdatas = np.array(covdatas)
             
+        fn_cov_dict = f'{self.dir_mn}/cov_dict.npy'
+        np.save(fn_cov_dict, self.cov_dict)
         #print(covariances_decomposed_unrolled.shape)
 
         self.n_covs = covdatas.shape[1]
@@ -508,8 +556,10 @@ class MomentNetwork():
         return theta_pred, covs_pred
 
 
-    def evaluate(self, y_obs, mean_only=False):
+    def evaluate(self, y_obs_unscaled, mean_only=False):
         print("Evaluating")
+        y_obs = self.scaler_y.scale(y_obs_unscaled)
+        
         theta_pred = self.model_mean.predict(np.atleast_2d(y_obs))
 
         if mean_only: 
@@ -527,23 +577,29 @@ class MomentNetwork():
         return theta_pred, covs_pred
 
 
-    def evaluate_test_set(self):
+    def evaluate_test_set(self, y_test_unscaled=None, theta_test=None, tag_test=''):
         
-        theta_test_pred, covs_test_pred = self.evaluate(self.y_test)
-        np.save(f'{self.dir_mn}/theta_test_pred.npy', theta_test_pred)
-        np.save(f'{self.dir_mn}/covs_test_pred.npy', covs_test_pred)
-
+        if y_test_unscaled is None:
+            y_test_unscaled = self.y_test_unscaled
+        theta_test_pred, covs_test_pred = self.evaluate(y_test_unscaled)
+        fn_theta_test_pred = f'{self.dir_mn}/theta_test{tag_test}_pred.npy'
+        fn_covs_test_pred = f'{self.dir_mn}/covs_test{tag_test}_pred.npy'
+        np.save(fn_theta_test_pred, theta_test_pred)
+        np.save(fn_covs_test_pred, covs_test_pred)
+        
         # if we have a test set, let's also compute and save the covariances
         # for help with dev
-        if self.theta_test is not None:
-            covdata_test = self.get_covariances(self.theta_test, theta_test_pred,
+        if theta_test is None:
+            theta_test = self.theta_test
+        if theta_test is not None:
+            covdata_test = self.get_covariances(theta_test, theta_test_pred,
                                     include_covariances=self.include_covariances)
             covs_test = []
             for cov_test in covdata_test:
                 covmat = self.covdata_to_covmat(cov_test, self.cov_dict, include_covariances=self.include_covariances,
                                                 cov_mode=self.cov_mode)
                 covs_test.append(covmat)
-            np.save(f'{self.dir_mn}/covs_test.npy', covs_test)
+            np.save(f'{self.dir_mn}/covs_test{tag_test}.npy', covs_test)
 
 
 

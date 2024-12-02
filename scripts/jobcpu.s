@@ -3,7 +3,8 @@
 ##SBATCH --job-name=precompute_kaiser_p5_n10000_b1
 ##SBATCH --job-name=compute_pnn_emu_p5_n10000
 ##SBATCH --job-name=compute_pks_p5_n10000_b0000_cont
-#SBATCH --job-name=compute_pks_p5_n10000_biaszen_p1_n10000_cont
+##SBATCH --job-name=compute_pks_p5_n10000_biaszen_p1_n10000_cont
+#SBATCH --job-name=compute_pks_fixedcosmo_biaszen_p4_n1000
 ##SBATCH --job-name=emcee_emuPk_5param_n10000
 ##SBATCH --job-name=timetest_datagen_nthreads8
 ##SBATCH --job-name=id_bad_idxs

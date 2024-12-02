@@ -1,13 +1,15 @@
 #!/bin/bash
 #SBATCH --qos=regular
-#SBATCH --job-name=datagen_p5_n10000_step10_round8
-#SBATCH --time=02:30:00
+##SBATCH --job-name=datagen_p5_n10000_step10_round8
+#SBATCH --job-name=datagen_fixedcosmo_step10
+#SBATCH --time=4:00:00
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=8             # tasks per instance
 ##x-y%z; start x, end y INCLUSIVE, z tasks at a time max
-#SBATCH --array=0-999%5
+##SBATCH --array=0-999%5
+#SBATCH --array=0-99%6
 #SBATCH --mem=35G 	       # 30 hit OOM error
 #SBATCH --output=logs/%x-%a.out
 
@@ -28,8 +30,9 @@ conda activate benv
 i=$((SLURM_ARRAY_TASK_ID-SLURM_ARRAY_TASK_MIN))
 step_size=10
 echo "i=${i}"
-idx_LH_start=$((SLURM_ARRAY_TASK_MIN + i*step_size))
-idx_LH_end=$((idx_LH_start + step_size))
-echo "idx_LH_start=${idx_LH_start}, idx_LH_end=${idx_LH_end}"
-python data_creation_pipeline.py ${idx_LH_start} ${idx_LH_end}
+idx_mock_start=$((SLURM_ARRAY_TASK_MIN + i*step_size))
+idx_mock_end=$((idx_mock_start + step_size))
+echo "idx_mock_start=${idx_mock_start}, idx_mock_end=${idx_mock_end}"
+#python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end}
+python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fixed
 #python cuda_minimal.py

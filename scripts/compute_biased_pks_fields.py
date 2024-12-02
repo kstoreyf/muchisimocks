@@ -35,14 +35,18 @@ def compute_pks_muchisimocks():
 
     n_threads = 24
     
-    tag_params = '_p5_n10000'
-    tag_mocks = tag_params
+    #tag_params = '_p5_n10000'
+    tag_params = None
+    tag_mocks = '_fixedcosmo'
+    #tag_mocks = tag_params
     dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_mocks}'
     
-    mode_bias_vector = 'LH'
+    #mode_bias_vector = 'LH'
+    mode_bias_vector = 'single'
     if mode_bias_vector == 'LH':
         #tag_biasparams = '_biaszen_p4_n10000'
-        tag_biasparams = '_biaszen_p1_n10000'
+        #tag_biasparams = '_biaszen_p1_n10000'
+        tag_biasparams = '_biaszen_p4_n1000'
         dir_params = f'../data/params'
         fn_biasparams = f'{dir_params}/params_lh{tag_biasparams}.txt'
         fn_biasparams_fixed = f'{dir_params}/params_fixed{tag_biasparams}.txt'
@@ -56,16 +60,24 @@ def compute_pks_muchisimocks():
         tags_pk = [tag_biasparams]
         tags_fields = ['_deconvolved']
     elif mode_bias_vector == 'single':
-        bias_vector = [0., 0., 0., 0.]    
-        tags_pk = ['_b0000', '_b0000_zspace']
+        bias_vector = [1., 0., 0., 0.]    
+        tags_pk = ['_b1000', '_b1000_zspace']
         #bias_vector = [1., 0., 0., 0.]    
         #tags_pk = ['_b1000', '_b1000_zspace']
         tags_fields = ['_deconvolved', '_zspace_deconvolved']
         
     #idxs_LH = [0]
-    idxs_LH = np.sort([int(re.search(r'^LH(\d+)$', dir_mocks).group(1)) \
+    if 'fixedcosmo' in tag_mocks:
+        subdir_prefix='mock'
+    else:
+        subdir_prefix='LH'
+    #     idxs_LH = np.sort([int(re.search(r'^mock(\d+)$', dir_mocks).group(1)) \
+    #         for dir_mocks in os.listdir(dir_mocks) \
+    #         if re.search(r'^mock\d+$', dir_mocks)])
+    # else:
+    idxs_LH = np.sort([int(re.search(rf'^{subdir_prefix}(\d+)$', dir_mocks).group(1)) \
         for dir_mocks in os.listdir(dir_mocks) \
-        if re.search(r'^LH\d+$', dir_mocks)])
+        if re.search(rf'^{subdir_prefix}\d+$', dir_mocks)])
     #idxs_LH = idxs_LH[:1000] # for now!
     #idxs_LH = [43]
     
@@ -89,12 +101,15 @@ def compute_pks_muchisimocks():
     else:
         box_size = 1000.0
     
-    fn_params = f'{dir_mocks}/params_lh{tag_params}.txt'
-    fn_params_fixed = f'{dir_mocks}/params_fixed{tag_params}.txt'
-    params_df = pd.read_csv(fn_params, index_col=0)
-    param_dict_fixed = pd.read_csv(fn_params_fixed).loc[0].to_dict()
-    # order of saved cosmo param files
-    #param_names = ['omega_cold', 'sigma_8', 'h', 'omega_baryon', 'n_s', 'seed']
+    if 'fixedcosmo' in tag_mocks:
+        param_dict = utils.cosmo_dict_quijote
+    else:
+        fn_params = f'{dir_mocks}/params_lh{tag_params}.txt'
+        fn_params_fixed = f'{dir_mocks}/params_fixed{tag_params}.txt'
+        params_df = pd.read_csv(fn_params, index_col=0)
+        param_dict_fixed = pd.read_csv(fn_params_fixed).loc[0].to_dict()
+        # order of saved cosmo param files
+        #param_names = ['omega_cold', 'sigma_8', 'h', 'omega_baryon', 'n_s', 'seed']
     
     for tag_pk, tag_fields in zip(tags_pk, tags_fields):
         dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}'
@@ -107,8 +122,8 @@ def compute_pks_muchisimocks():
         for idx_LH in idxs_LH:
             #if idx_LH%10==0:
             print(f"Computing Pk for LH{idx_LH} ({tag_pk})", flush=True)
-            fn_fields = f'{dir_mocks}/LH{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
-            #fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
+            fn_fields = f'{dir_mocks}/{subdir_prefix}{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
+            #fn_params = f'{dir_mocks}/{subdir_prefix}{idx_LH}/cosmo_{idx_LH}.txt'
             fn_pk = f'{dir_pks}/pk_{idx_LH}{tag_fields_extra}.npy'
             if os.path.exists(fn_pk) and not overwrite:
                 print(f"P(k) for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing", flush=True)
@@ -135,9 +150,10 @@ def compute_pks_muchisimocks():
             
             #param_vals = np.loadtxt(fn_params)
             #param_dict = dict(zip(param_names, param_vals))
-            param_dict = params_df.loc[idx_LH].to_dict()
-            param_dict.update(param_dict_fixed)
-            print(param_dict, flush=True)
+            if 'fixedcosmo' not in tag_mocks:
+                param_dict = params_df.loc[idx_LH].to_dict()
+                param_dict.update(param_dict_fixed)
+                print(param_dict, flush=True)
             cosmo = utils.get_cosmo(param_dict)
             
             compute_pk(tracer_field, cosmo, box_size,
@@ -218,25 +234,25 @@ def compute_pks_quijote_LH():
             idx_LH_str = f'{idx_LH:04}'
          
             # get params
-            fn_params = f'{dir_mocks}/LH{idx_LH_str}/param_{idx_LH_str}.txt'
+            fn_params = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/param_{idx_LH_str}.txt'
             param_vals = np.loadtxt(fn_params)
             param_dict = dict(zip(param_names, param_vals))
             cosmo = utils.get_cosmo(param_dict)
                   
             # check fields existence
-            fn_fields = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields{tag}_{idx_LH_str}.npy'
-            fn_fields_zspace = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields_zspace{tag}_{idx_LH_str}.npy'
+            fn_fields = f'{dir_fields}/{subdir_prefix}{idx_LH_str}/Eulerian_fields{tag}_{idx_LH_str}.npy'
+            fn_fields_zspace = f'{dir_fields}/{subdir_prefix}{idx_LH_str}/Eulerian_fields_zspace{tag}_{idx_LH_str}.npy'
             
-            Path.mkdir(Path(f'{dir_fields}/LH{idx_LH_str}'), parents=True, exist_ok=True)
+            Path.mkdir(Path(f'{dir_fields}/{subdir_prefix}{idx_LH_str}'), parents=True, exist_ok=True)
 
-            fn_dens_lin = f'{dir_mocks}/LH{idx_LH_str}/lin_den_{idx_LH_str}.npy'
+            fn_dens_lin = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/lin_den_{idx_LH_str}.npy'
             dens_lin = np.load(fn_dens_lin)
             
             # get fields sim
             if 'sim' in tag:
-                fn_disp = f'{dir_mocks}/LH{idx_LH_str}/dis_{idx_LH_str}.npy'
+                fn_disp = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/dis_{idx_LH_str}.npy'
             elif 'pred' in tag:
-                fn_disp = f'{dir_mocks}/LH{idx_LH_str}/pred_pos_{idx_LH_str}.npy'
+                fn_disp = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/pred_pos_{idx_LH_str}.npy'
             else:
                 raise ValueError("tag must be 'sim' or 'pred'")
             disp = np.load(fn_disp)
@@ -256,9 +272,9 @@ def compute_pks_quijote_LH():
             if run_zspace and (not os.path.exists(fn_fields_zspace) or overwrite_fields):
                 start = time.time()
                 if 'sim' in tag:
-                    fn_vel = f'{dir_mocks}/LH{idx_LH_str}/nlvel_{idx_LH_str}.npy'
+                    fn_vel = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/nlvel_{idx_LH_str}.npy'
                 elif 'pred' in tag:
-                    fn_vel = f'{dir_mocks}/LH{idx_LH_str}/pred_vel_{idx_LH_str}.npy'
+                    fn_vel = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/pred_vel_{idx_LH_str}.npy'
                 else:
                     raise ValueError("tag must be 'sim' or 'pred'")
                 vel = np.load(fn_vel)

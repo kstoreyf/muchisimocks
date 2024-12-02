@@ -136,9 +136,9 @@ def get_posterior_maxes(samples_equal, param_names):
     return maxes
 
 
-def get_samples(idx_obs, inf_method, tag_inf):
+def get_samples(idx_obs, inf_method, tag_inf, tag_test=''):
     if inf_method == 'mn':
-        return get_samples_mn(idx_obs, tag_inf)
+        return get_samples_mn(idx_obs, tag_inf, tag_test=tag_test)
     elif inf_method == 'emcee':
         return get_samples_emcee(idx_obs, tag_inf)
     elif inf_method == 'dynesty':
@@ -147,18 +147,18 @@ def get_samples(idx_obs, inf_method, tag_inf):
         raise ValueError(f'Method {inf_method} not recognized!')
         
         
-def get_moments_test_mn(tag_inf):
+def get_moments_test_mn(tag_inf, tag_test=''):
     dir_mn = f'../results/results_moment_network/mn{tag_inf}'
-    theta_test_pred = np.load(f'{dir_mn}/theta_test_pred.npy')
-    covs_test_pred = np.load(f'{dir_mn}/covs_test_pred.npy')
+    theta_test_pred = np.load(f'{dir_mn}/theta_test{tag_test}_pred.npy')
+    covs_test_pred = np.load(f'{dir_mn}/covs_test{tag_test}_pred.npy')
     return theta_test_pred, covs_test_pred
     
         
-def get_samples_mn(idx_obs, tag_inf):
+def get_samples_mn(idx_obs, tag_inf, tag_test=''):
     rng = np.random.default_rng(42)
     dir_mn = f'../results/results_moment_network/mn{tag_inf}'
-    theta_test_pred = np.load(f'{dir_mn}/theta_test_pred.npy')
-    covs_test_pred = np.load(f'{dir_mn}/covs_test_pred.npy')
+    theta_test_pred = np.load(f'{dir_mn}/theta_test{tag_test}_pred.npy')
+    covs_test_pred = np.load(f'{dir_mn}/covs_test{tag_test}_pred.npy')
     
     try:
         samples = rng.multivariate_normal(theta_test_pred[idx_obs], 

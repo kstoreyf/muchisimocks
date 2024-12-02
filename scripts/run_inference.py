@@ -21,7 +21,8 @@ import generate_emuPks as genP
 
 def main():
     #run_3D_inference()
-    run_pk_inference()
+    #run_pk_inference()
+    test_pk_inference()
 
 
 def run_3D_inference():
@@ -105,10 +106,10 @@ def run_pk_inference():
                                                         n_rlzs_per_cosmo=n_rlzs_per_cosmo)
     elif data_mode == 'muchisimocksPk':
         tag_mocks = '_p5_n10000'
-        tag_pk = '_b1000'
-        mode_bias_vector = 'single'
-        #tag_pk = '_biaszen_p4_n10000'
-        #mode_bias_vector = 'LH'
+        #tag_pk = '_b1000'
+        #mode_bias_vector = 'single'
+        tag_pk = '_biaszen_p4_n10000'
+        mode_bias_vector = 'LH'
         tag_datagen = f'{tag_mocks}{tag_pk}'
         theta, y, y_err, k, param_names, bias_params, random_ints = load_data_muchisimocksPk(tag_mocks,
                                                                                              tag_pk,
@@ -169,12 +170,14 @@ def run_pk_inference():
     print(y_train.shape, y_val.shape, y_test.shape)
     print(y_err_train.shape, y_err_val.shape, y_err_test.shape)
     
+    # NOW DOING IN MOMENT_NETWORK
+    # will have to do for each inf method
     ### Scale data
-    ys_scaled = scale_y_data(y_train, y_val, y_test,
-                           y_err_train=y_err_train, y_err_val=y_err_val, y_err_test=y_err_test,
-                           return_scaler=True)
-    y_train_scaled, y_val_scaled, y_test_scaled, \
-               y_err_train_scaled, y_err_val_scaled, y_err_test_scaled, scaler = ys_scaled
+    # ys_scaled = scale_y_data(y_train, y_val, y_test,
+    #                        y_err_train=y_err_train, y_err_val=y_err_val, y_err_test=y_err_test,
+    #                        return_scaler=True)
+    # y_train_scaled, y_val_scaled, y_test_scaled, \
+    #            y_err_train_scaled, y_err_val_scaled, y_err_test_scaled, scaler = ys_scaled
     
     ### Run inference
     if run_moment:
@@ -182,18 +185,22 @@ def run_pk_inference():
         #tag_inf = f'{tag_data}_ntrain{n_train}_eigs'
         tag_run = ''
         
-        # run_mode_mean = 'best'
-        # sweep_name_mean = 'rand10'
+        run_mode_mean = 'best'
+        sweep_name_mean = 'rand10'
         #run_mode_mean = 'sweep'
         #sweep_name_mean = 'biaszenp4rand10'
-        run_mode_mean = 'load'
-        tag_run += '_best-rand10'
-        sweep_name_mean = None
+        # run_mode_mean = 'load'
+        # tag_run += '_best-rand10'
+        # sweep_name_mean = None
         
         #run_mode_cov = 'single'
         #sweep_name_cov = None
-        run_mode_cov = 'sweep'
+        #run_mode_cov = 'sweep'
+        run_mode_cov = 'best'
         sweep_name_cov = 'rand10'
+        # run_mode_cov = 'load'
+        # tag_run += '_bestcov-rand10'
+        # sweep_name_cov = None
         
         if run_mode_mean == 'sweep':
             tag_run += f'_sweep-{sweep_name_mean}'
@@ -213,12 +220,18 @@ def run_pk_inference():
         # sweep_name_cov = None
         # tag_inf = f'{tag_data}_ntrain{n_train}_direct'
         
-        moment_network = mn.MomentNetwork(theta_train=theta_train, y_train=y_train_scaled, y_err_train=y_err_train_scaled,
-                            theta_val=theta_val, y_val=y_val_scaled, y_err_val=y_err_val_scaled,
-                            theta_test=theta_test, y_test=y_test_scaled, y_err_test=y_err_test_scaled,
-                            tag_mn=tag_inf,
-                            run_mode_mean=run_mode_mean, run_mode_cov=run_mode_cov,
-                            sweep_name_mean=sweep_name_mean, sweep_name_cov=sweep_name_cov)
+        moment_network = mn.MomentNetwork(theta_train=theta_train, y_train_unscaled=y_train, y_err_train_unscaled=y_err_train,
+                    theta_val=theta_val, y_val_unscaled=y_val, y_err_val_unscaled=y_err_val,
+                    theta_test=theta_test, y_test_unscaled=y_test, y_err_test_unscaled=y_err_test,
+                    tag_mn=tag_inf,
+                    run_mode_mean=run_mode_mean, run_mode_cov=run_mode_cov,
+                    sweep_name_mean=sweep_name_mean, sweep_name_cov=sweep_name_cov)
+        # moment_network = mn.MomentNetwork(theta_train=theta_train, y_train=y_train_scaled, y_err_train=y_err_train_scaled,
+        #                     theta_val=theta_val, y_val=y_val_scaled, y_err_val=y_err_val_scaled,
+        #                     theta_test=theta_test, y_test=y_test_scaled, y_err_test=y_err_test_scaled,
+        #                     tag_mn=tag_inf,
+        #                     run_mode_mean=run_mode_mean, run_mode_cov=run_mode_cov,
+        #                     sweep_name_mean=sweep_name_mean, sweep_name_cov=sweep_name_cov)
         #moment_network.run(max_epochs_mean=5, max_epochs_cov=5)
         moment_network.run(max_epochs_mean=2000, max_epochs_cov=2000)
         moment_network.evaluate_test_set()
@@ -271,12 +284,85 @@ def run_pk_inference():
                         dict_bounds, param_names, emu_param_names,
                         tag_inf=tag_inf)
         
+        
+def test_pk_inference():
+    run_moment = True
+    run_sbi = False
+    run_emcee = False
+    run_dynesty = False
+    
+    # for likelihood methods only
+    idxs_obs = np.arange(1)
+
+    ### Load data
+    data_mode = 'muchisimocksPk'
+
+    tag_mocks_train = '_p5_n10000'
+    #tag_pk_train = '_b1000'
+    tag_pk_train = '_biaszen_p4_n10000'
+
+    tag_mocks = '_fixedcosmo'
+    #tag_pk = '_b1000'
+    #mode_bias_vector = 'single'
+    tag_pk = '_biaszen_p4_n1000'
+    mode_bias_vector = 'LH'
+    tag_datagen = f'{tag_mocks_train}{tag_pk_train}'
+    
+    param_dict, y, gaussian_error_pk, k, bias_vector = load_data_muchisimocksPk_fixedcosmo(tag_mocks,
+                                            tag_pk,
+                                            mode_bias_vector=mode_bias_vector
+                                            )
+
+    tag_data = '_'+data_mode + tag_datagen
+    print(y.shape)
+
+
+    ### Run inference
+    if run_moment:
+        #tag_inf = f'{tag_data}_ntrain{n_train}_scalecovminmax'
+        #tag_inf = f'{tag_data}_ntrain{n_train}_eigs'
+        tag_run = ''
+        
+        run_mode_mean = 'load'
+        tag_run += '_best-rand10'
+        sweep_name_mean = None
+        
+        run_mode_cov = 'load'
+        tag_run += '_bestcov-rand10'
+        sweep_name_cov = None
+
+            
+        n_train = 8000
+        tag_inf = f'{tag_data}_ntrain{n_train}_direct{tag_run}'
+        print("tag_inf", tag_inf)
+        # run_mode_mean = 'single'
+        # sweep_name_mean = None
+        # run_mode_cov = None
+        # sweep_name_cov = None
+        # tag_inf = f'{tag_data}_ntrain{n_train}_direct'
+        
+        moment_network = mn.MomentNetwork(
+                            tag_mn=tag_inf,
+                            run_mode_mean=run_mode_mean, run_mode_cov=run_mode_cov,
+                            sweep_name_mean=sweep_name_mean, sweep_name_cov=sweep_name_cov)
+        moment_network.run() #need this to do the loading
+        moment_network.evaluate_test_set(y_test_unscaled=y, tag_test=tag_mocks)
+        
+        y_mean = np.mean(y, axis=0)
+        moment_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test=f'{tag_mocks}_mean')
+        print(f"Saved results to {moment_network.dir_mn}")
+    
+            
 
 def load_data_muchisimocksPk(tag_mocks, tag_pk, mode_bias_vector='single'):       
-     
-    dir_params = '../data/params'
-    fn_params = f'{dir_params}/params_lh{tag_mocks}.txt'
-    params_df = pd.read_csv(fn_params, index_col=0)
+    
+    if 'fixedcosmo' in tag_mocks:
+        param_dict = utils.cosmo_dict_quijote
+    else:
+        dir_params = '../data/params'
+        fn_params = f'{dir_params}/params_lh{tag_mocks}.txt'
+        params_df = pd.read_csv(fn_params, index_col=0)
+    
     param_names = params_df.columns.tolist()
     #idxs_LH = params_df.index.tolist()
     dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}'
@@ -301,8 +387,11 @@ def load_data_muchisimocksPk(tag_mocks, tag_pk, mode_bias_vector='single'):
         pk_obj = np.load(fn_pk, allow_pickle=True).item()
         Pk.append(pk_obj['pk'])
         gaussian_error_pk.append(pk_obj['pk_gaussian_error'])
-        param_vals = params_df.loc[idx_LH].values
-        theta.append(param_vals)
+        if 'fixedcosmo' in tag_mocks:
+            theta.append(param_dict.values)
+        else:
+            param_vals = params_df.loc[idx_LH].values
+            theta.append(param_vals)
 
     Pk = np.array(Pk)
     theta = np.array(theta)
@@ -318,6 +407,42 @@ def load_data_muchisimocksPk(tag_mocks, tag_pk, mode_bias_vector='single'):
     k = k[mask]
     
     return theta, Pk, gaussian_error_pk, k, param_names, bias_vector, random_ints
+
+
+def load_data_muchisimocksPk_fixedcosmo(tag_mocks, tag_pk, mode_bias_vector='single'):       
+   
+    idxs_mock = np.array([idx_mock for idx_mock in range(1000) if os.path.exists(f"/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}/pk_{idx_mock}.npy")])
+    
+    dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}'
+    if mode_bias_vector == 'single':
+        fn_bias_vector = f'{dir_pks}/bias_params.txt'
+        bias_vector = np.loadtxt(fn_bias_vector)
+    else:
+        # TODO update as needed
+        bias_vector = None
+        
+    param_dict = utils.cosmo_dict_quijote
+
+
+    Pk, gaussian_error_pk = [], []
+    for idx_mock in idxs_mock:
+        fn_pk = f'{dir_pks}/pk_{idx_mock}.npy'
+        pk_obj = np.load(fn_pk, allow_pickle=True).item()
+        Pk.append(pk_obj['pk'])
+        gaussian_error_pk.append(pk_obj['pk_gaussian_error'])
+
+    Pk = np.array(Pk)
+    gaussian_error_pk = np.array(gaussian_error_pk)
+    k = pk_obj['k'] # all ks should be same so just grab one
+
+    # TODO do i want / need this here?
+    mask = np.all(Pk>0, axis=0)
+    print(f"{np.sum(np.any(Pk<=0, axis=1))}/{Pk.shape[0]} have at least one non-positive Pk value")
+    print(f"Masking columns {np.where(~mask)[0]}")
+    Pk = Pk[:,mask]
+    gaussian_error_pk = gaussian_error_pk[:,mask]
+    k = k[mask]
+    return param_dict, Pk, gaussian_error_pk, k, bias_vector
 
         
 def load_data_muchisimocks3D(tag_mocks):       
