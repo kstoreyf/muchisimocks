@@ -363,6 +363,9 @@ def load_data_muchisimocksPk(tag_mocks, tag_pk, mode_bias_vector='single'):
         fn_params = f'{dir_params}/params_lh{tag_mocks}.txt'
         params_df = pd.read_csv(fn_params, index_col=0)
     
+    # NOTE for now theta is only cosmo params! 
+    # may want to add bias params too 
+    
     param_names = params_df.columns.tolist()
     #idxs_LH = params_df.index.tolist()
     dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}'
