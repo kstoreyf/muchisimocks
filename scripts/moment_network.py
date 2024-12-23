@@ -258,8 +258,11 @@ class MomentNetwork():
             self.scaler_cov = pickle.load(f)
         
     
+    # moved scaler_y to MN class because to evaluate posteriors for new ydata,
+    # need to make sure to scale in same way
+    # replicated in run_inference because the likelihood methods also need scaling
     def setup_scaler_y(self):
-        self.scaler_y = scl.Scaler()
+        self.scaler_y = scl.Scaler('log_minmax')
         self.scaler_y.fit(self.y_train_unscaled)
         
         self.y_train = self.scaler_y.scale(self.y_train_unscaled)

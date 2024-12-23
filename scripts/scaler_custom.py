@@ -3,8 +3,8 @@ import numpy as np
 
 class Scaler:
 
-    def __init__(self, func='log_minmax'):
-        assert func in ['none', 'log_minmax', 'log_minmax_const', 'minmax'], f"Function {func} not recognized"
+    def __init__(self, func):
+        assert func in ['none', 'log_minmax', 'log_minmax_const', 'log', 'minmax'], f"Function {func} not recognized"
         self.func = func
         
     def fit(self, x_train):
@@ -14,8 +14,10 @@ class Scaler:
     def scale(self, x):
         if self.func=='log_minmax':
             return self._scale_log_minmax(x)
-        if self.func=='log_minmax_const':
+        elif self.func=='log_minmax_const':
             return self._scale_log_minmax_const(x)
+        if self.func=='log':
+            return self._scale_log(x)
         elif self.func=='minmax':
             return self._scale_minmax(x)
         elif self.func=='none':
@@ -28,6 +30,8 @@ class Scaler:
             return self._unscale_log_minmax(x)
         if self.func=='log_minmax_const':
             return self._unscale_log_minmax_const(x)
+        if self.func=='log':
+            return self._unscale_log(x)
         elif self.func=='minmax':
             return self._unscale_minmax(x)
         elif self.func=='none':
@@ -38,6 +42,8 @@ class Scaler:
     def scale_error(self, err, x):
         if self.func=='log_minmax':
             return self._scale_error_log_minmax(err, x)
+        if self.func=='log':
+            return self._scale_error_log(err, x)
         elif self.func=='none':
             return x
         else:
@@ -84,7 +90,11 @@ class Scaler:
     def _scale_log(self, x):
         return np.log10(x)
     
-    def _scale_log_error(self, err, x):
+    def _unscale_log(self, x_scaled):
+        x = 10**x_scaled
+        return x  
+    
+    def _scale_error_log(self, err, x):
         return (1./x) * (1/np.log(10)) * err
     
     def _scale_minmax(self, x):

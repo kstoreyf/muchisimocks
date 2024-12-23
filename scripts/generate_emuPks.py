@@ -9,8 +9,10 @@ import utils
 
 def main():
 
-    n_emuPk = 10000
-    tag_emuPk = f'_5param_n{n_emuPk}'
+    n_emuPk = 1000
+    #tag_emuPk = f'_5param_n{n_emuPk}'
+    #tag_emuPk = f'_2param_n{n_emuPk}'
+    tag_emuPk = f'_fixedcosmo_n{n_emuPk}'
 
     box_size = 500.
     tag_errG = f'_boxsize{int(box_size)}'
@@ -29,19 +31,32 @@ def main():
     np.savetxt(fn_bias_vector, bias_params)
     
     
+    dir_emus_lbias = '/home/kstoreyf/external'
+    emu, emu_bounds, emu_param_names = utils.load_emu(dir_emus_lbias=dir_emus_lbias)
+    
     if '_2param' in tag_datagen:
         param_names = ['omega_cold', 'sigma8_cold']
     elif '_5param' in tag_datagen:
         param_names = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
+    elif '_fixedcosmo' in tag_datagen:
+        param_dict = utils.cosmo_dict_quijote
+        param_names = param_dict.keys()
+        param_names = [pn for pn in param_names if pn in emu_param_names]
     else:
         raise KeyError('define parameters!')
-    
-    dir_emus_lbias = '/home/kstoreyf/external'
-    emu, emu_bounds, emu_param_names = utils.load_emu(dir_emus_lbias=dir_emus_lbias)
+    print(param_names)
+
     param_bounds = {name: emu_bounds[emu_param_names.index(name)] for name in param_names}
     
-    theta = latin_hypercube(param_names, param_bounds, n_emuPk,
-                            fn_emuPk_params=fn_emuPk_params)
+    if '_fixedcosmo' in tag_datagen:
+        theta_single = np.array([param_dict[pn] for pn in param_names])
+        theta = np.tile(theta_single, (n_emuPk, 1))
+        header = ','.join(param_names)
+        # redundant to save all of them but doing it for consistency
+        np.savetxt(fn_emuPk_params, theta, header=header, delimiter=',', fmt='%.8f')
+    else:
+        theta = latin_hypercube(param_names, param_bounds, n_emuPk,
+                                fn_emuPk_params=fn_emuPk_params)
     print(theta.shape)
     k, Pk_noiseless = generate_pks(theta, bias_params, param_names, emu, 
                          fn_emuk=fn_emuk, fn_emuPk=fn_emuPk)
@@ -62,7 +77,7 @@ def generate_pks(theta, bias_params, param_names, emu,
         return k, Pk
     
     print(f"Generating emuPks for {fn_emuPk}...")
-    cosmo_params = utils.setup_cosmo_emu()
+    cosmo_params = utils.setup_cosmo_emu(cosmo='quijote')
     cosmo_params['expfactor'] = 1
     k = np.logspace(-2, np.log10(0.75), 30)
 
@@ -76,7 +91,7 @@ def generate_pks(theta, bias_params, param_names, emu,
 
     np.save(fn_emuPk, Pk)
     np.savetxt(fn_emuk, k)
-    return k, Pk
+    return np.array(k), np.array(Pk)
            
   
 def latin_hypercube(param_names, param_bounds, n_tot, 

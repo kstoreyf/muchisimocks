@@ -1,8 +1,6 @@
 import os
 os.environ["OMP_NUM_THREADS"] = str(1)
 
-import emcee
-import dynesty
 import multiprocessing as mp
 import numpy as np
 import pathlib
@@ -21,6 +19,8 @@ def log_prior(theta):
 def log_likelihood(theta):
     for pp in range(len(_param_names)):
         _cosmo_params[_emu_param_names[pp]] = theta[pp]
+    expfactor = 1.0 # careful, may need to change at some point!
+    _cosmo_params['expfactor'] = expfactor
     _, pk_model_unscaled, _ = _emu.get_galaxy_real_pk(bias=_bias_params, k=_k, 
                                                 **_cosmo_params)
     pk_model = _scaler.scale(pk_model_unscaled)
@@ -54,18 +54,24 @@ def evaluate_dynesty(idx_test, pk_data, cov_inv, scaler,
                      dict_bounds, param_names, emu_param_names,
                      tag_inf='', n_threads=10):
     
+    # import here so if only have emcee, that still works
+    import dynesty
+
     dir_dynesty =  f'../results/results_dynesty/samplers{tag_inf}'
     p = pathlib.Path(dir_dynesty)
     p.mkdir(parents=True, exist_ok=True)
     fn_dynesty = f'{dir_dynesty}/sampler_results_idxtest{idx_test}.npy'
     if os.path.exists(fn_dynesty):
-        print("File exists, skipping")
+        print(f"Sampler results file {fn_dynesty} already exists, skipping")
         return
     
+    assert len(emu_param_names) == len(param_names), "Parameter names and emulator parameter names must be the same length"
     global _pk_data, _cov_inv, _scaler
     global _emu, _cosmo_params, _bias_params, _k
     global _dict_bounds, _param_names, _emu_param_names
     
+    # i think i should maybe only pass param names, and then in here 
+    # if they don't align with emu_param_names, do the translation??
     _pk_data, _cov_inv, _scaler = pk_data, cov_inv, scaler
     _emu, _cosmo_params, _bias_params, _k =  emu, cosmo_params, bias_params, k
     _dict_bounds, _param_names, _emu_param_names = dict_bounds, param_names, emu_param_names
@@ -91,6 +97,9 @@ def evaluate_emcee(idx_test, pk_data, cov_inv, scaler,
                      dict_bounds, param_names, emu_param_names,
                      tag_inf='', n_threads=8):
     
+    # import here so if only want emcee (not dynesty), still runs
+    import emcee
+
     global _pk_data, _cov_inv, _scaler
     global _emu, _cosmo_params, _bias_params, _k
     global _dict_bounds, _param_names, _emu_param_names
@@ -110,7 +119,7 @@ def evaluate_emcee(idx_test, pk_data, cov_inv, scaler,
     p.mkdir(parents=True, exist_ok=True)
     fn_emcee = f'{dir_emcee}/sampler_idxtest{idx_test}.npy'
     if os.path.exists(fn_emcee):
-        print("File exists, skipping")
+        print(f"Sampler results file {fn_emcee} already exists, skipping")
         return
     
     backend = emcee.backends.HDFBackend(fn_emcee)
