@@ -234,7 +234,7 @@ def run_pk_inference():
     
     if run_sbi:
         run_mode = 'single'
-        tag_inf = f'{tag_data}_ntrain{n_train}_sbi'
+        tag_inf = f'{tag_data}_ntrain{n_train}'
         sbi_network = sbi_model.SBIModel(theta_train=theta_train, y_train_unscaled=y_train, y_err_train_unscaled=y_err_train,
                     theta_val=theta_val, y_val_unscaled=y_val, y_err_val_unscaled=y_err_val,
                     theta_test=theta_test, y_test_unscaled=y_test, y_err_test_unscaled=y_err_test,
@@ -325,9 +325,8 @@ def test_pk_inference():
         n_rlzs_per_cosmo = 1
         #tag_emuPk = '_5param'
         #tag_emuPk = '_2param'
-        tag_emuPk = '_fixedcosmo'
+        tag_emuPk = '_fixedcosmo_n1000'
         tag_errG = f'_boxsize500'
-        tag_datagen = f'{tag_emuPk}{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
 
         test_noiseless = True
         tag_datagen = f'{tag_emuPk}{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
@@ -338,6 +337,7 @@ def test_pk_inference():
                                                         n_rlzs_per_cosmo=n_rlzs_per_cosmo,
                                                         return_noiseless=True)
         
+        tag_test = ''
         # for fixedcosmo, we decide which parameters to sample over
         if 'fixedcosmo' in tag_emuPk:
             param_names = ['omega_cold', 'sigma8_cold']
@@ -373,7 +373,6 @@ def test_pk_inference():
                                                 )
 
     tag_data = '_'+data_mode + tag_datagen
-    print(y.shape)
 
 
     ### Run inference
@@ -412,14 +411,19 @@ def test_pk_inference():
         print(f"Saved results to {moment_network.dir_mn}")
         
     if run_sbi:
-        tag_inf = f'{tag_data}_ntrain{n_train}'
+        #n_train = 8000
+        #tag_inf = f'{tag_data}_ntrain{n_train}'
+        tag_inf = '_emuPk_2param_boxsize500_nrlzs1_ntrain8000'
         sbi_network = sbi_model.SBIModel(
                     theta_test=theta_test, y_test_unscaled=y_test, y_err_test_unscaled=y_err_test,
                     tag_sbi=tag_inf, run_mode='load',
                     param_names=param_names       
                     )
         sbi_network.run() #need this to do the loading
-        sbi_network.evaluate_test_set(y_test_unscaled=y, tag_test=tag_mocks)
+        # TODO make this work for both emu and muchisimocks
+        #sbi_network.evaluate_test_set(y_test_unscaled=y, tag_test=tag_emupk)
+        
+        sbi_network.evaluate_test_set(y_test_unscaled=y_test, tag_test=f'{tag_emuPk}_noiseless')
         
         
     

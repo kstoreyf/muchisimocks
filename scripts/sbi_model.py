@@ -168,5 +168,6 @@ class SBIModel():
         if y_test_unscaled is None:
             y_test_unscaled = self.y_test_unscaled
         samples_test_pred = self.evaluate(y_test_unscaled)
-        fn_samples_test_pred = f'{self.dir_mn}/samples_test{tag_test}_pred.npy'
+        fn_samples_test_pred = f'{self.dir_sbi}/samples_test{tag_test}_pred.npy'
         np.save(fn_samples_test_pred, samples_test_pred)
+        print(f"Saved samples to {fn_samples_test_pred}")

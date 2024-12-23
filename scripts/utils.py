@@ -15,10 +15,12 @@ param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
                 }
 
 color_dict_methods = {'mn': 'blue',
+                      'sbi': 'green',
                       'emcee': 'purple',
                       'dynesty': 'red'}
 
 label_dict_methods = {'mn': 'Moment Network',
+                      'sbi': 'SBI',
                       'emcee': 'MCMC (emcee)',
                       'dynesty': 'MCMC (dynesty)'}
 
@@ -139,6 +141,8 @@ def get_posterior_maxes(samples_equal, param_names):
 def get_samples(idx_obs, inf_method, tag_inf, tag_test=''):
     if inf_method == 'mn':
         return get_samples_mn(idx_obs, tag_inf, tag_test=tag_test)
+    if inf_method == 'sbi':
+        return get_samples_sbi(idx_obs, tag_inf, tag_test=tag_test)
     elif inf_method == 'emcee':
         return get_samples_emcee(idx_obs, tag_inf)
     elif inf_method == 'dynesty':
@@ -169,6 +173,13 @@ def get_samples_mn(idx_obs, tag_inf, tag_test=''):
         samples = rng.multivariate_normal(theta_test_pred[idx_obs], 
                                             covs_test_pred[idx_obs], int(1e6),
                                             check_valid='ignore')
+    return samples
+
+
+def get_samples_sbi(idx_obs, tag_inf, tag_test=''):
+    dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
+    fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
+    samples = np.load(fn_samples_test_pred)
     return samples
 
 

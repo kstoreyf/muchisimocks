@@ -185,8 +185,8 @@ def plot_contours(samples_arr, labels, colors, param_names, param_label_dict,
         plt.savefig(fn_save)
         
         
-smooth_dict = {'mn': 1, 'emcee': 2, 'dynesty': 2}
-bins_dict = {'mn': None, 'emcee': 10, 'dynesty': 7}
+smooth_dict = {'mn': 1, 'sbi': 1, 'emcee': 2, 'dynesty': 2}
+bins_dict = {'mn': None, 'sbi': None, 'emcee': 10, 'dynesty': 7}
 
 def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       inf_methods, tags_inf, tag_test='',
