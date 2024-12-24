@@ -328,7 +328,7 @@ def test_pk_inference():
         tag_emuPk = '_fixedcosmo_n1000'
         tag_errG = f'_boxsize500'
 
-        test_noiseless = True
+        test_noiseless = False
         tag_datagen = f'{tag_emuPk}{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
         
         theta, Pk, gaussian_error_pk, k, param_names_all, bias_params, random_ints, \
@@ -337,22 +337,24 @@ def test_pk_inference():
                                                         n_rlzs_per_cosmo=n_rlzs_per_cosmo,
                                                         return_noiseless=True)
         
-        tag_test = ''
+        tag_test = tag_emuPk
         # for fixedcosmo, we decide which parameters to sample over
         if 'fixedcosmo' in tag_emuPk:
             param_names = ['omega_cold', 'sigma8_cold']
             #param_names = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
             tag_test += f'_{len(param_names)}param'
             theta = np.array([theta[:,param_names_all.index(pn)] for pn in param_names]).T
-            theta_test = theta[idxs_obs]
             
+        
         if test_noiseless:
+            theta_test = theta[idxs_obs]
             y_test = Pk_noiseless[idxs_obs]
             y_err_test = gaussian_error_pk_noiseless[idxs_obs]
             tag_test += '_noiseless'
         else:
-            y_test = Pk[idxs_obs]
-            y_err_test = gaussian_error_pk[idxs_obs]
+            theta_test = theta
+            y_test = Pk
+            y_err_test = gaussian_error_pk
 
 
     elif data_mode == 'muchisimocksPk':
@@ -423,7 +425,7 @@ def test_pk_inference():
         # TODO make this work for both emu and muchisimocks
         #sbi_network.evaluate_test_set(y_test_unscaled=y, tag_test=tag_emupk)
         
-        sbi_network.evaluate_test_set(y_test_unscaled=y_test, tag_test=f'{tag_emuPk}_noiseless')
+        sbi_network.evaluate_test_set(y_test_unscaled=y_test, tag_test=tag_test)
         
         
     
@@ -505,11 +507,13 @@ def run_likelihood_inference():
             y_data_unscaled = y_test[idx_obs]
             y_data = y_test_scaled[idx_obs]
 
-            err_1p = 0.01*y_data_unscaled
-            err_1p_scaled = scaler.scale_error(err_1p, y_data_unscaled)
-            err_gaussian_scaled = y_err_test_scaled[idx_obs]
-            var = err_gaussian_scaled**2 + err_1p_scaled**2
-            cov_inv = np.diag(1/var)
+            # err_1p = 0.01*y_data_unscaled
+            # err_1p_scaled = scaler.scale_error(err_1p, y_data_unscaled)
+            # err_gaussian_scaled = y_err_test_scaled[idx_obs]
+            # var = err_gaussian_scaled**2 + err_1p_scaled**2
+            # cov_inv = np.diag(1/var)
+            cov_inv = np.diag(np.ones(len(y_data)))
+            tag_inf += f'_covnone'
         
             mcmc.evaluate_dynesty(idx_obs, y_data, cov_inv, scaler,
                         emu, cosmo_params, bias_params, k,

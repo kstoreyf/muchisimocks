@@ -179,9 +179,13 @@ def get_samples_mn(idx_obs, tag_inf, tag_test=''):
 def get_samples_sbi(idx_obs, tag_inf, tag_test=''):
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
-    samples = np.load(fn_samples_test_pred)
-    return samples
-
+    samples_arr = np.load(fn_samples_test_pred)
+    if samples_arr.ndim == 2:
+        return samples_arr
+    elif samples_arr.ndim == 3:
+        return samples_arr[:,idx_obs,:]
+    else:
+        raise ValueError(f"Samples shape {samples_arr.shape} is weird!")
 
 def get_samples_emcee(idx_obs, tag_inf):
     import emcee

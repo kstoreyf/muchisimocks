@@ -25,7 +25,9 @@ class SBIModel():
         # if n_threads is not None:
         #     tf.config.threading.set_inter_op_parallelism_threads(n_threads)
         #     tf.config.threading.set_intra_op_parallelism_threads(n_threads)
-        # # TODO error not being used!!! ack! write custom loss func
+        
+        # TODO the error is not being used!!! ack! write custom loss func?
+        # actually unclear how the error should be taken into account... 
 
         self.dir_sbi = f'../results/results_sbi/sbi{tag_sbi}'
         p = pathlib.Path(self.dir_sbi)
@@ -68,7 +70,7 @@ class SBIModel():
         self.run_mode = run_mode
 
         
-    def run(self, max_epochs=20):
+    def run(self, max_epochs=500):
 
         if self.run_mode == 'single':
             # get prior
@@ -92,6 +94,9 @@ class SBIModel():
                 # num_blocks=num_blocks
             )
     
+            # can't pass in own validation set without writing custom training loop,
+            # so doing this hack (don't even know if the fraction is taken from the end
+            # or randomly, so may be mixing train and val here)
             theta_train_and_val = np.concatenate((self.theta_train, self.theta_val), axis=0)
             y_train_and_val = np.concatenate((self.y_train, self.y_val), axis=0)
             validation_fraction = len(self.theta_val) / len(theta_train_and_val)
@@ -114,23 +119,32 @@ class SBIModel():
                 show_train_summary=True
                 )
             
+            #print(inference._summary)
+            #train_log = inference._summary # 
+            #training_loss = train_log[0]["training_loss"]
+            #validation_loss = train_log[0]["validation_loss"]
+            
             print("Building posterior")
             self.posterior = inference.build_posterior(density_estimator)
             print(self.posterior)
+            
+            # save
             with open(f"{self.dir_sbi}/posterior.p", "wb") as f:
                 pickle.dump(self.posterior, f)
+            with open(f"{self.dir_sbi}/inference.p", "wb") as f:
+                pickle.dump(inference, f)
 
         elif self.run_mode == 'load':
             self.load_posterior()
             # may need to get n_params somehow
             
         else: 
-            raise ValueError("run_mode not recognized")
+            raise ValueError(f"run_mode {self.run_mode} not recognized")
             
             
     def load_posterior(self):
         fn_posterior = f'{self.dir_sbi}/posterior.p'
-        assert os.path.exists(fn_posterior), f"model_mean.keras not found in {self.dirsbi}"
+        assert os.path.exists(fn_posterior), f"model_mean.keras not found in {self.dir_sbi}"
         print(f"Loading mean model from {fn_posterior}")
         with open(fn_posterior, "rb") as f:
             self.posterior = pickle.load(f)
@@ -159,8 +173,13 @@ class SBIModel():
             self.scaler_y = pickle.load(f)
         
         
-    def evaluate(self, y_obs_unscaled, n_samples=1000, mean_only=False):
-        samples = self.posterior.sample((n_samples,), x=y_obs_unscaled)
+    def evaluate(self, y_obs_unscaled, n_samples=10000, mean_only=False):
+        y_obs = self.scaler_y.scale(y_obs_unscaled)
+        # model is built with float32 so need the data to be here too
+        y_obs = np.float32(y_obs)
+        #samples = self.posterior.sample((n_samples,), x=y_obs)
+        print(y_obs.dtype)
+        samples = self.posterior.sample_batched((n_samples,), x=y_obs)
         return samples
     
     

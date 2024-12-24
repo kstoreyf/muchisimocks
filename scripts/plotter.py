@@ -185,12 +185,13 @@ def plot_contours(samples_arr, labels, colors, param_names, param_label_dict,
         plt.savefig(fn_save)
         
         
-smooth_dict = {'mn': 1, 'sbi': 1, 'emcee': 2, 'dynesty': 2}
-bins_dict = {'mn': None, 'sbi': None, 'emcee': 10, 'dynesty': 7}
+smooth_dict = {'mn': 1, 'sbi': 2, 'emcee': 2, 'dynesty': 2}
+bins_dict = {'mn': None, 'sbi': 4, 'emcee': 10, 'dynesty': 7}
 
 def plot_contours_inf(param_names, idx_obs, theta_obs_true,
-                      inf_methods, tags_inf, tag_test='',
+                      inf_methods, tags_inf, tags_test=None,
                       colors=None, labels=None, labels_extra=None,
+                      figsize=(7,7),
                       extents={}, title=None):
     if title is None:
         title = f'test model {idx_obs}'
@@ -198,6 +199,10 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
 
     samples_arr = []
     for i, inf_method in enumerate(inf_methods):
+        if tags_test is None:
+            tag_test = ''
+        else:
+            tag_test = tags_test[i]
         samples = utils.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
         samples_arr.append(samples)
 
@@ -212,7 +217,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
 
     plot_contours(samples_arr, labels, colors, param_names, utils.param_label_dict, 
                         smooth_arr=smooth_arr, bins_arr=bins_arr,
-                        truth_loc=truth_loc, title=title, extents=extents, fn_save=None)
+                        truth_loc=truth_loc, title=title, figsize=figsize,
+                        extents=extents, fn_save=None)
  # for backwards compatibility
 
 def plot_overdensity_field(tracer_field, normalize=False, vmax=None, 
