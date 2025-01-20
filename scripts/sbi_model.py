@@ -108,8 +108,6 @@ class SBIModel():
                 torch.tensor(y_train_and_val, dtype=torch.float32),
                 )
             
-            
-            
             print("Training")
             density_estimator = inference.train(
                 max_num_epochs=max_epochs,

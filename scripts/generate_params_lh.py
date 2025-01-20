@@ -15,23 +15,30 @@ def main():
     seed = 42
     overwrite = False
 
-    n_samples = 1000
+    n_samples = 1
     
-    pset = 'biaszen'
-    #pset = 'cosmo'
+    bounds_type = 'cosmo' #cosmo or bias
+    #tag_bounds = '_test' 
+    tag_bounds = '_quijote'
     
-    if pset=='cosmo':
+    #bounds_type = 'bias'
+    #tag_bounds = '_biaszen'
+    #tag_bounds = '_b1000'
+    
+    if bounds_type == 'cosmo':
+        param_names_vary = []
         #param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble']
-        param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
-        param_names_ordered, bounds_dict, fiducial_dict = define_LH_cosmo()
-    elif 'bias' in pset:
-        param_names_vary = ['b1', 'b2', 'bs2', 'bl']
+        #param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
+        param_names_ordered, bounds_dict, fiducial_dict = define_LH_cosmo(tag_bounds=tag_bounds)
+    elif bounds_type == 'bias':
+        #param_names_vary = ['b1', 'b2', 'bs2', 'bl']
         #param_names_vary = ['b1']
-        param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(bounds=pset)
+        param_names_vary = []
+        param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(tag_bounds=tag_bounds)
     else:
         raise ValueError("pset must be 'cosmo' or 'bias'")
     
-    tag_params = f'_{pset}_p{len(param_names_vary)}_n{n_samples}'
+    tag_params = f'{tag_bounds}_p{len(param_names_vary)}_n{n_samples}'
     dir_params = '../data/params'
     fn_params = f'{dir_params}/params_lh{tag_params}.txt'
     fn_params_fixed = f'{dir_params}/params_fixed{tag_params}.txt'
@@ -45,32 +52,37 @@ def main():
         print(f'Found existing fixed params: {fn_params_fixed}; stopping!')
         return
     
-    generate_LH(param_names_vary, param_names_ordered, bounds_dict, 
-                n_samples, fn_params, fn_params_fixed, 
-                fiducial_dict=fiducial_dict, seed=seed)
+    if len(param_names_vary) > 0:
+        generate_LH(param_names_vary, bounds_dict, 
+                    n_samples, fn_params, seed=seed)
+        fn_rands = f'{dir_params}/randints{tag_params}.npy'
+        utils.generate_randints(n_samples, fn_rands)
+        
+    param_names_fixed = [pn for pn in param_names_ordered if pn not in param_names_vary]
+    if len(param_names_fixed) > 0:
+        save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
     
-    fn_rands = f'{dir_params}/randints{tag_params}.npy'
-    utils.generate_randints(n_samples, fn_rands)
 
 
-def define_LH_bias(bounds='mid'):
+
+def define_LH_bias(tag_bounds):
     
     param_names_ordered = ['b1', 'b2', 'bs2', 'bl']
     
-    if bounds=='bias':
+    if 'biaswide' in tag_bounds:
         bounds_dict = {'b1'     :  [-5, 20],
                         'b2'    :  [-5, 10],
                         'bs2'   :  [-10, 20],
                         'bl'   :  [-20, 30],
                     }
-    elif bounds=='biaszen':
+    elif 'biaszen' in tag_bounds:
         bounds_dict = {'b1'     :  [-1, 2],
                         'b2'    :  [-2, 2],
                         'bs2'   :  [-2, 2],
                         'bl'   :  [-10, 10],
                     }
     else:
-        raise ValueError("bounds must be 'wide' or 'mid'")
+        bounds_dict = {}
     
     fiducial_dict = {'b1'     :  1,
                     'b2'    :  0,
@@ -78,10 +90,13 @@ def define_LH_bias(bounds='mid'):
                     'bl'   :  0,
                 }
     
+    if 'test' in tag_bounds:
+        bounds_dict = restrict_bounds(bounds_dict, factor=0.05)
+        
     return param_names_ordered, bounds_dict, fiducial_dict
     
     
-def define_LH_cosmo():
+def define_LH_cosmo(tag_bounds):
     
     param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns', 'neutrino_mass', 'w0', 'wa']
 
@@ -97,20 +112,31 @@ def define_LH_cosmo():
                     'wa'            :  [-0.3, 0.3],
                     }
     
+    if 'test' in tag_bounds:
+        bounds_dict = restrict_bounds(bounds_dict, factor=0.05)
+    
     fiducial_dict = utils.cosmo_dict_quijote
 
     return param_names_ordered, bounds_dict, fiducial_dict
 
 
+def restrict_bounds(bounds_dict, factor=0.05):
+    # for test set, reduce edges by 5%
+    bounds_dict_reduced = {}
+    for name in bounds_dict.keys():
+        l_bound, u_bound = bounds_dict[name]
+        width = u_bound - l_bound
+        l_bound = l_bound + factor * width
+        u_bound = u_bound - factor * width
+        bounds_dict_reduced[name] = [l_bound, u_bound]
+    return bounds_dict_reduced
 
-def generate_LH(param_names_vary, param_names_ordered, bounds_dict, 
-                n_samples, fn_params, fn_params_fixed, 
-                fiducial_dict=None,
+
+def generate_LH(param_names_vary, bounds_dict, 
+                n_samples, fn_params, 
                 seed=42):
 
-    param_names_fixed = [pn for pn in param_names_ordered if pn not in param_names_vary]
     print(param_names_vary)
-    print(param_names_fixed)
 
     n_params = len(param_names_vary)
     sampler = qmc.LatinHypercube(d=n_params, seed=seed)
@@ -126,13 +152,13 @@ def generate_LH(param_names_vary, param_names_ordered, bounds_dict,
     param_df.to_csv(fn_params)
     print(f'Saved LH to {fn_params}')
 
-    if len(param_names_fixed)>0:
-        assert fiducial_dict is not None, "fiducial_dict must be provided if have some fixed params!"
-        param_df_fixed = pd.DataFrame()    
-        for param_name in param_names_fixed:
-            param_df_fixed[param_name] = [fiducial_dict[param_name]]
-        param_df_fixed.to_csv(fn_params_fixed, index=False)
-        print(f'Saved LH to {param_df_fixed}')
+
+def save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict):
+    param_df_fixed = pd.DataFrame()    
+    for param_name in param_names_fixed:
+        param_df_fixed[param_name] = [fiducial_dict[param_name]]
+    param_df_fixed.to_csv(fn_params_fixed, index=False)
+    print(f'Saved fixed params to {fn_params_fixed}')
 
 
 

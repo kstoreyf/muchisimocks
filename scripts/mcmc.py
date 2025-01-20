@@ -6,23 +6,39 @@ import numpy as np
 import pathlib
 import time
 
+import utils
+
 
 
 ### Emcee
 def log_prior(theta):
     for pp in range(len(_param_names)):
-       if (theta[pp] < _dict_bounds[_param_names[pp]][0]) or (theta[pp] >= _dict_bounds[_param_names[pp]][1]):
+       if (theta[pp] < _dict_bounds[_param_names_vary[pp]][0]) or (theta[pp] >= _dict_bounds[_param_names_vary[pp]][1]):
            return -np.inf
     return 0.0
 
 
 def log_likelihood(theta):
-    for pp in range(len(_param_names)):
-        _cosmo_params[_emu_param_names[pp]] = theta[pp]
+    # theta combines cosmo and bias params sampling over, and names are _param_names
+    #for pp in range(len(_cosmo_param_names)):
+    for cosmo_param_name in _cosmo_param_names_vary:
+        i_param = _param_names.index(cosmo_param_name)
+        cosmo_params = _cosmo_params_fixed.copy()
+        cosmo_param_name_emu = utils.param_name_to_param_name_emu(cosmo_param_name)
+        cosmo_params[cosmo_param_name_emu] = theta[i_param]
+                
     expfactor = 1.0 # careful, may need to change at some point!
     _cosmo_params['expfactor'] = expfactor
-    _, pk_model_unscaled, _ = _emu.get_galaxy_real_pk(bias=_bias_params, k=_k, 
-                                                **_cosmo_params)
+    
+    for bias_param_name in _bias_param_names_vary:
+        i_param = _param_names_vary.index(bias_param_name)
+        bias_params = _bias_params_fixed.copy()
+        bias_params[bias_param_name] = theta[i_param]
+    bias_vector = [bias_params[bname] for bname in _bias_param_names_ordered]
+        
+    _bias_params = 
+    _, pk_model_unscaled, _ = _emu.get_galaxy_real_pk(bias=bias_vector, k=_k, 
+                                                **cosmo_params)
     pk_model = _scaler.scale(pk_model_unscaled)
     diff = _pk_data-pk_model
 
@@ -49,10 +65,35 @@ def prior_transform(u):
     return np.array(u_transformed)
 
 
-def evaluate_dynesty(idx_test, pk_data, cov_inv, scaler,
-                     emu, cosmo_params, bias_params, k,
-                     dict_bounds, param_names, emu_param_names,
-                     tag_inf='', n_threads=10):
+def evaluate_mcmc(idx_test, pk_data, cov_inv, scaler, 
+                   emu, k, 
+                   cosmo_params_fixed, bias_params_fixed, 
+                   cosmo_param_names_vary, bias_param_names_vary,
+                   dict_bounds_cosmo, dict_bounds_bias,
+                   tag_inf='', n_threads=8, framework='dynesty'):
+
+    global _pk_data, _cov_inv, _scaler
+    global _emu, _k
+    global _cosmo_params_fixed, _bias_params_fixed
+    global _cosmo_param_names_vary, _bias_param_names_vary, _param_names_vary
+    global _dict_bounds
+    global _bias_param_names_ordered
+    
+    dict_bounds = dict_bounds_cosmo.update(dict_bounds_bias)
+    _bias_param_names_ordered = ['b1', 'b2', 'bs2', 'bl']    
+    _param_names_vary = _cosmo_param_names_vary + _bias_param_names_vary
+    _pk_data, _cov_inv, _scaler = pk_data, cov_inv, scaler
+    _emu, _k, _dict_bounds, = emu, k, dict_bounds
+    _cosmo_params_fixed, _bias_params_fixed = cosmo_params_fixed, bias_params_fixed
+    _cosmo_param_names_vary, _bias_param_names_vary = cosmo_param_names_vary, bias_param_names_vary    
+    
+    if framework == 'dynesty':
+        evaluate_dynesty(idx_test, tag_inf=tag_inf, n_threads=n_threads)
+    elif framework == 'emcee':
+        evaluate_emcee(idx_test, tag_inf=tag_inf, n_threads=n_threads)
+    
+    
+def evaluate_dynesty(idx_test, tag_inf='', n_threads=8):
     
     # import here so if only have emcee, that still works
     import dynesty
@@ -65,19 +106,8 @@ def evaluate_dynesty(idx_test, pk_data, cov_inv, scaler,
         print(f"Sampler results file {fn_dynesty} already exists, skipping")
         return
     
-    assert len(emu_param_names) == len(param_names), "Parameter names and emulator parameter names must be the same length"
-    global _pk_data, _cov_inv, _scaler
-    global _emu, _cosmo_params, _bias_params, _k
-    global _dict_bounds, _param_names, _emu_param_names
-    
-    # i think i should maybe only pass param names, and then in here 
-    # if they don't align with emu_param_names, do the translation??
-    _pk_data, _cov_inv, _scaler = pk_data, cov_inv, scaler
-    _emu, _cosmo_params, _bias_params, _k =  emu, cosmo_params, bias_params, k
-    _dict_bounds, _param_names, _emu_param_names = dict_bounds, param_names, emu_param_names
-    
     start = time.time()
-    n_params = len(param_names)
+    n_params = len(_cosmo_param_names_vary) + len(_bias_param_names_vary)
     with dynesty.pool.Pool(n_threads, log_likelihood, prior_transform) as pool:
         sampler = dynesty.NestedSampler(pool.loglike, pool.prior_transform, n_params, 
                                              nlive=50, bound='single')
@@ -90,26 +120,15 @@ def evaluate_dynesty(idx_test, pk_data, cov_inv, scaler,
     #print(samples_dynesty.shape)
     
     np.save(fn_dynesty, results_dynesty)
-
-
-def evaluate_emcee(idx_test, pk_data, cov_inv, scaler,
-                     emu, cosmo_params, bias_params, k,
-                     dict_bounds, param_names, emu_param_names,
-                     tag_inf='', n_threads=8):
+    
+    
+def evaluate_emcee(idx_test, tag_inf='', n_threads=8):
     
     # import here so if only want emcee (not dynesty), still runs
     import emcee
 
-    global _pk_data, _cov_inv, _scaler
-    global _emu, _cosmo_params, _bias_params, _k
-    global _dict_bounds, _param_names, _emu_param_names
-    
-    _pk_data, _cov_inv, _scaler = pk_data, cov_inv, scaler
-    _emu, _cosmo_params, _bias_params, _k =  emu, cosmo_params, bias_params, k
-    _dict_bounds, _param_names, _emu_param_names = dict_bounds, param_names, emu_param_names
-    
-    n_params = len(param_names)
-    
+    n_params = len(_cosmo_param_names_vary) + len(_bias_param_names_vary)
+
     # n_burn = 100
     n_steps = 4000 # 50000
     n_walkers = 4 * n_params
@@ -126,8 +145,8 @@ def evaluate_emcee(idx_test, pk_data, cov_inv, scaler,
     backend.reset(n_walkers, n_params)
 
     rng = np.random.default_rng(seed=42)
-    theta_0 = np.array([[rng.uniform(low=dict_bounds[param_name][0],high=dict_bounds[param_name][1]) 
-                        for param_name in param_names] for _ in range(n_walkers)])
+    theta_0 = np.array([[rng.uniform(low=_dict_bounds[param_name][0],high=_dict_bounds[param_name][1]) 
+                        for param_name in _param_names_vary] for _ in range(n_walkers)])
 
     start = time.time()
     if n_threads>1:

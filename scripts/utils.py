@@ -55,7 +55,7 @@ cosmo_dict_quijote = {
                 'tau'           :  0.0952,
                 }   
 
-def idxs_train_val_test(random_ints, frac_train=0.70, frac_val=0.15, frac_test=0.15,
+def idxs_train_val_test(random_ints, frac_train=0.8, frac_val=0.1, frac_test=0.1,
                         N_tot=None):
     print(frac_train, frac_val, frac_test)
     tol = 1e-6
@@ -315,6 +315,15 @@ def cosmo_bacco_to_cosmo_baccoemu(cosmo):
         cosmo_params_emu[param_name_emu] = param_bacco
         
     return cosmo_params_emu
+
+
+# TODO fill this out with other name mismatches ??
+def param_name_to_param_name_emu(param_name):
+    if param_name=='sigma8_cold':
+        param_name_emu = 'sigma8'
+    else:
+        param_name_emu = param_name
+    return param_name_emu
 
 
 def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=None):

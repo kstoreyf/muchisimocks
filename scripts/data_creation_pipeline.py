@@ -50,7 +50,8 @@ def run_LH(idx_mock):
 
     #tag_params = f'_p3_n50'
     #tag_params = f'_p3_n10'
-    tag_params = f'_p5_n10000'
+    #tag_params = f'_p5_n10000'
+    tag_params = f'_test_p5_n1000'
     tag_mocks = f'{tag_params}'
     #tag_mocks = f'{tag_params}_timetests'
     box_size = 1000.
@@ -71,6 +72,8 @@ def run_LH(idx_mock):
     print(f"Made mock dir {dir_mocks}", flush=True)
     
     # Deal with cosmological parameters
+    
+    # TODO update so can handle fixedcosmo case in this same framework
     
     dir_params = '../data/params'
     fn_params_orig = f'{dir_params}/params_lh{tag_params}.txt'

@@ -56,7 +56,7 @@ def compute_pks_muchisimocks():
             if os.path.exists(fn_biasparams_fixed)
             else {}
         )
-        biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl']
+        biasparam_names_ordered = biasparams_df.columns.tolist()
         tags_pk = [tag_biasparams]
         tags_fields = ['_deconvolved']
     elif mode_bias_vector == 'single':
