@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import pandas as pd
+import re
 import tensorflow as tf
 
 import utils
@@ -10,64 +11,58 @@ import utils
 def load_data(data_mode, tag_params, tag_biasparams,
               kwargs={}):
     
+    tag_mocks = tag_params + tag_biasparams
     if data_mode == 'emuPk':
-        theta, y, y_err, k, param_names, random_ints = \
-            load_data_emuPk(tag_params, tag_biasparams,
-                               **kwargs)
+        k, y, y_err = load_data_emuPk(tag_mocks, **kwargs)
     elif data_mode == 'muchisimocksPk':
-        theta, y, y_err, k, param_names, random_ints = \
-            load_data_muchisimocksPk(tag_params, tag_biasparams,
-                                        **kwargs)
+        k, y, y_err = load_data_muchisimocksPk(tag_mocks, **kwargs)
     else:
         raise ValueError(f"Data mode {data_mode} not recognized!")
-    
-    return theta, y, y_err, k, param_names, random_ints
+                   
+    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams)
+    return k, y, y_err, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
 
 
-def load_data_muchisimocksPk(tag_mocks, tag_pk, mode_bias_vector='single'):       
+def load_data_muchisimocksPk(tag_mocks, tag_datagen=''):       
     
-    if 'fixedcosmo' in tag_mocks:
-        param_dict = utils.cosmo_dict_quijote
-    else:
-        dir_params = '../data/params'
-        fn_params = f'{dir_params}/params_lh{tag_mocks}.txt'
-        params_df = pd.read_csv(fn_params, index_col=0)
+    # if 'fixedcosmo' in tag_mocks:
+    #     param_dict = utils.cosmo_dict_quijote
+    # else:
+    #     dir_params = '../data/params'
+    #     fn_params = f'{dir_params}/params_lh{tag_mocks}.txt'
+    #     params_df = pd.read_csv(fn_params, index_col=0)
     
     # NOTE for now theta is only cosmo params! 
     # may want to add bias params too 
     
-    param_names = params_df.columns.tolist()
+    #param_names = params_df.columns.tolist()
     #idxs_LH = params_df.index.tolist()
-    dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}'
-    idxs_LH = np.array([idx_LH for idx_LH in params_df.index.values 
-                        if os.path.exists(f"{dir_pks}/pk_{idx_LH}.npy")])
-    assert len(idxs_LH) > 0, f"No pks found in {dir_pks}!"
+
+    dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_datagen}'
+    #idxs_LH = np.array([idx_LH for idx_LH in params_df.index.values 
+    #                    if os.path.exists(f"{dir_pks}/pk_{idx_LH}.npy")])
     
-    if mode_bias_vector == 'single':
-        fn_bias_vector = f'{dir_pks}/bias_params.txt'
-        bias_vector = np.loadtxt(fn_bias_vector)
-    else:
-        # TODO update as needed
-        bias_vector = None
+    # using regexp bc not loading params_df here (tho could reorg if decide i need)
+    idxs_LH = [int(re.search(r'pk_(\d+)\.npy', file_name).group(1)) 
+               for file_name in os.listdir(dir_pks) if re.search(r'pk_(\d+)\.npy', file_name)]
 
-    fn_rands = f'{dir_params}/randints{tag_mocks}.npy'
-    random_ints = np.load(fn_rands)
-    random_ints = random_ints[idxs_LH]
+    assert len(idxs_LH) > 0, f"No pks found in {dir_pks}!"
 
-    theta, Pk, gaussian_error_pk = [], [], []
+    #theta, Pk, gaussian_error_pk = [], [], []
+    Pk, gaussian_error_pk = [], []
     for idx_LH in idxs_LH:
         fn_pk = f'{dir_pks}/pk_{idx_LH}.npy'
         pk_obj = np.load(fn_pk, allow_pickle=True).item()
         Pk.append(pk_obj['pk'])
         gaussian_error_pk.append(pk_obj['pk_gaussian_error'])
-        if 'fixedcosmo' in tag_mocks:
-            theta.append(param_dict.values)
-        else:
-            param_vals = params_df.loc[idx_LH].values
-            theta.append(param_vals)
+        # if 'fixedcosmo' in tag_mocks:
+        #     theta.append(param_dict.values)
+        # else:
+        #     param_vals = params_df.loc[idx_LH].values
+        #     theta.append(param_vals)
 
     Pk = np.array(Pk)
-    theta = np.array(theta)
+    #theta = np.array(theta)
     gaussian_error_pk = np.array(gaussian_error_pk)
     k = pk_obj['k'] # all ks should be same so just grab one
 
@@ -79,9 +74,10 @@ def load_data_muchisimocksPk(tag_mocks, tag_pk, mode_bias_vector='single'):
     gaussian_error_pk = gaussian_error_pk[:,mask]
     k = k[mask]
     
-    return theta, Pk, gaussian_error_pk, k, param_names, bias_vector, random_ints
+    return k, Pk, gaussian_error_pk
 
 
+# hopefully this will become irrelevant after refactor !! 
 def load_data_muchisimocksPk_fixedcosmo(tag_mocks, tag_pk, mode_bias_vector='single'):       
    
     idxs_mock = np.array([idx_mock for idx_mock in range(1000) if os.path.exists(f"/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}/pk_{idx_mock}.npy")])
@@ -117,37 +113,97 @@ def load_data_muchisimocksPk_fixedcosmo(tag_mocks, tag_pk, mode_bias_vector='sin
     k = k[mask]
     return param_dict, Pk, gaussian_error_pk, k, bias_vector
 
+
+def load_params(tag_params, tag_biasparams,
+                dir_params='../data/params'):
         
-def load_data_emuPk(tag_params, tag_biasparams, tag_datagen,
-                    tag_errG=None,
-                    n_rlzs_per_cosmo=1, return_noiseless=False):
+    fn_params = f'{dir_params}/params_lh{tag_params}.txt'
+    fn_params_fixed = f'{dir_params}/params_fixed{tag_params}.txt'
+    
+    params_df = {
+        pd.read_csv(fn_params, index_col=0)
+        if os.path.exists(fn_params)
+        else None
+    }
+    param_dict_fixed = {
+        pd.read_csv(fn_params_fixed).iloc[0].to_dict() 
+        if os.path.exists(fn_params_fixed)
+        else {}
+    }
+    #param_names = params_df.columns.tolist()
+    # theta = params_df.values
+    # assert theta.shape[0] == n_data, f"Expected {n_data} rows in {fn_params}"
+    
+    fn_biasparams = f'{dir_params}/params_lh{tag_biasparams}.txt'
+    fn_biasparams_fixed = f'{dir_params}/params_fixed{tag_biasparams}.txt'
+    biasparams_df = (
+        pd.read_csv(fn_biasparams, index_col=0)
+        if os.path.exists(fn_biasparams)
+        else None
+    )
+    biasparams_dict_fixed = (
+        pd.read_csv(fn_biasparams_fixed).iloc[0].to_dict() 
+        if os.path.exists(fn_biasparams_fixed)
+        else {}
+    )
+    
+    random_ints = np.load(f'{dir_params}/randints{tag_params}.npy', allow_pickle=True)
+    random_ints_bias = np.load(f'{dir_params}/randints{tag_biasparams}.npy', allow_pickle=True)
+    
+    return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
+    
+    
+def param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=1):
+    assert params_df is not None or biasparams_df is not None, "params_df or biasparams_df (or both) must be specified"
+    param_names = []
+    if params_df is not None:
+        param_names.append(params_df.columns.tolist())
+        theta_cosmo_orig = params_df.values
+        theta_cosmo = utils.repeat_arr_rlzs(theta_cosmo_orig, n_rlzs=n_rlzs_per_cosmo)
+    if biasparams_df is not None:
+        param_names.append(biasparams_df.columns.tolist())
+        theta_bias_orig = biasparams_df.values
+        theta_bias = utils.repeat_arr_rlzs(theta_bias_orig, n_rlzs=n_rlzs_per_cosmo)
+
+    if params_df is not None and biasparams_df is not None:
+        theta = np.concatenate((theta_cosmo, theta_bias), axis=1)
+    else:
+        theta = theta_cosmo if params_df is not None else theta_bias
+
+    return theta, param_names
+    
+
+def load_data_emuPk(tag_mocks, tag_errG=None, tag_noiseless='',
+                    n_rlzs_per_cosmo=1):
     
     assert tag_errG is not None, "tag_errG must be specified"
-    tag_mocks = tag_params + tag_biasparams
     dir_emuPk = f'../data/emuPks/emuPks{tag_mocks}'
-    fn_emuPk = f'{dir_emuPk}/emuPks.npy'
-    fn_emuPkerrG = f'{dir_emuPk}/emuPks_errgaussian{tag_errG}.npy'
-    fn_emuPk_noisy = f'{dir_emuPk}/emuPks_noisy.npy'
-    fn_emuPk_params = f'{dir_emuPk}/params_lh{tag_params}.txt'
-    fn_emuk = f'{dir_emuPk}/emuPks_k.txt'
-    #fn_bias_vector = f'{dir_emuPk}/bias_params.txt'
-    # TODO separate randits for cosmo & bias, how to deal with?
-    # for now here we are only returning cosmo theta, not bias params; so rand ints are theta
-    fn_rands = f'{dir_emuPk}/randints{tag_params}.npy'
-        
-    Pk = np.load(fn_emuPk_noisy, allow_pickle=True)   
-    Pk_noiseless = np.load(fn_emuPk, allow_pickle=True)
-    k = np.genfromtxt(fn_emuk)
-    random_ints = np.load(fn_rands, allow_pickle=True)
-
-    theta_noiseless = np.genfromtxt(fn_emuPk_params, delimiter=',', names=True)
-    print("theta_noiseless", theta_noiseless.shape)
-    param_names = theta_noiseless.dtype.names
-    theta_noiseless = np.array([list(tup) for tup in theta_noiseless]) # from tuples to 2d array
-    gaussian_error_pk_noiseless = np.load(fn_emuPkerrG, allow_pickle=True)
     
-    theta = utils.repeat_arr_rlzs(theta_noiseless, n_rlzs=n_rlzs_per_cosmo)
-    gaussian_error_pk = utils.repeat_arr_rlzs(gaussian_error_pk_noiseless, n_rlzs=n_rlzs_per_cosmo)
+    if 'noiseless' in tag_noiseless:
+        assert n_rlzs_per_cosmo==1, "Why would you want multiple realizations per cosmo if using noiseless?"
+        fn_emuPk = f'{dir_emuPk}/emuPks.npy'
+    else:
+        fn_emuPk = f'{dir_emuPk}/emuPks_noisy.npy'
+    fn_emuk = f'{dir_emuPk}/emuPks_k.txt'
+    fn_emuPkerrG = f'{dir_emuPk}/emuPks_errgaussian{tag_errG}.npy'
+    #fn_emuPk_params = f'{dir_emuPk}/params_lh{tag_params}.txt'
+    #fn_bias_vector = f'{dir_emuPk}/bias_params.txt'
+
+        
+    Pk = np.load(fn_emuPk, allow_pickle=True)   
+    k = np.genfromtxt(fn_emuk)
+
+    #params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed = load_params(tag_params, tag_biasparams)
+    #theta_noiseless = np.genfromtxt(fn_emuPk_params, delimiter=',', names=True)
+    #print("theta_noiseless", theta_noiseless.shape)
+    #param_names = theta_noiseless.dtype.names
+    #theta_noiseless = np.array([list(tup) for tup in theta_noiseless]) # from tuples to 2d array
+    
+    # if we have more than 1 rlz per cosmo, repeat the error arrays to get the right number
+    #theta = utils.repeat_arr_rlzs(theta_noiseless, n_rlzs=n_rlzs_per_cosmo)
+    gaussian_error_pk_orig = np.load(fn_emuPkerrG, allow_pickle=True)
+    gaussian_error_pk = utils.repeat_arr_rlzs(gaussian_error_pk_orig, n_rlzs=n_rlzs_per_cosmo)
+    assert gaussian_error_pk.shape[0] == Pk.shape[0], "Number of pks and errors should be the same, something is wrong"
     
     mask = np.all(Pk>0, axis=0)
     Pk = Pk[:,mask]
@@ -156,12 +212,11 @@ def load_data_emuPk(tag_params, tag_biasparams, tag_datagen,
     gaussian_error_pk_noiseless = gaussian_error_pk_noiseless[:,mask]
     k = k[mask]
     
-    if return_noiseless:
-        return theta, Pk, gaussian_error_pk, k, param_names, random_ints, \
-               theta_noiseless, Pk_noiseless, gaussian_error_pk_noiseless
+    if 'noiseless' in tag_noiseless:
+        return k, Pk_noiseless, gaussian_error_pk_noiseless, random_ints
     
     else:
-        return theta, Pk, gaussian_error_pk, k, param_names, random_ints
+        return k, Pk, gaussian_error_pk
 
 
 

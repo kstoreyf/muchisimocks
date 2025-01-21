@@ -33,45 +33,25 @@ def train_likefree_inference():
     # train test split, and number of rlzs per cosmo
     n_train = None
 
-    ### Load data
+    ### Set up data
     #data_mode = 'muchisimocksPk'
     data_mode = 'emuPk'
-    tag_mocks = '_p5_n10000' #for emu, formerly tag_emuPk
-    tag_data_extra = '_boxsize500' #formerly tag_errG for data
-    kwargs = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo}
-
-    ### TODO clean all this up, now can just load train vs test and then do val split later?? 
-    assert data_mode in ['emuPk', 'muchisimocksPk']
+    tag_params = '_p2_n10000' #for emu, formerly tag_emuPk
+    tag_biasparams = '_b1000_p0_n1'
+    n_rlzs_per_cosmo = 1
+    tag_errG = '_boxsize1000'
+    tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
     
-    # if data_mode == 'emuPk':
-    #     #n_rlzs_per_cosmo = 9
-    #     #tag_emuPk = '_5param'
-    #     tag_emuPk = '_2param'
-    #     tag_errG = f'_boxsize500'
-    #     tag_datagen = f'{tag_emuPk}{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
-    #     n_rlzs_per_cosmo = 1
-    #     kwargs = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo}
-        
-    #     theta, y, y_err, k, param_names, bias_params, random_ints = load_data_emuPk(tag_emuPk, 
-    #                                                     tag_errG, tag_datagen,
-    #                                                     n_rlzs_per_cosmo=n_rlzs_per_cosmo)
-    # elif data_mode == 'muchisimocksPk':
-    #     tag_mocks = '_p5_n10000'
-    #     tag_pk = '_b1000'
-    #     mode_bias_vector = 'single'
-    #     #tag_pk = '_biaszen_p4_n10000'
-    #     #mode_bias_vector = 'LH'
-    #     tag_datagen = f'{tag_mocks}{tag_pk}'
-    #     theta, y, y_err, k, param_names, bias_params, random_ints = load_data_muchisimocksPk(tag_mocks,
-    #                                                                                          tag_pk,
-    #                                                                                          mode_bias_vector=mode_bias_vector
-    #                                                                                          )
-    tag_datagen = f'{tag_mocks}{tag_data_extra}'
-    theta, y, y_err, k, param_names, bias_params, random_ints = \
-                data_loader.load_data(data_mode, tag_params, tag_biasparams, tag_datagen, #mode_bias_vector=mode_bias_vector,
+    kwargs_data = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
+                   'tag_errG': tag_errG}
+    
+    ### Load data and parameters
+    k, y, y_err, random_ints, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed = \
+                data_loader.load_data(data_mode, tag_params, tag_biasparams,
                                       kwargs=kwargs_data)
-    
-    tag_data = '_'+data_mode + tag_datagen
+    theta, param_names = data_loader.param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
+
+    tag_data = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
 
     # split into train and validation - but for SBI, these just get lumped back together
     idxs_train, idxs_val, _ = utils.idxs_train_val_test(random_ints, frac_train=0.9, frac_val=0.1, frac_test=0.0,
@@ -130,12 +110,6 @@ def train_likefree_inference():
                     tag_mn=tag_inf,
                     run_mode_mean=run_mode_mean, run_mode_cov=run_mode_cov,
                     sweep_name_mean=sweep_name_mean, sweep_name_cov=sweep_name_cov)
-        # moment_network = mn.MomentNetwork(theta_train=theta_train, y_train=y_train_scaled, y_err_train=y_err_train_scaled,
-        #                     theta_val=theta_val, y_val=y_val_scaled, y_err_val=y_err_val_scaled,
-        #                     theta_test=theta_test, y_test=y_test_scaled, y_err_test=y_err_test_scaled,
-        #                     tag_mn=tag_inf,
-        #                     run_mode_mean=run_mode_mean, run_mode_cov=run_mode_cov,
-        #                     sweep_name_mean=sweep_name_mean, sweep_name_cov=sweep_name_cov)
         #moment_network.run(max_epochs_mean=5, max_epochs_cov=5)
         moment_network.run(max_epochs_mean=2000, max_epochs_cov=2000)
         print(f"Saved results to {moment_network.dir_mn}")
@@ -145,24 +119,10 @@ def train_likefree_inference():
         tag_inf = f'{tag_data}_ntrain{n_train}'
         sbi_network = sbi_model.SBIModel(theta_train=theta_train, y_train_unscaled=y_train, y_err_train_unscaled=y_err_train,
                     theta_val=theta_val, y_val_unscaled=y_val, y_err_val_unscaled=y_err_val,
-                    theta_test=theta_test, y_test_unscaled=y_test, y_err_test_unscaled=y_err_test,
                     tag_sbi=tag_inf, run_mode=run_mode,
                     param_names=param_names)
         sbi_network.run()
 
-
-    if run_emcee or run_dynesty:
-        # for likelihood methods, set up scaler here (TODO maybe better to do in MCMC?)
-        # for SBI, doing in classes, bc need to make sure to save the scaler with the model
-        ### Scale data
-        ys_scaled = scale_y_data(y_train, y_val, y_test,
-                               y_err_train=y_err_train, y_err_val=y_err_val, y_err_test=y_err_test,
-                               return_scaler=True)
-        y_train_scaled, y_val_scaled, y_test_scaled, \
-                   y_err_train_scaled, y_err_val_scaled, y_err_test_scaled, scaler = ys_scaled
-
-
-            
 
         
         
@@ -297,138 +257,96 @@ def test_pk_inference():
         
         
     
-    
-    
 
 def run_likelihood_inference():
 
-    run_emcee = False
-    run_dynesty = True
+    mcmc_framework = 'dynesty'
     
     # for likelihood methods only
     idxs_obs = np.arange(1)
 
-    ### Load data
+    ### Set up data
     #data_mode = 'muchisimocksPk'
     data_mode = 'emuPk'
-    assert data_mode in ['emuPk', 'muchisimocksPk']
-    
-    tag_params = '_test_p2_n1000'
+    #tag_params = '_p2_n10000' #for emu, formerly tag_emuPk
+    tag_params = '_cosmoquijote_p0_n1' #for emu, formerly tag_emuPk
     tag_biasparams = '_b1000_p0_n1'
-    kwargs_data = {}
-    
-    theta_cosmo, theta_bias, cosmo_params_fixed, bias_params_fixed, \ 
-        cosmo_param_names, bias_param_names, y, y_err, k, random_ints = \
-        data_loader.load_data(data_mode, tag_params, tag_biasparams, tag_datagen, #mode_bias_vector=mode_bias_vector,
-                            kwargs=kwargs_data)
-    
-    tag_test = ''
-    if data_mode == 'emuPk':
-        #n_rlzs_per_cosmo = 9
-        n_rlzs_per_cosmo = 1
-        #tag_emuPk = '_5param'
-        #tag_emuPk = '_2param'
-        tag_emuPk = '_fixedcosmo_n1000'
-        tag_errG = f'_boxsize500'
-        
-        test_noiseless = True
-        tag_datagen = f'{tag_emuPk}{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
-        
-        theta, Pk, gaussian_error_pk, k, param_names, bias_params, random_ints, \
-               theta_noiseless, Pk_noiseless, gaussian_error_pk_noiseless = load_data_emuPk(tag_emuPk, 
-                                                        tag_errG, tag_datagen,
-                                                        n_rlzs_per_cosmo=n_rlzs_per_cosmo,
-                                                        return_noiseless=True)
-        
-        # for fixedcosmo, we decide which parameters to sample over
-        if 'fixedcosmo' in tag_emuPk:
-            param_names = ['omega_cold', 'sigma8_cold']
-            #param_names = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
-            tag_test += f'_{len(param_names)}param'
+    n_rlzs_per_cosmo = 1
+    tag_errG = '_boxsize1000'
+    tag_noiseless = ''
+    tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
+    tag_data = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
 
-        if test_noiseless:
-            y_test = Pk_noiseless[idxs_obs]
-            y_err_test = gaussian_error_pk_noiseless[idxs_obs]
-            tag_test += '_noiseless'
-        else:
-            y_test = Pk[idxs_obs]
-            y_err_test = gaussian_error_pk[idxs_obs]
+    # for likelihood methods, we decide which parameters to sample over! 
+    # (will have to change when have a test set not generated with these params, e.g. hydro)
+    cosmo_param_names_vary = ['omega_cold', 'sigma8_cold']
+    #cosmo_param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
+    bias_param_names_vary = []
+    tag_test = f'_mcmctest_p{len(cosmo_param_names_vary)}_b{len(bias_param_names_vary)}'
+            
+    kwargs_data = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
+                   'tag_errG': tag_errG,
+                   'tag_noiseless': tag_noiseless}
+    
+    ### Load data and parameters
+    # theta nor random ints needed for likelihood inf
+    k, y, y_err, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
+                data_loader.load_data(data_mode, tag_params, tag_biasparams,
+                                      kwargs=kwargs_data)
+            
+    # gather the fixed parameters (may be from the varied df for the test case!)
+    for idx_obs in idxs_obs:
+        cosmo_param_dict_fixed_obs = params_df.iloc[idx_obs].to_dict()
+        cosmo_param_dict_fixed_obs.update(cosmo_param_dict_fixed)
+        for pn in cosmo_param_names_vary:
+            cosmo_param_dict_fixed.pop(pn)
+        
+        bias_param_dict_fixed_obs = biasparams_df.iloc[idx_obs].to_dict()
+        bias_param_dict_fixed_obs.update(bias_param_dict_fixed)
+        for pn in bias_param_names_vary:
+            bias_param_dict_fixed_obs.pop(pn)       
 
+    # the dataset now is a pure test set, so no need to split; just grab the ones to evaluate
+    y_test, y_err_test = y[idxs_obs], y_err[idxs_obs]
 
     # not using training data for likelihood methods, so unclear how to scale; 
     # let's just do log for now
     # (maybe really should take reasonable bounds from training data?)
-    
     scaler = scl.Scaler('log')
     scaler.fit(y_test)
     y_test_scaled = scaler.scale(y_test)
     y_err_test_scaled = scaler.scale_error(y_err_test, y_test)
-
-    tag_data = '_'+data_mode + tag_datagen + tag_test
-           
            
     dir_emus_lbias = '/home/kstoreyf/external' #hyperion path
     emu, emu_bounds, emu_param_names_all = utils.load_emu(dir_emus_lbias=dir_emus_lbias)    
-        
-    if run_dynesty:
-        
-        import mcmc
+                
+    import mcmc
+
+    # TODO deal with dict_bounds - get from generate_params_lh!
     
-        #dict_bounds = {name: emu_bounds[emu_param_names_all.index(name)] for name in param_names}
-        # for emulator, the emu param names are the param names, but not so for muchisimocks necessarily
-        # not handled bc havent tried likelihood for muchisimocks yet?
-        emu_param_names = param_names
-        cosmo_params = utils.setup_cosmo_emu()
+    tag_inf = f'{tag_data}'
+    
+    for idx_obs in idxs_obs:
         
-        tag_inf = f'{tag_data}'
-      
-        for idx_obs in idxs_obs:
-            
-            y_data_unscaled = y_test[idx_obs]
-            y_data = y_test_scaled[idx_obs]
+        y_data_unscaled = y_test[idx_obs]
+        y_data = y_test_scaled[idx_obs]
 
-            # err_1p = 0.01*y_data_unscaled
-            # err_1p_scaled = scaler.scale_error(err_1p, y_data_unscaled)
-            # err_gaussian_scaled = y_err_test_scaled[idx_obs]
-            # var = err_gaussian_scaled**2 + err_1p_scaled**2
-            # cov_inv = np.diag(1/var)
-            cov_inv = np.diag(np.ones(len(y_data)))
-            tag_inf += f'_covnone'
-        
-            mcmc.evaluate_mcmc(idx_obs, y_data, cov_inv, scaler, 
-                   emu, k, 
-                   cosmo_params_fixed, bias_params_fixed, 
-                   cosmo_param_names_vary, bias_param_names_vary,
-                   dict_bounds_cosmo, dict_bounds_bias,
-                   tag_inf='', n_threads=8, framework='dynesty')
+        err_1p = 0.01*y_data_unscaled
+        err_1p_scaled = scaler.scale_error(err_1p, y_data_unscaled)
+        err_gaussian_scaled = y_err_test_scaled[idx_obs]
+        var = err_gaussian_scaled**2 + err_1p_scaled**2
+        cov_inv = np.diag(1/var)
+        #cov_inv = np.diag(np.ones(len(y_data)))
+        #tag_inf += f'_covnone'
+    
+        mcmc.evaluate_mcmc(idx_obs, y_data, cov_inv, scaler, 
+                emu, k, 
+                cosmo_param_dict_fixed, bias_param_dict_fixed, 
+                cosmo_param_names_vary, bias_param_names_vary,
+                dict_bounds_cosmo, dict_bounds_bias,
+                tag_inf='', n_threads=8, mcmc_framework=mcmc_framework)
            
-    # UNTESTED after refactor
-    if run_emcee:
-        # TODO deal with how bias_params are handled now that they might be a vector
-        import mcmc
-        dir_emus_lbias = '/home/kstoreyf/external' #hyperion path
-        emu, emu_bounds, emu_param_names = utils.load_emu(dir_emus_lbias=dir_emus_lbias)
-        dict_bounds = {name: emu_bounds[emu_param_names.index(name)] for name in param_names}
-        cosmo_params = utils.setup_cosmo_emu()   
-            
-        tag_inf = f'{tag_data}'
-        
-        for idx_obs in idxs_obs:
-            
-            y_data_unscaled = y_test[idx_obs]
-            y_data = y_test_scaled[idx_obs]
 
-            err_1p = 0.01*y_data_unscaled
-            err_1p_scaled = scaler.scale_error(err_1p, y_data_unscaled)
-            err_gaussian_scaled = y_err_test_scaled[idx_obs]
-            var = err_gaussian_scaled**2 + err_1p_scaled**2
-            cov_inv = np.diag(1/var)
-        
-            mcmc.evaluate_emcee(idx_obs, y_data, cov_inv, scaler,
-                        emu, cosmo_params, bias_params, k,
-                        dict_bounds, param_names, emu_param_names,
-                        tag_inf=tag_inf)
-            
          
 def scale_y_data(y_train, y_val, y_test,
                  y_err_train=None, y_err_val=None, y_err_test=None,

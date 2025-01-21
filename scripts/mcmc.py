@@ -12,7 +12,7 @@ import utils
 
 ### Emcee
 def log_prior(theta):
-    for pp in range(len(_param_names)):
+    for pp in range(len(_param_names_vary)):
        if (theta[pp] < _dict_bounds[_param_names_vary[pp]][0]) or (theta[pp] >= _dict_bounds[_param_names_vary[pp]][1]):
            return -np.inf
     return 0.0
@@ -22,21 +22,20 @@ def log_likelihood(theta):
     # theta combines cosmo and bias params sampling over, and names are _param_names
     #for pp in range(len(_cosmo_param_names)):
     for cosmo_param_name in _cosmo_param_names_vary:
-        i_param = _param_names.index(cosmo_param_name)
-        cosmo_params = _cosmo_params_fixed.copy()
+        i_param = _param_names_vary.index(cosmo_param_name)
+        cosmo_params = _cosmo_param_dict_fixed.copy()
         cosmo_param_name_emu = utils.param_name_to_param_name_emu(cosmo_param_name)
         cosmo_params[cosmo_param_name_emu] = theta[i_param]
                 
     expfactor = 1.0 # careful, may need to change at some point!
-    _cosmo_params['expfactor'] = expfactor
+    cosmo_params['expfactor'] = expfactor
     
     for bias_param_name in _bias_param_names_vary:
         i_param = _param_names_vary.index(bias_param_name)
-        bias_params = _bias_params_fixed.copy()
+        bias_params = _bias_param_dict_fixed.copy()
         bias_params[bias_param_name] = theta[i_param]
     bias_vector = [bias_params[bname] for bname in _bias_param_names_ordered]
         
-    _bias_params = 
     _, pk_model_unscaled, _ = _emu.get_galaxy_real_pk(bias=bias_vector, k=_k, 
                                                 **cosmo_params)
     pk_model = _scaler.scale(pk_model_unscaled)
@@ -55,9 +54,9 @@ def log_posterior(theta):
 def prior_transform(u):
 
     u_transformed = []
-    for pp in range(len(_param_names)):
-        width = _dict_bounds[_param_names[pp]][1] - _dict_bounds[_param_names[pp]][0]
-        min_bound = _dict_bounds[_param_names[pp]][0]
+    for pp in range(len(_param_names_vary)):
+        width = _dict_bounds[_param_names_vary[pp]][1] - _dict_bounds[_param_names_vary[pp]][0]
+        min_bound = _dict_bounds[_param_names_vary[pp]][0]
         
         u_t = width*u[pp] + min_bound
         u_transformed.append(u_t)           
@@ -67,14 +66,14 @@ def prior_transform(u):
 
 def evaluate_mcmc(idx_test, pk_data, cov_inv, scaler, 
                    emu, k, 
-                   cosmo_params_fixed, bias_params_fixed, 
+                   cosmo_param_dict_fixed, bias_param_dict_fixed, 
                    cosmo_param_names_vary, bias_param_names_vary,
                    dict_bounds_cosmo, dict_bounds_bias,
-                   tag_inf='', n_threads=8, framework='dynesty'):
+                   tag_inf='', n_threads=8, mcmc_framework='dynesty'):
 
     global _pk_data, _cov_inv, _scaler
     global _emu, _k
-    global _cosmo_params_fixed, _bias_params_fixed
+    global _cosmo_param_dict_fixed, _bias_param_dict_fixed
     global _cosmo_param_names_vary, _bias_param_names_vary, _param_names_vary
     global _dict_bounds
     global _bias_param_names_ordered
@@ -84,12 +83,12 @@ def evaluate_mcmc(idx_test, pk_data, cov_inv, scaler,
     _param_names_vary = _cosmo_param_names_vary + _bias_param_names_vary
     _pk_data, _cov_inv, _scaler = pk_data, cov_inv, scaler
     _emu, _k, _dict_bounds, = emu, k, dict_bounds
-    _cosmo_params_fixed, _bias_params_fixed = cosmo_params_fixed, bias_params_fixed
+    _cosmo_param_dict_fixed, _bias_param_dict_fixed = cosmo_param_dict_fixed, bias_param_dict_fixed
     _cosmo_param_names_vary, _bias_param_names_vary = cosmo_param_names_vary, bias_param_names_vary    
     
-    if framework == 'dynesty':
+    if mcmc_framework == 'dynesty':
         evaluate_dynesty(idx_test, tag_inf=tag_inf, n_threads=n_threads)
-    elif framework == 'emcee':
+    elif mcmc_framework == 'emcee':
         evaluate_emcee(idx_test, tag_inf=tag_inf, n_threads=n_threads)
     
     
