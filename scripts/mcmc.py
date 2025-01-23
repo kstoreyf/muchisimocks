@@ -64,7 +64,7 @@ def prior_transform(u):
     return np.array(u_transformed)
 
 
-def evaluate_mcmc(idx_test, pk_data, cov_inv, scaler, 
+def evaluate_mcmc(tag_obs, pk_data, cov_inv, scaler, 
                    emu, k, 
                    cosmo_param_dict_fixed, bias_param_dict_fixed, 
                    cosmo_param_names_vary, bias_param_names_vary,
@@ -87,12 +87,12 @@ def evaluate_mcmc(idx_test, pk_data, cov_inv, scaler,
     _cosmo_param_names_vary, _bias_param_names_vary = cosmo_param_names_vary, bias_param_names_vary    
     
     if mcmc_framework == 'dynesty':
-        evaluate_dynesty(idx_test, tag_inf=tag_inf, n_threads=n_threads)
+        evaluate_dynesty(tag_obs, tag_inf=tag_inf, n_threads=n_threads)
     elif mcmc_framework == 'emcee':
-        evaluate_emcee(idx_test, tag_inf=tag_inf, n_threads=n_threads)
+        evaluate_emcee(tag_obs, tag_inf=tag_inf, n_threads=n_threads)
     
     
-def evaluate_dynesty(idx_test, tag_inf='', n_threads=8):
+def evaluate_dynesty(tag_obs, tag_inf='', n_threads=8):
     
     # import here so if only have emcee, that still works
     import dynesty
@@ -100,7 +100,7 @@ def evaluate_dynesty(idx_test, tag_inf='', n_threads=8):
     dir_dynesty =  f'../results/results_dynesty/samplers{tag_inf}'
     p = pathlib.Path(dir_dynesty)
     p.mkdir(parents=True, exist_ok=True)
-    fn_dynesty = f'{dir_dynesty}/sampler_results_idxtest{idx_test}.npy'
+    fn_dynesty = f'{dir_dynesty}/sampler_results{tag_obs}.npy'
     if os.path.exists(fn_dynesty):
         print(f"Sampler results file {fn_dynesty} already exists, skipping")
         return
@@ -121,7 +121,7 @@ def evaluate_dynesty(idx_test, tag_inf='', n_threads=8):
     np.save(fn_dynesty, results_dynesty)
     
     
-def evaluate_emcee(idx_test, tag_inf='', n_threads=8):
+def evaluate_emcee(tag_obs, tag_inf='', n_threads=8):
     
     # import here so if only want emcee (not dynesty), still runs
     import emcee
@@ -135,7 +135,7 @@ def evaluate_emcee(idx_test, tag_inf='', n_threads=8):
     dir_emcee =  f'../results/results_emcee/samplers{tag_inf}'
     p = pathlib.Path(dir_emcee)
     p.mkdir(parents=True, exist_ok=True)
-    fn_emcee = f'{dir_emcee}/sampler_idxtest{idx_test}.npy'
+    fn_emcee = f'{dir_emcee}/sampler{tag_obs}.npy'
     if os.path.exists(fn_emcee):
         print(f"Sampler results file {fn_emcee} already exists, skipping")
         return

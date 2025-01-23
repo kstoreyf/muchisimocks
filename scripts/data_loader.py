@@ -213,7 +213,7 @@ def load_data_emuPk(tag_mocks, tag_errG=None, tag_noiseless='',
     k = k[mask]
     
     if 'noiseless' in tag_noiseless:
-        return k, Pk_noiseless, gaussian_error_pk_noiseless, random_ints
+        return k, Pk_noiseless, gaussian_error_pk_noiseless
     
     else:
         return k, Pk, gaussian_error_pk
@@ -334,7 +334,7 @@ def load_data_muchisimocks3D(tag_mocks, n_train, n_val, n_test,
 
 
 # NOT CURRENTLY USED
-def get_split(split, theta, y, y_err, random_ints, 
+def get_split(data_mode, split, theta, y, y_err, random_ints, 
               n_train, n_val, n_test,
               n_rlzs_per_cosmo=None):
     
