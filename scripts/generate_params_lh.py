@@ -15,9 +15,11 @@ def main():
     seed = 42
     overwrite = False
 
-    n_samples = 1
+    n_samples = 1000
     
     bounds_type = 'cosmo' #cosmo or bias
+    n_params_vary = 0
+    #tag_bounds = '' #NOTE params are automatically tagged below; this is for '_test' or '_quijote' so far
     #tag_bounds = '_test' 
     tag_bounds = '_quijote'
     
@@ -26,14 +28,13 @@ def main():
     #tag_bounds = '_b1000'
     
     if bounds_type == 'cosmo':
-        param_names_vary = []
-        #param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble']
-        #param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
+        param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
+        # for now we will always select the varying params in this order, for reproducibility
+        param_names_vary = param_names_vary[:n_params_vary]
         param_names_ordered, bounds_dict, fiducial_dict = define_LH_cosmo(tag_bounds=tag_bounds)
     elif bounds_type == 'bias':
-        #param_names_vary = ['b1', 'b2', 'bs2', 'bl']
-        #param_names_vary = ['b1']
-        param_names_vary = []
+        param_names_vary = ['b1', 'b2', 'bs2', 'bl']
+        param_names_vary = param_names_vary[:n_params_vary]
         param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(tag_bounds=tag_bounds)
     else:
         raise ValueError("pset must be 'cosmo' or 'bias'")

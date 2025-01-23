@@ -120,16 +120,16 @@ def load_params(tag_params, tag_biasparams,
     fn_params = f'{dir_params}/params_lh{tag_params}.txt'
     fn_params_fixed = f'{dir_params}/params_fixed{tag_params}.txt'
     
-    params_df = {
+    params_df = (
         pd.read_csv(fn_params, index_col=0)
         if os.path.exists(fn_params)
         else None
-    }
-    param_dict_fixed = {
+    )
+    param_dict_fixed = (
         pd.read_csv(fn_params_fixed).iloc[0].to_dict() 
         if os.path.exists(fn_params_fixed)
         else {}
-    }
+    )
     #param_names = params_df.columns.tolist()
     # theta = params_df.values
     # assert theta.shape[0] == n_data, f"Expected {n_data} rows in {fn_params}"
@@ -147,8 +147,10 @@ def load_params(tag_params, tag_biasparams,
         else {}
     )
     
-    random_ints = np.load(f'{dir_params}/randints{tag_params}.npy', allow_pickle=True)
-    random_ints_bias = np.load(f'{dir_params}/randints{tag_biasparams}.npy', allow_pickle=True)
+    fn_randints = f'{dir_params}/randints{tag_params}.npy'
+    fn_randints_bias = f'{dir_params}/randints{tag_biasparams}.npy'
+    random_ints = np.load(fn_randints, allow_pickle=True) if os.path.exists(fn_randints) else None
+    random_ints_bias = np.load(fn_randints_bias, allow_pickle=True) if os.path.exists(fn_randints_bias) else None
     
     return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
     
@@ -173,17 +175,18 @@ def param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=1):
     return theta, param_names
     
 
-def load_data_emuPk(tag_mocks, tag_errG=None, tag_noiseless='',
+def load_data_emuPk(tag_mocks, tag_errG='', tag_datagen='', tag_noiseless='',
                     n_rlzs_per_cosmo=1):
     
     assert tag_errG is not None, "tag_errG must be specified"
     dir_emuPk = f'../data/emuPks/emuPks{tag_mocks}'
     
+    assert tag_noiseless in ['', '_noiseless'], "tag_noiseless must be '_noiseless' or ''"
     if 'noiseless' in tag_noiseless:
         assert n_rlzs_per_cosmo==1, "Why would you want multiple realizations per cosmo if using noiseless?"
         fn_emuPk = f'{dir_emuPk}/emuPks.npy'
     else:
-        fn_emuPk = f'{dir_emuPk}/emuPks_noisy.npy'
+        fn_emuPk = f'{dir_emuPk}/emuPks_noisy{tag_datagen}.npy'
     fn_emuk = f'{dir_emuPk}/emuPks_k.txt'
     fn_emuPkerrG = f'{dir_emuPk}/emuPks_errgaussian{tag_errG}.npy'
     #fn_emuPk_params = f'{dir_emuPk}/params_lh{tag_params}.txt'
@@ -207,16 +210,10 @@ def load_data_emuPk(tag_mocks, tag_errG=None, tag_noiseless='',
     
     mask = np.all(Pk>0, axis=0)
     Pk = Pk[:,mask]
-    Pk_noiseless = Pk_noiseless[:,mask]
     gaussian_error_pk = gaussian_error_pk[:,mask]
-    gaussian_error_pk_noiseless = gaussian_error_pk_noiseless[:,mask]
     k = k[mask]
     
-    if 'noiseless' in tag_noiseless:
-        return k, Pk_noiseless, gaussian_error_pk_noiseless
-    
-    else:
-        return k, Pk, gaussian_error_pk
+    return k, Pk, gaussian_error_pk
 
 
 

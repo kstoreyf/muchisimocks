@@ -21,21 +21,21 @@ def log_prior(theta):
 def log_likelihood(theta):
     # theta combines cosmo and bias params sampling over, and names are _param_names
     #for pp in range(len(_cosmo_param_names)):
+    cosmo_params = _cosmo_param_dict_fixed.copy()
     for cosmo_param_name in _cosmo_param_names_vary:
         i_param = _param_names_vary.index(cosmo_param_name)
-        cosmo_params = _cosmo_param_dict_fixed.copy()
         cosmo_param_name_emu = utils.param_name_to_param_name_emu(cosmo_param_name)
         cosmo_params[cosmo_param_name_emu] = theta[i_param]
                 
     expfactor = 1.0 # careful, may need to change at some point!
     cosmo_params['expfactor'] = expfactor
     
+    bias_params = _bias_param_dict_fixed.copy()
     for bias_param_name in _bias_param_names_vary:
         i_param = _param_names_vary.index(bias_param_name)
-        bias_params = _bias_param_dict_fixed.copy()
         bias_params[bias_param_name] = theta[i_param]
     bias_vector = [bias_params[bname] for bname in _bias_param_names_ordered]
-        
+
     _, pk_model_unscaled, _ = _emu.get_galaxy_real_pk(bias=bias_vector, k=_k, 
                                                 **cosmo_params)
     pk_model = _scaler.scale(pk_model_unscaled)
@@ -64,12 +64,12 @@ def prior_transform(u):
     return np.array(u_transformed)
 
 
-def evaluate_mcmc(tag_obs, pk_data, cov_inv, scaler, 
+def evaluate_mcmc(idx_obs, pk_data, cov_inv, scaler, 
                    emu, k, 
                    cosmo_param_dict_fixed, bias_param_dict_fixed, 
                    cosmo_param_names_vary, bias_param_names_vary,
                    dict_bounds_cosmo, dict_bounds_bias,
-                   tag_inf='', n_threads=8, mcmc_framework='dynesty'):
+                   tag_inf='', tag_obs=None, n_threads=8, mcmc_framework='dynesty'):
 
     global _pk_data, _cov_inv, _scaler
     global _emu, _k
@@ -77,22 +77,23 @@ def evaluate_mcmc(tag_obs, pk_data, cov_inv, scaler,
     global _cosmo_param_names_vary, _bias_param_names_vary, _param_names_vary
     global _dict_bounds
     global _bias_param_names_ordered
-    
-    dict_bounds = dict_bounds_cosmo.update(dict_bounds_bias)
+
+    # for some reason using "update" does not work, at least if one dict is empty
+    dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
     _bias_param_names_ordered = ['b1', 'b2', 'bs2', 'bl']    
-    _param_names_vary = _cosmo_param_names_vary + _bias_param_names_vary
     _pk_data, _cov_inv, _scaler = pk_data, cov_inv, scaler
     _emu, _k, _dict_bounds, = emu, k, dict_bounds
     _cosmo_param_dict_fixed, _bias_param_dict_fixed = cosmo_param_dict_fixed, bias_param_dict_fixed
     _cosmo_param_names_vary, _bias_param_names_vary = cosmo_param_names_vary, bias_param_names_vary    
-    
+    _param_names_vary = _cosmo_param_names_vary + _bias_param_names_vary
+
     if mcmc_framework == 'dynesty':
-        evaluate_dynesty(tag_obs, tag_inf=tag_inf, n_threads=n_threads)
+        evaluate_dynesty(idx_obs, tag_inf=tag_inf, tag_obs=tag_obs, n_threads=n_threads)
     elif mcmc_framework == 'emcee':
-        evaluate_emcee(tag_obs, tag_inf=tag_inf, n_threads=n_threads)
+        evaluate_emcee(idx_obs, tag_inf=tag_inf, tag_obs=tag_obs, n_threads=n_threads)
     
     
-def evaluate_dynesty(tag_obs, tag_inf='', n_threads=8):
+def evaluate_dynesty(idx_obs, tag_inf='', tag_obs=None, n_threads=8):
     
     # import here so if only have emcee, that still works
     import dynesty
@@ -100,6 +101,8 @@ def evaluate_dynesty(tag_obs, tag_inf='', n_threads=8):
     dir_dynesty =  f'../results/results_dynesty/samplers{tag_inf}'
     p = pathlib.Path(dir_dynesty)
     p.mkdir(parents=True, exist_ok=True)
+    if tag_obs is None:
+        tag_obs = f'_idx{idx_obs}'
     fn_dynesty = f'{dir_dynesty}/sampler_results{tag_obs}.npy'
     if os.path.exists(fn_dynesty):
         print(f"Sampler results file {fn_dynesty} already exists, skipping")
@@ -121,7 +124,7 @@ def evaluate_dynesty(tag_obs, tag_inf='', n_threads=8):
     np.save(fn_dynesty, results_dynesty)
     
     
-def evaluate_emcee(tag_obs, tag_inf='', n_threads=8):
+def evaluate_emcee(idx_obs, tag_inf='', tag_obs=None, n_threads=8):
     
     # import here so if only want emcee (not dynesty), still runs
     import emcee
@@ -135,6 +138,8 @@ def evaluate_emcee(tag_obs, tag_inf='', n_threads=8):
     dir_emcee =  f'../results/results_emcee/samplers{tag_inf}'
     p = pathlib.Path(dir_emcee)
     p.mkdir(parents=True, exist_ok=True)
+    if tag_obs is None:
+        tag_obs = f'_idx{idx_obs}'
     fn_emcee = f'{dir_emcee}/sampler{tag_obs}.npy'
     if os.path.exists(fn_emcee):
         print(f"Sampler results file {fn_emcee} already exists, skipping")

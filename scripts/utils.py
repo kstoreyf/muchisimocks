@@ -138,15 +138,15 @@ def get_posterior_maxes(samples_equal, param_names):
     return maxes
 
 
-def get_samples(idx_obs, inf_method, tag_inf, tag_test=''):
+def get_samples(idx_obs, inf_method, tag_inf, tag_test='', tag_obs=None):
     if inf_method == 'mn':
         return get_samples_mn(idx_obs, tag_inf, tag_test=tag_test)
     if inf_method == 'sbi':
         return get_samples_sbi(idx_obs, tag_inf, tag_test=tag_test)
     elif inf_method == 'emcee':
-        return get_samples_emcee(idx_obs, tag_inf)
+        return get_samples_emcee(idx_obs, tag_inf, tag_obs=tag_obs)
     elif inf_method == 'dynesty':
-        return get_samples_dynesty(idx_obs, tag_inf)
+        return get_samples_dynesty(idx_obs, tag_inf, tag_obs=tag_obs)
     else:
         raise ValueError(f'Method {inf_method} not recognized!')
         
@@ -187,10 +187,12 @@ def get_samples_sbi(idx_obs, tag_inf, tag_test=''):
     else:
         raise ValueError(f"Samples shape {samples_arr.shape} is weird!")
 
-def get_samples_emcee(idx_obs, tag_inf):
+def get_samples_emcee(idx_obs, tag_inf, tag_obs=None):
     import emcee
     dir_emcee =  f'../results/results_emcee/samplers{tag_inf}'
-    fn_emcee = f'{dir_emcee}/sampler_idxtest{idx_obs}.npy'
+    if tag_obs is None:
+        tag_obs = f'_idx{idx_obs}'
+    fn_emcee = f'{dir_emcee}/sampler{tag_obs}.npy'
     if not os.path.exists(fn_emcee):
         print(f'File {fn_emcee} not found')
         return
@@ -204,9 +206,11 @@ def get_samples_emcee(idx_obs, tag_inf):
     return samples
 
 
-def get_samples_dynesty(idx_obs, tag_inf):
+def get_samples_dynesty(idx_obs, tag_inf, tag_obs=None):
     dir_dynesty =  f'../results/results_dynesty/samplers{tag_inf}'
-    fn_dynesty = f'{dir_dynesty}/sampler_results_idxtest{idx_obs}.npy'
+    if tag_obs is None:
+        tag_obs = f'_idx{idx_obs}'
+    fn_dynesty = f'{dir_dynesty}/sampler_results{tag_obs}.npy'
     results_dynesty = np.load(fn_dynesty, allow_pickle=True).item()
     
     # doesn't work upon reload for some reason
@@ -319,8 +323,10 @@ def cosmo_bacco_to_cosmo_baccoemu(cosmo):
 
 # TODO fill this out with other name mismatches ??
 def param_name_to_param_name_emu(param_name):
-    if param_name=='sigma8_cold':
-        param_name_emu = 'sigma8'
+    # TODO this is not true if have nonzero neutrino mass!! 
+    # compute relation: https://chatgpt.com/share/6792b607-1aa8-8002-b6e5-128a98d70302
+    if param_name=='sigma8':
+        param_name_emu = 'sigma8_cold'
     else:
         param_name_emu = param_name
     return param_name_emu
