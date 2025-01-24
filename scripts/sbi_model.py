@@ -19,7 +19,7 @@ class SBIModel():
                        theta_val=None, y_val_unscaled=None, y_err_val_unscaled=None,
                        theta_test=None, y_test_unscaled=None, y_err_test_unscaled=None,
                        param_names=None, run_mode='single',
-                       tag_sbi='', n_threads=8, 
+                       tag_sbi='', tag_bounds='', n_threads=8, 
                        ):
         
         # if n_threads is not None:
@@ -45,8 +45,10 @@ class SBIModel():
         self.y_test_unscaled = y_test_unscaled
         self.y_err_test_unscaled = y_err_test_unscaled
         
-        assert param_names is not None, 'need parameter names'
-        self.param_names = param_names
+        # if training, need to pass param names
+        if run_mode != 'load':
+            assert param_names is not None, 'need parameter names'
+            self.param_names = param_names
         
         if self.y_train_unscaled is not None:
             self.setup_scaler_y()
@@ -68,13 +70,15 @@ class SBIModel():
             self.n_params = self.theta_test.shape[1]
         
         self.run_mode = run_mode
+        self.tag_bounds = tag_bounds
 
         
     def run(self, max_epochs=500):
 
         if self.run_mode == 'single':
             # get prior
-            _, bounds_dict, _ = gplh.define_LH_cosmo()
+            # TODO update to deal with bias params!! 
+            _, bounds_dict, _ = gplh.define_LH_cosmo(tag_bounds=self.tag_bounds)
             l_bounds = np.array([bounds_dict[pn][0] for pn in self.param_names])
             u_bounds = np.array([bounds_dict[pn][1] for pn in self.param_names])
             prior = BoxUniform(low=torch.from_numpy(l_bounds), 
@@ -143,7 +147,7 @@ class SBIModel():
     def load_posterior(self):
         fn_posterior = f'{self.dir_sbi}/posterior.p'
         assert os.path.exists(fn_posterior), f"model_mean.keras not found in {self.dir_sbi}"
-        print(f"Loading mean model from {fn_posterior}")
+        print(f"Loading posterior from {fn_posterior}")
         with open(fn_posterior, "rb") as f:
             self.posterior = pickle.load(f)
 

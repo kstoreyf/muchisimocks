@@ -66,7 +66,7 @@ def main():
 
 
 
-def define_LH_bias(tag_bounds):
+def define_LH_bias(tag_bounds='biaszen'):
     
     param_names_ordered = ['b1', 'b2', 'bs2', 'bl']
     
@@ -97,7 +97,7 @@ def define_LH_bias(tag_bounds):
     return param_names_ordered, bounds_dict, fiducial_dict
     
     
-def define_LH_cosmo(tag_bounds):
+def define_LH_cosmo(tag_bounds=''):
     
     param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns', 'neutrino_mass', 'w0', 'wa']
 

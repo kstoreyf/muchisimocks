@@ -22,8 +22,8 @@ import generate_params_lh as gplh
 
 def main():
     #train_likefree_inference()
-    #test_likefree_inference()
-    run_likelihood_inference()
+    test_likefree_inference()
+    #run_likelihood_inference()
 
 
 
@@ -49,12 +49,20 @@ def train_likefree_inference():
     tag_data = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
 
     ### Load data and parameters
-    k, y, y_err, random_ints, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed = \
+    k, y, y_err, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = \
                 data_loader.load_data(data_mode, tag_params, tag_biasparams,
                                       kwargs=kwargs_data)
+    mask = data_loader.get_Pk_mask(tag_data, Pk=y)
+    print(mask)
+
+    k, y, y_err = k[mask], y[:,mask], y_err[:,mask]
+
     theta, param_names = data_loader.param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
+    print(param_names)
+    
 
     # split into train and validation - but for SBI, these just get lumped back together
+    # TODO deal properly with random ints - may break
     idxs_train, idxs_val, _ = utils.idxs_train_val_test(random_ints, frac_train=0.9, frac_val=0.1, frac_test=0.0,
                         N_tot=len(theta))
     # fixing absolute size of validation set, as per chatgpt's advice: https://chatgpt.com/share/678e9ef1-a574-8002-adcb-4929630fbf01
@@ -138,24 +146,25 @@ def test_likefree_inference():
 
     ### Select trained model
     n_train = 9000
-    tag_params = '_p2_n10000' #for emu, formerly tag_emuPk
+    tag_params = '_p2_n10000'
     tag_biasparams = '_b1000_p0_n1'
     n_rlzs_per_cosmo = 1
     tag_errG = '_boxsize1000'
     tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
     # don't need kwargs here bc not actually loading the data; just getting tag to reload model
     tag_data_train = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
+    mask = data_loader.get_Pk_mask(tag_data_train)
 
     ### Set up test data
-    #tag_params = '_p2_n10000' #for emu, formerly tag_emuPk
-    tag_params_test = '_cosmoquijote_p0_n1' #for emu, formerly tag_emuPk
+    #tag_params = '_p2_n10000' 
+    tag_params_test = '_quijote_p0_n1000'
     tag_biasparams_test = '_b1000_p0_n1'
     n_rlzs_per_cosmo = 1
     tag_errG = '_boxsize1000'
     tag_noiseless = ''
     tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
     tag_data_test = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
-    evaluate_mean = False # will want to use with fixed cosmo
+    evaluate_mean = False # will want to use with fixed cosmo muchisimocks
 
     kwargs_data_test = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
                         'tag_errG': tag_errG,
@@ -168,6 +177,7 @@ def test_likefree_inference():
     k, y, y_err, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
                 data_loader.load_data(data_mode, tag_params_test, tag_biasparams_test,
                                       kwargs=kwargs_data_test)
+    k, y, y_err = k[mask], y[:,mask], y_err[:,mask]
 
     ### Run inference
     if run_moment:
@@ -205,8 +215,8 @@ def test_likefree_inference():
         
     if run_sbi:
         #n_train = 8000
-        #tag_inf = f'{tag_data}_ntrain{n_train}'
-        tag_inf = '_emuPk_2param_boxsize500_nrlzs1_ntrain8000'
+        tag_inf = f'{tag_data_train}_ntrain{n_train}'
+        #tag_inf = '_emuPk_2param_boxsize500_nrlzs1_ntrain8000'
         sbi_network = sbi_model.SBIModel(
                     tag_sbi=tag_inf, run_mode='load',
                     )

@@ -19,6 +19,7 @@ def load_data(data_mode, tag_params, tag_biasparams,
     else:
         raise ValueError(f"Data mode {data_mode} not recognized!")
                    
+
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams)
     return k, y, y_err, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
 
@@ -65,14 +66,6 @@ def load_data_muchisimocksPk(tag_mocks, tag_datagen=''):
     #theta = np.array(theta)
     gaussian_error_pk = np.array(gaussian_error_pk)
     k = pk_obj['k'] # all ks should be same so just grab one
-
-    # TODO do i want / need this here?
-    mask = np.all(Pk>0, axis=0)
-    print(f"{np.sum(np.any(Pk<=0, axis=1))}/{Pk.shape[0]} have at least one non-positive Pk value")
-    print(f"Masking columns {np.where(~mask)[0]}")
-    Pk = Pk[:,mask]
-    gaussian_error_pk = gaussian_error_pk[:,mask]
-    k = k[mask]
     
     return k, Pk, gaussian_error_pk
 
@@ -159,11 +152,11 @@ def param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=1):
     assert params_df is not None or biasparams_df is not None, "params_df or biasparams_df (or both) must be specified"
     param_names = []
     if params_df is not None:
-        param_names.append(params_df.columns.tolist())
+        param_names.extend(params_df.columns.tolist())
         theta_cosmo_orig = params_df.values
         theta_cosmo = utils.repeat_arr_rlzs(theta_cosmo_orig, n_rlzs=n_rlzs_per_cosmo)
     if biasparams_df is not None:
-        param_names.append(biasparams_df.columns.tolist())
+        param_names.extend(biasparams_df.columns.tolist())
         theta_bias_orig = biasparams_df.values
         theta_bias = utils.repeat_arr_rlzs(theta_bias_orig, n_rlzs=n_rlzs_per_cosmo)
 
@@ -176,7 +169,7 @@ def param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=1):
     
 
 def load_data_emuPk(tag_mocks, tag_errG='', tag_datagen='', tag_noiseless='',
-                    n_rlzs_per_cosmo=1):
+                    n_rlzs_per_cosmo=1, tag_mask=''):
     
     assert tag_errG is not None, "tag_errG must be specified"
     dir_emuPk = f'../data/emuPks/emuPks{tag_mocks}'
@@ -192,7 +185,6 @@ def load_data_emuPk(tag_mocks, tag_errG='', tag_datagen='', tag_noiseless='',
     #fn_emuPk_params = f'{dir_emuPk}/params_lh{tag_params}.txt'
     #fn_bias_vector = f'{dir_emuPk}/bias_params.txt'
 
-        
     Pk = np.load(fn_emuPk, allow_pickle=True)   
     k = np.genfromtxt(fn_emuk)
 
@@ -208,13 +200,30 @@ def load_data_emuPk(tag_mocks, tag_errG='', tag_datagen='', tag_noiseless='',
     gaussian_error_pk = utils.repeat_arr_rlzs(gaussian_error_pk_orig, n_rlzs=n_rlzs_per_cosmo)
     assert gaussian_error_pk.shape[0] == Pk.shape[0], "Number of pks and errors should be the same, something is wrong"
     
-    mask = np.all(Pk>0, axis=0)
-    Pk = Pk[:,mask]
-    gaussian_error_pk = gaussian_error_pk[:,mask]
-    k = k[mask]
-    
+    # mask = np.all(Pk>0, axis=0)
+    # print("mask")
+    # print(mask)
+    # Pk = Pk[:,mask]
+    # gaussian_error_pk = gaussian_error_pk[:,mask]
+    # k = k[mask]
+    # print(len(k))
+
     return k, Pk, gaussian_error_pk
 
+
+# used to both remove nonpositive data, and to select certain k_bins
+def get_Pk_mask(tag_data, tag_mask='', k=None, Pk=None):
+    dir_masks = '../data/masks'
+    fn_mask = f'{dir_masks}/mask{tag_data}{tag_mask}.txt'
+    if os.path.exists(fn_mask):
+        return np.loadtxt(fn_mask, dtype=bool)
+    else:
+        if Pk is not None:
+            mask = np.all(Pk>0, axis=0)
+        else:
+            mask = np.ones(len(k), dtype=int)
+        np.savetxt(fn_mask, mask.astype(int), fmt='%i')
+    return mask
 
 
 
