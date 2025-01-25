@@ -12,16 +12,16 @@ import utils
 
 def main():
 
-    n_data = 1000
+    n_data = 10000
     #tag_params = f'_p5_n{n_data}'
     # TODO change to tag_params, & tag_biasparams ?
     #tag_params = f'_test_p5_n{n_data}'
     
-    #tag_params = f'_p2_n{n_data}'
-    #tag_biasparams = '_b1000_p0_n1'
+    tag_params = f'_p5_n{n_data}'
+    tag_biasparams = '_b1000_p0_n1'
       
-    tag_params = f'_quijote_p0_n{n_data}'
-    tag_biasparams = '_b1000_p0_n1'  
+    #tag_params = f'_quijote_p0_n{n_data}'
+    #tag_biasparams = '_b1000_p0_n1'  
     
     #tag_biasparams = '_biaszen_p4_n1000'
     tag_mocks = tag_params + tag_biasparams

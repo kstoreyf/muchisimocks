@@ -9,6 +9,7 @@ import time
 
 import bacco
 
+import data_loader
 import utils
 
 
@@ -21,60 +22,35 @@ def main():
 def compute_pks_muchisimocks():
     
     print("Starting muchisimocks pk computation")
-    #tag_mocks = '_HR'
-    #tag_mocks = '_FixedPk'
-    
-    #tag_params = '_p3_n10'
-    #dir_mocks = f'../data/cosmolib{tag_mocks}'
-    #dir_mocks = f'/cosmos_storage/cosmosims/muchisimocks_lib{tag_mocks}'
-    
-    # p5_n50 is in data, bc contains full fields as checks so needs more space
-    #tag_params = '_p5_n50'
-    #tag_mocks = tag_params
-    #dir_mocks = f'/data/kstoreyf/muchisimocks/muchisimocks_lib{tag_mocks}'
-
     n_threads = 24
     
-    #tag_params = '_p5_n10000'
-    tag_params = None
-    tag_mocks = '_fixedcosmo'
-    #tag_mocks = tag_params
-    dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_mocks}'
+    # tag_params = '_p5_n10000'
+    # tag_biasparams = '_biaszen_p4_n1000'
+    #tag_params = '_test_p5_n1000'
+    tag_params = '_quijote_p0_n1000'
+    tag_biasparams = '_b1000_p0_n1'
+    tag_mocks = tag_params + tag_biasparams
+
+    dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_params}'
     
-    #mode_bias_vector = 'LH'
-    mode_bias_vector = 'single'
-    if mode_bias_vector == 'LH':
-        #tag_biasparams = '_biaszen_p4_n10000'
-        #tag_biasparams = '_biaszen_p1_n10000'
-        tag_biasparams = '_biaszen_p4_n1000'
-        dir_params = f'../data/params'
-        fn_biasparams = f'{dir_params}/params_lh{tag_biasparams}.txt'
-        fn_biasparams_fixed = f'{dir_params}/params_fixed{tag_biasparams}.txt'
-        biasparams_df = pd.read_csv(fn_biasparams, index_col=0)
-        biasparams_dict_fixed = (
-            pd.read_csv(fn_biasparams_fixed).iloc[0].to_dict() 
-            if os.path.exists(fn_biasparams_fixed)
-            else {}
-        )
-        biasparam_names_ordered = biasparams_df.columns.tolist()
-        tags_pk = [tag_biasparams]
-        tags_fields = ['_deconvolved']
-    elif mode_bias_vector == 'single':
-        bias_vector = [1., 0., 0., 0.]    
-        tags_pk = ['_b1000', '_b1000_zspace']
-        #bias_vector = [1., 0., 0., 0.]    
-        #tags_pk = ['_b1000', '_b1000_zspace']
-        tags_fields = ['_deconvolved', '_zspace_deconvolved']
+    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = \
+        data_loader.load_params(tag_params, tag_biasparams)
+    
+    biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl']
+        
+    tags_pk = ['']
+    tags_fields = ['_deconvolved']
+    # for running zspace
+    # tags_pk = ['', '_zspace']
+    # tags_fields = ['_deconvolved', '_deconvolved_zspace']
+        
         
     #idxs_LH = [0]
-    if 'fixedcosmo' in tag_mocks:
+    if 'p0' in tag_params:
         subdir_prefix='mock'
     else:
         subdir_prefix='LH'
-    #     idxs_LH = np.sort([int(re.search(r'^mock(\d+)$', dir_mocks).group(1)) \
-    #         for dir_mocks in os.listdir(dir_mocks) \
-    #         if re.search(r'^mock\d+$', dir_mocks)])
-    # else:
+
     idxs_LH = np.sort([int(re.search(rf'^{subdir_prefix}(\d+)$', dir_mocks).group(1)) \
         for dir_mocks in os.listdir(dir_mocks) \
         if re.search(rf'^{subdir_prefix}\d+$', dir_mocks)])
@@ -92,7 +68,6 @@ def compute_pks_muchisimocks():
     correct_grid = False
     k_min, k_max, n_bins = 0.01, 0.4, 30
 
-
     #n_grid = 128
     #n_grid_orig = None #compute from fields, if we don't know that it's different
     n_grid_orig = 512
@@ -101,22 +76,9 @@ def compute_pks_muchisimocks():
     else:
         box_size = 1000.0
     
-    if 'fixedcosmo' in tag_mocks:
-        param_dict = utils.cosmo_dict_quijote
-    else:
-        fn_params = f'{dir_mocks}/params_lh{tag_params}.txt'
-        fn_params_fixed = f'{dir_mocks}/params_fixed{tag_params}.txt'
-        params_df = pd.read_csv(fn_params, index_col=0)
-        param_dict_fixed = pd.read_csv(fn_params_fixed).loc[0].to_dict()
-        # order of saved cosmo param files
-        #param_names = ['omega_cold', 'sigma_8', 'h', 'omega_baryon', 'n_s', 'seed']
-    
     for tag_pk, tag_fields in zip(tags_pk, tags_fields):
         dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}'
         Path.mkdir(Path(dir_pks), parents=True, exist_ok=True)
-        if mode_bias_vector == 'single':
-            fn_bias_vector = f'{dir_pks}/bias_params.txt'
-            np.savetxt(fn_bias_vector, bias_vector)
     
         print("tag_pk:", tag_pk, flush=True)
         for idx_LH in idxs_LH:
@@ -140,20 +102,21 @@ def compute_pks_muchisimocks():
                 n_grid_orig = bias_terms_eul.shape[-1]
             print(f"n_grid_orig = {n_grid_orig}", flush=True)
             
-            if mode_bias_vector == 'LH':
-                bias_vals = biasparams_df.loc[idx_LH].to_dict()
-                if biasparams_dict_fixed:
-                    bias_vals.update(biasparams_dict_fixed)
-                bias_vector = [bias_vals[name] for name in biasparam_names_ordered]
-                print("bias_vector:", bias_vector, flush=True)
+            biasparam_dict = biasparams_dict_fixed.copy()
+            if biasparams_df is not None:
+                biasparam_dict.update(biasparams_df.loc[idx_LH].to_dict())
+            bias_vector = [biasparam_dict[name] for name in biasparam_names_ordered]
+
+            print("bias_vector:", bias_vector, flush=True)
             tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
             
             #param_vals = np.loadtxt(fn_params)
             #param_dict = dict(zip(param_names, param_vals))
-            if 'fixedcosmo' not in tag_mocks:
-                param_dict = params_df.loc[idx_LH].to_dict()
-                param_dict.update(param_dict_fixed)
-                print(param_dict, flush=True)
+            
+            param_dict = param_dict_fixed.copy()
+            if params_df is not None:
+                param_dict.update(params_df.loc[idx_LH].to_dict())
+            print(param_dict, flush=True)
             cosmo = utils.get_cosmo(param_dict)
             
             compute_pk(tracer_field, cosmo, box_size,
@@ -163,7 +126,7 @@ def compute_pks_muchisimocks():
                         fn_pk=fn_pk,
                         n_threads=n_threads)
             end = time.time()
-            print(f"Computed P(k) for idx_LH={idx_LH} ({tag_pk}) in time {end-start} s", flush=True)
+            print(f"Computed P(k) for idx_LH={idx_LH} ({tag_mocks+tag_pk}) in time {end-start} s", flush=True)
     
 
 def compute_pks_quijote_LH():

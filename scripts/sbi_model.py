@@ -82,7 +82,7 @@ class SBIModel():
             l_bounds = np.array([bounds_dict[pn][0] for pn in self.param_names])
             u_bounds = np.array([bounds_dict[pn][1] for pn in self.param_names])
             prior = BoxUniform(low=torch.from_numpy(l_bounds), 
-                                        high=torch.from_numpy(u_bounds))
+                               high=torch.from_numpy(u_bounds))
 
             print("Setting up inference")
             # SimBIG switched to NSF (neural spine flow) from originally an MAF (masked autoregressive flow)
@@ -105,6 +105,9 @@ class SBIModel():
             y_train_and_val = np.concatenate((self.y_train, self.y_val), axis=0)
             validation_fraction = len(self.theta_val) / len(theta_train_and_val)
             print(f"Validation fraction: {validation_fraction}")
+            
+            print(theta_train_and_val)
+            print(y_train_and_val)
     
             inference = NPE(prior=prior, density_estimator=density_estimator_build_fun)
             inference = inference.append_simulations(
@@ -117,7 +120,7 @@ class SBIModel():
                 max_num_epochs=max_epochs,
                 # training_batch_size=training_batch_size,
                 validation_fraction=validation_fraction,
-                # learning_rate=learning_rate,
+                learning_rate=1e-4,
                 show_train_summary=True
                 )
             
@@ -175,17 +178,18 @@ class SBIModel():
             self.scaler_y = pickle.load(f)
         
         
-    def evaluate(self, y_obs_unscaled, n_samples=10000, mean_only=False):
+    def evaluate(self, y_obs_unscaled, n_samples=10000):
         y_obs = self.scaler_y.scale(y_obs_unscaled)
         # model is built with float32 so need the data to be here too
         y_obs = np.float32(y_obs)
         #samples = self.posterior.sample((n_samples,), x=y_obs)
-        print(y_obs.dtype)
+        print(y_obs_unscaled)
+        print(y_obs)
         samples = self.posterior.sample_batched((n_samples,), x=y_obs)
         return samples
     
     
-    def evaluate_test_set(self, y_test_unscaled=None, theta_test=None, tag_test=''):
+    def evaluate_test_set(self, y_test_unscaled=None, tag_test=''):
         if y_test_unscaled is None:
             y_test_unscaled = self.y_test_unscaled
         samples_test_pred = self.evaluate(y_test_unscaled)
