@@ -36,6 +36,7 @@ class SBIModel():
         self.theta_train = theta_train
         self.y_train_unscaled = y_train_unscaled
         self.y_err_train_unscaled = y_err_train_unscaled
+        print('y_train_unscaled:',self.y_train_unscaled)
 
         self.theta_val = theta_val
         self.y_val_unscaled = y_val_unscaled
@@ -59,7 +60,7 @@ class SBIModel():
             self.n_dim = self.y_test_unscaled.shape[1]
             #self.n_dim = self.y_test.shape[1:]
             
-        # If we don't have training data, we'll probs want the scale
+        # If we don't have training data, we'll probs want the scaler
         # (but maybe there's a better place for this...?)
         if self.y_train_unscaled is None:
             self.load_scaler_y()
@@ -84,6 +85,7 @@ class SBIModel():
             prior = BoxUniform(low=torch.from_numpy(l_bounds), 
                                high=torch.from_numpy(u_bounds))
 
+            print(bounds_dict)
             print("Setting up inference")
             # SimBIG switched to NSF (neural spine flow) from originally an MAF (masked autoregressive flow)
             # could customize this further (that's where would tune hyperparams) 
@@ -106,8 +108,8 @@ class SBIModel():
             validation_fraction = len(self.theta_val) / len(theta_train_and_val)
             print(f"Validation fraction: {validation_fraction}")
             
-            print(theta_train_and_val)
-            print(y_train_and_val)
+            print('theta:', theta_train_and_val)
+            print('y:', y_train_and_val)
     
             inference = NPE(prior=prior, density_estimator=density_estimator_build_fun)
             inference = inference.append_simulations(
@@ -120,7 +122,7 @@ class SBIModel():
                 max_num_epochs=max_epochs,
                 # training_batch_size=training_batch_size,
                 validation_fraction=validation_fraction,
-                learning_rate=1e-4,
+                learning_rate=1e-3,
                 show_train_summary=True
                 )
             
@@ -164,6 +166,7 @@ class SBIModel():
         if self.y_test_unscaled is not None:
             self.y_test = self.scaler_y.scale(self.y_test_unscaled)
         
+        print('y_train scaled:',self.y_train)
         fn_scaler_y = f'{self.dir_sbi}/scaler_y.p'
         
         # need pickle for custom object!!

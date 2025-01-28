@@ -46,12 +46,15 @@ def load_data_muchisimocksPk(tag_mocks, tag_datagen=''):
     # using regexp bc not loading params_df here (tho could reorg if decide i need)
     idxs_LH = [int(re.search(r'pk_(\d+)\.npy', file_name).group(1)) 
                for file_name in os.listdir(dir_pks) if re.search(r'pk_(\d+)\.npy', file_name)]
+    idxs_LH = np.sort(np.array(idxs_LH)) # now doing regexp, need to sort
 
     assert len(idxs_LH) > 0, f"No pks found in {dir_pks}!"
 
     #theta, Pk, gaussian_error_pk = [], [], []
     Pk, gaussian_error_pk = [], []
     for idx_LH in idxs_LH:
+        #if idx_LH%100 == 0:
+            #print(f"Loading Pk {idx_LH}", flush=True)
         fn_pk = f'{dir_pks}/pk_{idx_LH}.npy'
         pk_obj = np.load(fn_pk, allow_pickle=True).item()
         Pk.append(pk_obj['pk'])

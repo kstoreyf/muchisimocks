@@ -30,33 +30,30 @@ def main():
 def train_likefree_inference():
     run_moment = False
     run_sbi = True
-    
 
     ### Set up data
+    #data_mode = 'emuPk'
+    data_mode = 'muchisimocksPk'
     n_train = None #if None, uses all
-    data_mode = 'emuPk'
     tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
     tag_biasparams = '_b1000_p0_n1'
     n_rlzs_per_cosmo = 1
-    tag_errG = '_boxsize1000'
-    tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
-    kwargs_data = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
-                   'tag_errG': tag_errG,
-                   'tag_datagen': tag_datagen}
     
-    # n_train = None #if None, uses all
-    # data_mode = 'muchisimocksPk'
-    # tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
-    # tag_biasparams = '_b1000_p0_n1'
-    # tag_datagen = ''
-    # n_rlzs_per_cosmo = 1
-    # #tag_datagen = '_zspace
-    # kwargs_data = {'tag_datagen': tag_datagen}
-    
+    if data_mode == 'emuPk':
+        tag_errG = '_boxsize1000'
+        tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
+        kwargs_data = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
+                    'tag_errG': tag_errG,
+                    'tag_datagen': tag_datagen}
+    elif data_mode == 'muchisimocksPk':
+        tag_datagen = ''
+        kwargs_data = {'tag_datagen': tag_datagen}
+
     # no tag_noiseless here for now, bc not training on noiseless data
     tag_data = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
 
     ### Load data and parameters
+    # don't need the fixed params for training!
     k, y, y_err, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = \
                 data_loader.load_data(data_mode, tag_params, tag_biasparams,
                                       kwargs=kwargs_data)
@@ -64,10 +61,9 @@ def train_likefree_inference():
     print(mask)
 
     k, y, y_err = k[mask], y[:,mask], y_err[:,mask]
-    print(y)
+    print(k.shape, y.shape, y_err.shape)
 
     theta, param_names = data_loader.param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
-    print(theta)
     print(param_names)
 
     # split into train and validation - but for SBI, these just get lumped back together
@@ -150,57 +146,52 @@ def test_likefree_inference():
     run_sbi = True
 
     idxs_obs = np.arange(1)
+    evaluate_mean = True # this will be in additon to the idxs_obs!
     #data_mode = 'muchisimocksPk'
 
 
     ### Select trained model
-    data_mode = 'emuPk'
-    #data_mode = 'muchisimocksPk'
+    #data_mode = 'emuPk'
+    data_mode = 'muchisimocksPk'
+    
+    # train params
+    tag_params = '_p5_n10000'
+    tag_biasparams = '_b1000_p0_n1'
+    n_rlzs_per_cosmo = 1
+    n_train = 9000
+    
+    # test params
+    tag_params_test = '_quijote_p0_n1000'
+    tag_biasparams_test = '_b1000_p0_n1'
+        
     # this if-else is just so it's easier for me to switch between the two; may not need
     if data_mode == 'emuPk':
-        n_train = 9000
-        tag_params = '_p5_n10000'
-        tag_biasparams = '_b1000_p0_n1'
-        n_rlzs_per_cosmo = 1
+        # train
         tag_errG = '_boxsize1000'
         tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
-        # don't need kwargs here bc not actually loading the data; just getting tag to reload model
-        tag_data_train = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
-        mask = data_loader.get_Pk_mask(tag_data_train)
-
-        ### Set up test data
-        #tag_params = '_p2_n10000' 
-        tag_params_test = '_quijote_p0_n1000'
-        tag_biasparams_test = '_b1000_p0_n1'
-        n_rlzs_per_cosmo = 1
+        # test
         tag_errG = '_boxsize1000'
-        tag_noiseless = '_noiseless'
-        tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
-        tag_data_test = '_'+data_mode + tag_params + tag_biasparams + tag_datagen + tag_noiseless
-        evaluate_mean = False # will want to use with fixed cosmo muchisimocks
-
+        tag_noiseless = ''
+        #tag_noiseless = '_noiseless'
+        tag_datagen_test = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
+        #evaluate_mean = False # will want to use with fixed cosmo muchisimocks
         kwargs_data_test = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
                             'tag_errG': tag_errG,
                             'tag_datagen': tag_datagen,
                             'tag_noiseless': tag_noiseless}
     elif data_mode == 'muchisimocksPk':
-        n_train = 9000
-        tag_params = '_p5_n10000'
-        tag_biasparams = '_b1000_p0_n1'
+        # train
         tag_datagen = ''
-        # don't need kwargs here bc not actually loading the data; just getting tag to reload model
-        tag_data_train = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
-        mask = data_loader.get_Pk_mask(tag_data_train)
-
-        ### Set up test data
-        tag_params_test = '_quijote_p0_n1000'
-        tag_biasparams_test = '_b1000_p0_n1'
-        tag_datagen = ''
-        tag_data_test = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
-        evaluate_mean = True # will want to use with fixed cosmo muchisimocks
-
+        # test
+        tag_noiseless = ''
+        tag_datagen_test = ''
         kwargs_data_test = {'tag_datagen': tag_datagen}
     
+    # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
+    tag_data_train = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
+    tag_data_test = '_'+data_mode + tag_params_test + tag_biasparams_test + tag_datagen_test + tag_noiseless
+    mask = data_loader.get_Pk_mask(tag_data_train)
+
     ### Load data and parameters
     # our setup is such that that the test set is a separate dataset, so no need to split
     # don't need theta either - just predicting, not comparing
@@ -251,9 +242,11 @@ def test_likefree_inference():
                     )
         sbi_network.run() #need this to do the loading
         # TODO make this work for both emu and muchisimocks # ?? not sure what this means rn
-        if idxs_obs is not None:
-            y = y[idxs_obs]
-        sbi_network.evaluate_test_set(y_test_unscaled=y, tag_test=tag_data_test)
+        if idxs_obs is None:
+            y_obs = y
+        else:
+            y_obs = y[idxs_obs]
+        #sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_data_test)
         # maybe should load this in as a separate dataset, but for now seems fine to do this way
         if evaluate_mean:
             y_mean = np.mean(y, axis=0)        
