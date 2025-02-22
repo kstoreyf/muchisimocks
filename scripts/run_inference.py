@@ -36,7 +36,8 @@ def train_likefree_inference():
     data_mode = 'muchisimocksPk'
     n_train = None #if None, uses all
     tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
-    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_biaszen_p4_n10000'
     n_rlzs_per_cosmo = 1
     
     if data_mode == 'emuPk':
@@ -62,6 +63,11 @@ def train_likefree_inference():
 
     k, y, y_err = k[mask], y[:,mask], y_err[:,mask]
     print(k.shape, y.shape, y_err.shape)
+
+    # get bounds dict
+    _, dict_bounds_cosmo, _ = gplh.define_LH_cosmo(tag_params)
+    _, dict_bounds_bias, _ = gplh.define_LH_bias(tag_biasparams)
+    dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
 
     theta, param_names = data_loader.param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
     print(param_names)
@@ -135,7 +141,7 @@ def train_likefree_inference():
         sbi_network = sbi_model.SBIModel(theta_train=theta_train, y_train_unscaled=y_train, y_err_train_unscaled=y_err_train,
                     theta_val=theta_val, y_val_unscaled=y_val, y_err_val_unscaled=y_err_val,
                     tag_sbi=tag_inf, run_mode=run_mode,
-                    param_names=param_names)
+                    param_names=param_names, dict_bounds=dict_bounds)
         sbi_network.run()
 
 
@@ -156,7 +162,8 @@ def test_likefree_inference():
     
     # train params
     tag_params = '_p5_n10000'
-    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_biaszen_p4_n10000'
     n_rlzs_per_cosmo = 1
     n_train = 9000
     
@@ -256,6 +263,7 @@ def test_likefree_inference():
 def run_likelihood_inference():
 
     mcmc_framework = 'dynesty'
+    #mcmc_framework = 'emcee'
     
     # for likelihood methods only
     idxs_obs = np.arange(1)
@@ -276,8 +284,8 @@ def run_likelihood_inference():
 
     # for likelihood methods, we decide which parameters to sample over! 
     # (will have to change when have a test set not generated with these params, e.g. hydro)
-    cosmo_param_names_vary = ['omega_cold', 'sigma8_cold']
-    #cosmo_param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
+    #cosmo_param_names_vary = ['omega_cold', 'sigma8_cold']
+    cosmo_param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
     bias_param_names_vary = []
     tag_inf = f'{tag_data}_mcmctest_p{len(cosmo_param_names_vary)}_b{len(bias_param_names_vary)}'
             
@@ -294,6 +302,20 @@ def run_likelihood_inference():
                 data_loader.load_data(data_mode, tag_params, tag_biasparams,
                                       kwargs=kwargs_data)
                 
+    ### get covariance
+    tag_params_cov = '_p2_n10000'
+    tag_biasparams_cov = '_b1000_p0_n1'
+    kwargs_data_cov = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
+                   'tag_errG': tag_errG,
+                   'tag_datagen': tag_datagen,
+                   'tag_noiseless': ''} #don't want noiseless here bc want to match SBI training
+    k_cov, y_cov, y_err_cov, params_df_cov, cosmo_param_dict_fixed_cov, biasparams_df_cov, bias_param_dict_fixed_cov, random_ints_cov, random_ints_bias_cov = \
+                data_loader.load_data(data_mode, tag_params_cov, tag_biasparams_cov,
+                                      kwargs=kwargs_data_cov)
+    cov = np.cov(y_cov.T)
+
+    
+    
     if evaluate_mean:
         print("Evaluating mean of test set! idxs_obs ignored")
         ys_obs = np.array([np.mean(y, axis=0)])

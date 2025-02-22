@@ -12,6 +12,10 @@ param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
                 'n_s': r'$n_\mathrm{s}$',
                 'omega_baryon': r'$\Omega_\mathrm{b}$',
                 'omega_m': r'$\Omega_\mathrm{m}$',
+                'b1': r'$b_1$',
+                'b2': r'$b_2$',
+                'bs2': r'$b_{s^2}$',
+                'bl': r'$b_{\Delta}$',
                 }
 
 color_dict_methods = {'mn': 'blue',
@@ -180,6 +184,7 @@ def get_samples_sbi(idx_obs, tag_inf, tag_test=''):
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
     samples_arr = np.load(fn_samples_test_pred)
+    print(samples_arr)
     if samples_arr.ndim == 2:
         return samples_arr
     elif samples_arr.ndim == 3:

@@ -18,8 +18,8 @@ class SBIModel():
     def __init__(self, theta_train=None, y_train_unscaled=None, y_err_train_unscaled=None,
                        theta_val=None, y_val_unscaled=None, y_err_val_unscaled=None,
                        theta_test=None, y_test_unscaled=None, y_err_test_unscaled=None,
-                       param_names=None, run_mode='single',
-                       tag_sbi='', tag_bounds='', n_threads=8, 
+                       param_names=None, dict_bounds=None, run_mode='single',
+                       tag_sbi='', n_threads=8, 
                        ):
         
         # if n_threads is not None:
@@ -71,21 +71,21 @@ class SBIModel():
             self.n_params = self.theta_test.shape[1]
         
         self.run_mode = run_mode
-        self.tag_bounds = tag_bounds
+        if self.run_mode != 'load':
+            assert dict_bounds is not None, 'need dict_bounds if training model'
+        self.dict_bounds = dict_bounds
 
         
     def run(self, max_epochs=500):
 
         if self.run_mode == 'single':
             # get prior
-            # TODO update to deal with bias params!! 
-            _, bounds_dict, _ = gplh.define_LH_cosmo(tag_bounds=self.tag_bounds)
-            l_bounds = np.array([bounds_dict[pn][0] for pn in self.param_names])
-            u_bounds = np.array([bounds_dict[pn][1] for pn in self.param_names])
+            l_bounds = np.array([self.dict_bounds[pn][0] for pn in self.param_names])
+            u_bounds = np.array([self.dict_bounds[pn][1] for pn in self.param_names])
             prior = BoxUniform(low=torch.from_numpy(l_bounds), 
                                high=torch.from_numpy(u_bounds))
 
-            print(bounds_dict)
+            print(self.dict_bounds)
             print("Setting up inference")
             # SimBIG switched to NSF (neural spine flow) from originally an MAF (masked autoregressive flow)
             # could customize this further (that's where would tune hyperparams) 

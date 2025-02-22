@@ -158,6 +158,8 @@ def plot_contours(samples_arr, labels, colors, param_names, param_label_dict,
         bins_arr = [None]*len(param_names)
 
     for i, samples in enumerate(samples_arr):
+        print(param_names)
+        print(samples.shape)
         c.add_chain(chainconsumer.Chain(
                     samples=pd.DataFrame(samples, columns=param_names),
                     name=labels[i], color=colors[i],
@@ -223,17 +225,17 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
 
 def plot_overdensity_field(tracer_field, normalize=False, vmax=None, 
                       title=None, show_labels=True, show_colorbar=True,
-                      slice_width=1, figsize=(6,6), symlog=False):
+                      figsize=(6,6), symlog=False):
    
     plot_field(tracer_field, normalize=normalize, vmax=vmax, 
                       title=title, show_labels=show_labels, show_colorbar=show_colorbar,
-                      slice_width=slice_width, figsize=figsize, symlog=symlog)
+                      figsize=figsize, symlog=symlog)
                     
 
 def plot_field(tracer_field, normalize=False, vmin=None, vmax=None, 
                 title=None, show_labels=True, show_colorbar=True,
                 zslice_min=0, zslice_max=1, figsize=(6,6), log=False, symlog=False, 
-                overdensity=True):
+                overdensity=True, label_cbar=None):
 
         print(np.min(tracer_field), np.max(tracer_field))
 
@@ -287,11 +289,12 @@ def plot_field(tracer_field, normalize=False, vmin=None, vmax=None,
         ax = plt.gca()        
         
         if show_colorbar:
-            if overdensity:
-                label = r'overdensity $\delta$'
-            else:
-                label = r'density'
-            cbar = plt.colorbar(im, label=label, fraction=0.046, pad=0.04)
+            if label_cbar is None:
+                if overdensity:
+                    label_cbar = r'overdensity $\delta$'
+                else:
+                    label_cbar = r'density'
+            cbar = plt.colorbar(im, label=label_cbar, fraction=0.046, pad=0.04)
             cbar.ax.tick_params(labelsize=12) 
             
         if not show_labels:    
