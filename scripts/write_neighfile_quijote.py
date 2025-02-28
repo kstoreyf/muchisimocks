@@ -7,18 +7,25 @@ from pathlib import Path
 
 # Adapted from Raul Angulo's notebook QuijoteBias.ipynb
 
-ngrid = 512
 idx_LH = 663
 BoxSize = 1000
 ptype    = [1] #[1](CDM), [2](neutrinos) or [1,2](CDM+neutrinos)
 
-snapnums = ['000', '001', '002', '003', '004']
+#snapnums = ['000', '001', '002', '003', '004']
+snapnums = ['004']
+tag_res = '_HR' #''
+if tag_res=='':
+    ngrid = 512
+elif tag_res=='_HR':
+    ngrid = 1024
+else:
+    raise ValueError('tag_res must be either "" or "_HR"')
 
 for snapnum in snapnums:
     print(snapnum)
 
-    snapshot = f'/scratch/kstoreyf/Quijote_simulations/Snapshots/latin_hypercube/{idx_LH}/snapdir_{snapnum}/snap_{snapnum}' # 004 = z0 #hyperion
-    snapshot_ics = f'/scratch/kstoreyf/Quijote_simulations/Snapshots/latin_hypercube/{idx_LH}/ICs/ics'
+    snapshot = f'/scratch/kstoreyf/Quijote_simulations/Snapshots/latin_hypercube{tag_res}/{idx_LH}/snapdir_{snapnum}/snap_{snapnum}' # 004 = z0 #hyperion
+    snapshot_ics = f'/scratch/kstoreyf/Quijote_simulations/Snapshots/latin_hypercube{tag_res}/{idx_LH}/ICs/ics'
 
 
     # read the positions and IDs of the ICs
@@ -46,11 +53,11 @@ for snapnum in snapnums:
 
 
     #Saving indexes 
-    fn_lag_index = f'/scratch/kstoreyf/Quijote_simulations/quijote_LH{idx_LH}_snap{snapnum}_neighfile.pickle'
+    fn_lag_index = f'/scratch/kstoreyf/Quijote_simulations/quijote_LH{idx_LH}{tag_res}_snap{snapnum}_neighfile.pickle'
     with open(fn_lag_index, 'wb') as f:
         pickle.dump(lag_index, f, protocol=-1)
 
-    fn_lag_index_ics = f'/scratch/kstoreyf/Quijote_simulations/quijote_ics_LH{idx_LH}_neighfile.pickle'
+    fn_lag_index_ics = f'/scratch/kstoreyf/Quijote_simulations/quijote_ics_LH{idx_LH}{tag_res}_neighfile.pickle'
     if Path(fn_lag_index_ics).exists():
         print(f"IC neighfile {fn_lag_index_ics} already exists! skipping")
     else:
