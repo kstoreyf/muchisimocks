@@ -184,11 +184,11 @@ def get_samples_sbi(idx_obs, tag_inf, tag_test=''):
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
     samples_arr = np.load(fn_samples_test_pred)
-    print(samples_arr)
+    param_names = np.loadtxt(f'{dir_sbi}/param_names.txt', dtype=str)
     if samples_arr.ndim == 2:
-        return samples_arr
+        return samples_arr, param_names
     elif samples_arr.ndim == 3:
-        return samples_arr[:,idx_obs,:]
+        return samples_arr[:,idx_obs,:], param_names
     else:
         raise ValueError(f"Samples shape {samples_arr.shape} is weird!")
 
@@ -208,7 +208,10 @@ def get_samples_emcee(idx_obs, tag_inf, tag_obs=None):
     thin = int(0.5 * np.min(tau))
     #print(n_burn, thin)
     samples = reader.get_chain(discard=n_burn, flat=True, thin=thin)
-    return samples
+    
+    #TODO load and return param_names
+    param_names = None
+    return samples, param_names
 
 
 def get_samples_dynesty(idx_obs, tag_inf, tag_obs=None):
@@ -226,8 +229,9 @@ def get_samples_dynesty(idx_obs, tag_inf, tag_obs=None):
     weights = np.exp(results_dynesty['logwt'] - results_dynesty['logz'][-1])
     samples = resample_equal(results_dynesty.samples, weights)
 
-    return samples
-
+    #TODO load and return param_names
+    param_names = None
+    return samples, param_names
 
 def repeat_arr_rlzs(arr, n_rlzs=1):
     arr_repeat = np.tile(arr, (n_rlzs,1))

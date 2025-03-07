@@ -170,6 +170,37 @@ def param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=1):
 
     return theta, param_names
     
+    
+
+def get_param_names(tag_params=None, tag_biasparams=None, dir_params='../data/params'):
+    """
+    Gets parameter names given tag_params and tag_biasparams.
+
+    Args:
+        tag_params (str): Tag for cosmological parameters.
+        tag_biasparams (str): Tag for bias parameters.
+        dir_params (str): Directory where parameter files are located.
+
+    Returns:
+        list: A list of parameter names.
+    """
+
+    param_names = []
+
+    if tag_params is not None:
+        fn_params = f'{dir_params}/params_lh{tag_params}.txt'
+        if os.path.exists(fn_params):
+            params_df = pd.read_csv(fn_params, index_col=0)
+            param_names.extend(params_df.columns.tolist())
+
+    if tag_biasparams is not None:
+        fn_biasparams = f'{dir_params}/params_lh{tag_biasparams}.txt'
+        if os.path.exists(fn_biasparams):
+            biasparams_df = pd.read_csv(fn_biasparams, index_col=0)
+            param_names.extend(biasparams_df.columns.tolist())
+
+    return param_names
+
 
 def load_data_emuPk(tag_mocks, tag_errG='', tag_datagen='', tag_noiseless='',
                     n_rlzs_per_cosmo=1, tag_mask=''):

@@ -46,10 +46,12 @@ class SBIModel():
         self.y_test_unscaled = y_test_unscaled
         self.y_err_test_unscaled = y_err_test_unscaled
         
-        # if training, need to pass param names
-        if run_mode != 'load':
-            assert param_names is not None, 'need parameter names'
-            self.param_names = param_names
+        #if training, need to pass param names
+        #if run_mode != 'load':
+        # ideally for testing, the saved SBI model would know the 
+        # parameter names, but it seems that they can't save them
+        assert param_names is not None, 'need parameter names'
+        self.param_names = param_names
         
         if self.y_train_unscaled is not None:
             self.setup_scaler_y()
@@ -140,9 +142,12 @@ class SBIModel():
                 pickle.dump(self.posterior, f)
             with open(f"{self.dir_sbi}/inference.p", "wb") as f:
                 pickle.dump(inference, f)
+            with open(f"{self.dir_sbi}/param_names.txt", "w") as f:
+                np.savetxt(f, self.param_names, fmt="%s")
 
         elif self.run_mode == 'load':
             self.load_posterior()
+            self.load_param_names()
             # may need to get n_params somehow
             
         else: 
@@ -156,6 +161,12 @@ class SBIModel():
         with open(fn_posterior, "rb") as f:
             self.posterior = pickle.load(f)
 
+    def load_param_names(self):
+        fn_param_names = f'{self.dir_sbi}/param_names.txt'
+        assert os.path.exists(fn_param_names), f"param_names.txt not found in {self.dir_sbi}"
+        print(f"Loading param_names from {fn_param_names}")
+        with open(fn_param_names, "r") as f:
+            self.param_names = np.loadtxt(f, dtype=str)
 
     def setup_scaler_y(self):
         self.scaler_y = scl.Scaler('log_minmax')

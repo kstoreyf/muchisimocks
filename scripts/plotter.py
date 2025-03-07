@@ -158,8 +158,7 @@ def plot_contours(samples_arr, labels, colors, param_names, param_label_dict,
         bins_arr = [None]*len(param_names)
 
     for i, samples in enumerate(samples_arr):
-        print(param_names)
-        print(samples.shape)
+
         c.add_chain(chainconsumer.Chain(
                     samples=pd.DataFrame(samples, columns=param_names),
                     name=labels[i], color=colors[i],
@@ -205,8 +204,10 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             tag_test = ''
         else:
             tag_test = tags_test[i]
-        samples = utils.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
-        samples_arr.append(samples)
+        samples, param_names_samples = utils.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
+        print(samples.shape)
+        i_pn = [list(param_names_samples).index(pn) for pn in param_names]
+        samples_arr.append(samples[:,i_pn])
 
     smooth_arr = [smooth_dict[method] for method in inf_methods]
     bins_arr = [bins_dict[method] for method in inf_methods]
@@ -221,8 +222,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                         smooth_arr=smooth_arr, bins_arr=bins_arr,
                         truth_loc=truth_loc, title=title, figsize=figsize,
                         extents=extents, fn_save=None)
+    
  # for backwards compatibility
-
 def plot_overdensity_field(tracer_field, normalize=False, vmax=None, 
                       title=None, show_labels=True, show_colorbar=True,
                       figsize=(6,6), symlog=False):

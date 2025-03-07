@@ -21,7 +21,7 @@ import generate_params_lh as gplh
 
 
 def main():
-    #train_likefree_inference()
+    train_likefree_inference()
     test_likefree_inference()
     #run_likelihood_inference()
 
@@ -36,8 +36,8 @@ def train_likefree_inference():
     data_mode = 'muchisimocksPk'
     n_train = None #if None, uses all
     tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
-    #tag_biasparams = '_b1000_p0_n1'
-    tag_biasparams = '_biaszen_p4_n10000'
+    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_biaszen_p4_n10000'
     n_rlzs_per_cosmo = 1
     
     if data_mode == 'emuPk':
@@ -162,8 +162,8 @@ def test_likefree_inference():
     
     # train params
     tag_params = '_p5_n10000'
-    #tag_biasparams = '_b1000_p0_n1'
-    tag_biasparams = '_biaszen_p4_n10000'
+    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_biaszen_p4_n10000'
     n_rlzs_per_cosmo = 1
     n_train = 9000
     
@@ -207,6 +207,8 @@ def test_likefree_inference():
                                       kwargs=kwargs_data_test)
     k, y, y_err = k[mask], y[:,mask], y_err[:,mask]
 
+    param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams)
+
     ### Run inference
     if run_moment:
         #tag_inf = f'{tag_data}_ntrain{n_train}_scalecovminmax'
@@ -246,6 +248,7 @@ def test_likefree_inference():
         #tag_inf = '_emuPk_2param_boxsize500_nrlzs1_ntrain8000'
         sbi_network = sbi_model.SBIModel(
                     tag_sbi=tag_inf, run_mode='load',
+                    param_names=param_names_train,
                     )
         sbi_network.run() #need this to do the loading
         # TODO make this work for both emu and muchisimocks # ?? not sure what this means rn
