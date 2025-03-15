@@ -110,9 +110,31 @@ def load_data_muchisimocksPk_fixedcosmo(tag_mocks, tag_pk, mode_bias_vector='sin
     return param_dict, Pk, gaussian_error_pk, k, bias_vector
 
 
-def load_params(tag_params, tag_biasparams,
+def load_params(tag_params=None, tag_biasparams=None,
                 dir_params='../data/params'):
+    
+    if tag_params is None:
+        params_df = None
+        param_dict_fixed = {}
+        random_ints_bias = None
+    else:        
+        params_df, param_dict_fixed = load_cosmo_params(tag_params, dir_params=dir_params)
+        fn_randints = f'{dir_params}/randints{tag_params}.npy'
+        random_ints = np.load(fn_randints, allow_pickle=True) if os.path.exists(fn_randints) else None
+
+    if tag_biasparams is None:
+        biasparams_df = None
+        biasparams_dict_fixed = {}
+        random_ints_bias = None
+    else:
+        biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams, dir_params=dir_params)
+        fn_randints_bias = f'{dir_params}/randints{tag_biasparams}.npy'
+        random_ints_bias = np.load(fn_randints_bias, allow_pickle=True) if os.path.exists(fn_randints_bias) else None
         
+    return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
+    
+    
+def load_cosmo_params(tag_params, dir_params='../data/params'):
     fn_params = f'{dir_params}/params_lh{tag_params}.txt'
     fn_params_fixed = f'{dir_params}/params_fixed{tag_params}.txt'
     
@@ -126,10 +148,9 @@ def load_params(tag_params, tag_biasparams,
         if os.path.exists(fn_params_fixed)
         else {}
     )
-    #param_names = params_df.columns.tolist()
-    # theta = params_df.values
-    # assert theta.shape[0] == n_data, f"Expected {n_data} rows in {fn_params}"
+    return params_df, param_dict_fixed
     
+def load_bias_params(tag_biasparams, dir_params='../data/params'):
     fn_biasparams = f'{dir_params}/params_lh{tag_biasparams}.txt'
     fn_biasparams_fixed = f'{dir_params}/params_fixed{tag_biasparams}.txt'
     biasparams_df = (
@@ -142,13 +163,7 @@ def load_params(tag_params, tag_biasparams,
         if os.path.exists(fn_biasparams_fixed)
         else {}
     )
-    
-    fn_randints = f'{dir_params}/randints{tag_params}.npy'
-    fn_randints_bias = f'{dir_params}/randints{tag_biasparams}.npy'
-    random_ints = np.load(fn_randints, allow_pickle=True) if os.path.exists(fn_randints) else None
-    random_ints_bias = np.load(fn_randints_bias, allow_pickle=True) if os.path.exists(fn_randints_bias) else None
-    
-    return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
+    return biasparams_df, biasparams_dict_fixed
     
     
 def param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=1):

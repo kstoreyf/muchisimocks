@@ -28,7 +28,8 @@ def compute_pks_muchisimocks():
     # tag_biasparams = '_biaszen_p4_n1000'
     #tag_params = '_test_p5_n1000'
     tag_params = '_quijote_p0_n1000'
-    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_biaszen_p4_n1000'
     tag_mocks = tag_params + tag_biasparams
 
     dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_params}'
@@ -83,7 +84,7 @@ def compute_pks_muchisimocks():
         print("tag_pk:", tag_pk, flush=True)
         for idx_LH in idxs_LH:
             #if idx_LH%10==0:
-            print(f"Computing Pk for LH{idx_LH} ({tag_pk})", flush=True)
+            print(f"Computing Pk for LH{idx_LH} (tag_pk='{tag_pk}')", flush=True)
             fn_fields = f'{dir_mocks}/{subdir_prefix}{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
             #fn_params = f'{dir_mocks}/{subdir_prefix}{idx_LH}/cosmo_{idx_LH}.txt'
             fn_pk = f'{dir_pks}/pk_{idx_LH}{tag_fields_extra}.npy'

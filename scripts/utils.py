@@ -154,6 +154,33 @@ def get_samples(idx_obs, inf_method, tag_inf, tag_test='', tag_obs=None):
     else:
         raise ValueError(f'Method {inf_method} not recognized!')
         
+
+def get_moments_test_sbi(tag_inf, tag_test='', param_names=None):
+    dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
+    fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
+    samples_arr = np.load(fn_samples_test_pred)
+    print(samples_arr.shape)
+
+    dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
+    param_names_all = np.loadtxt(f'{dir_sbi}/param_names.txt', dtype=str)
+    if param_names is None:
+        param_names = param_names_all
+    i_pn = [list(param_names_all).index(pn) for pn in param_names]
+    
+    if samples_arr.ndim == 2:
+        samples_arr = samples_arr[:,i_pn]
+        theta_test_pred = np.mean(samples_arr, axis=0)
+        covs_test_pred = np.cov(samples_arr.T)
+    elif samples_arr.ndim == 3:
+        samples_arr = samples_arr[:,:,i_pn]
+        theta_test_pred = np.mean(samples_arr, axis=0)
+        covs_test_pred = np.array([np.cov(samples_arr[:,i,:].T) for i in range(samples_arr.shape[1])])
+        #theta_test_pred = np.mean(np.mean(samples_arr, axis=0), axis=0)
+        #covs_test_pred = np.mean([np.cov(samples_arr[:,i,:].T) for i in range(samples_arr.shape[1])], axis=0)
+    else:
+        raise ValueError(f"Samples shape {samples_arr.shape} is weird!")
+    return theta_test_pred, covs_test_pred
+        
         
 def get_moments_test_mn(tag_inf, tag_test=''):
     dir_mn = f'../results/results_moment_network/mn{tag_inf}'
@@ -209,8 +236,7 @@ def get_samples_emcee(idx_obs, tag_inf, tag_obs=None):
     #print(n_burn, thin)
     samples = reader.get_chain(discard=n_burn, flat=True, thin=thin)
     
-    #TODO load and return param_names
-    param_names = None
+    param_names = np.loadtxt(f'{dir_emcee}/param_names.txt', dtype=str)
     return samples, param_names
 
 
@@ -229,8 +255,7 @@ def get_samples_dynesty(idx_obs, tag_inf, tag_obs=None):
     weights = np.exp(results_dynesty['logwt'] - results_dynesty['logz'][-1])
     samples = resample_equal(results_dynesty.samples, weights)
 
-    #TODO load and return param_names
-    param_names = None
+    param_names = np.loadtxt(f'{dir_dynesty}/param_names.txt', dtype=str)
     return samples, param_names
 
 def repeat_arr_rlzs(arr, n_rlzs=1):
@@ -342,7 +367,7 @@ def param_name_to_param_name_emu(param_name):
 
 
 def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=None):
-    assert len(bias_vector)==bias_fields_eul.shape[0]-1, "bias_vector must length one less than number of bias fields"
+    assert len(bias_vector)==bias_fields_eul.shape[0]-1, "bias_vector must have length one less than number of bias fields"
     if n_grid_norm is None:
         n_grid_norm = bias_fields_eul.shape[-1]
         
@@ -358,10 +383,10 @@ def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=None):
 
 
 #Compute the predicted galaxy auto pk and galaxy-matter cross pk \
-#given a set of bias parameters
+#given a set of bias parameters; combines the pnns
 
 # copied from https://bitbucket.org/rangulo/baccoemu/src/master/baccoemu/lbias_expansion.py
-def pnn_to_pk(pnn, bias_params):
+def pnn_to_pk(pnn, bias_params, return_cross=False):
     
     message = 'Please, pass a valid bias array, with' \
             + 'b1, b2, bs2, blaplacian'
@@ -369,18 +394,23 @@ def pnn_to_pk(pnn, bias_params):
 
     import itertools
     #k, pnn = self.get_nonlinear_pnn(**kwargs)
-    bias_params = np.concatenate(([1], bias_params))
+    bias_params_extended = np.concatenate(([1], bias_params))
     prod = np.array(
-        list(itertools.combinations_with_replacement(np.arange(len(bias_params)),
+        list(itertools.combinations_with_replacement(np.arange(len(bias_params_extended)),
                                                     r=2)))
 
     pgal_auto = 0
     for i in range(len(pnn)):
         fac = 2 if prod[i, 0] != prod[i, 1] else 1
-        pgal_auto += bias_params[prod[i, 0]] * bias_params[prod[i, 1]] * fac * pnn[i]
-    pgal_cross = np.dot(bias_params, pnn[:5])
-
-    return pgal_auto, pgal_cross
+        pgal_auto += bias_params_extended[prod[i, 0]] * bias_params_extended[prod[i, 1]] * fac * pnn[i]['pk']
+        
+    if return_cross:
+        # TODO check this
+        pks = [pnn[i]['pk'] for i in range(5)]
+        pgal_cross = np.dot(bias_params_extended, pks)
+        return pgal_auto, pgal_cross
+    else:
+        return pgal_auto
 
 
 # used by scripts/generate_emuPks.py, generate_params_lh()

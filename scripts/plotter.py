@@ -205,7 +205,6 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         else:
             tag_test = tags_test[i]
         samples, param_names_samples = utils.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
-        print(samples.shape)
         i_pn = [list(param_names_samples).index(pn) for pn in param_names]
         samples_arr.append(samples[:,i_pn])
 
@@ -303,3 +302,47 @@ def plot_field(tracer_field, normalize=False, vmin=None, vmax=None,
             ax.axes.get_yaxis().set_visible(False)
 
         plt.show()
+        
+        
+        
+def plot_pnn(pnn, kk_emu=None, pnn_emu=None):
+    fig, axarr = plt.subplots(2, 3, figsize=(20,10), height_ratios=[2,1])
+    ax, ax_err = axarr
+
+    labels_pnn = utils.labels_pnn
+
+    contf=0
+    import itertools
+    prod = np.array(list(itertools.combinations_with_replacement(np.arange(5),r=2)))
+
+    for ii in range(0,len(prod)):
+        
+        kk = pnn[ii]['k']
+        pk = pnn[ii]['pk']
+
+        ax[contf].loglog(kk, pk,
+                        color='C'+str(ii), label=labels_pnn[ii], alpha=1, ls='-')
+        
+        if pnn_emu is not None:
+            pk_emu = pnn_emu[ii]
+            ax[contf].loglog(kk_emu, pk_emu, ls=':', color='C'+str(ii), 
+                            )
+            ax_err[contf].semilogx(kk_emu, (pk[i_k_emu]/pk_emu)-1, 
+                                ls='-', color='C'+str(ii),)
+                
+            
+        ax[contf].legend(loc='lower left', frameon=True, fancybox=True, fontsize=14)
+        
+        ax_err[contf].set_xlabel(r'$k[h/$Mpc]', size=30)
+        ax_err[contf].axhline(0, ls='-', color='grey')
+        ax_err[contf].set_ylim(-0.05, 0.05)
+        
+        if ii%5==0 and ii>0:
+            contf+=1
+
+    ax[0].set_ylabel(r'$P_{ij}(k)$', size=26)
+    ax_err[0].set_ylabel(r'$\Delta P_{ij}(k) / P_{ij,\text{emu}}(k) - 1$', size=26)
+    ax[0].set_ylim(1e2)
+    ax[1].set_ylim(1e2)
+    ax[2].set_ylim(1e-1)
+

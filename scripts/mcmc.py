@@ -121,7 +121,11 @@ def evaluate_dynesty(idx_obs, tag_inf='', tag_obs=None, n_threads=8):
     #samples_dynesty = results_dynesty.samples_equal()
     #print(samples_dynesty.shape)
     
+    print(f"Saving parameters to {_param_names_vary}")
     np.save(fn_dynesty, results_dynesty)
+
+    print(f"Saving parameters to {_param_names_vary}")
+    np.savetxt(f'{dir_dynesty}/param_names.txt', _param_names_vary, fmt='%s')
     
     
 def evaluate_emcee(idx_obs, tag_inf='', tag_obs=None, n_threads=8):
@@ -163,6 +167,9 @@ def evaluate_emcee(idx_obs, tag_inf='', tag_obs=None, n_threads=8):
                                               backend=backend)
         _ = sampler_emcee.run_mcmc(theta_0, n_steps, progress=True) 
     end = time.time()
+
+    print(f"Saving parameters to {_param_names_vary}")
+    np.savetxt(f'{dir_emcee}/param_names.txt', _param_names_vary, fmt='%s')
 
     print(f"Time: {end-start} s ({(end-start)/60} min)")
 

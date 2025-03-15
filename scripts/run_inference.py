@@ -21,7 +21,7 @@ import generate_params_lh as gplh
 
 
 def main():
-    train_likefree_inference()
+    #train_likefree_inference()
     test_likefree_inference()
     #run_likelihood_inference()
 
@@ -34,10 +34,10 @@ def train_likefree_inference():
     ### Set up data
     #data_mode = 'emuPk'
     data_mode = 'muchisimocksPk'
-    n_train = None #if None, uses all
+    n_train = 10000 #if None, uses all
     tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
-    tag_biasparams = '_b1000_p0_n1'
-    #tag_biasparams = '_biaszen_p4_n10000'
+    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_biaszen_p4_n10000'
     n_rlzs_per_cosmo = 1
     
     if data_mode == 'emuPk':
@@ -80,7 +80,7 @@ def train_likefree_inference():
     if n_train is None:
         n_train = len(idxs_train) # just get what it is for the full set
     else:
-        idxs_train = idxs_train[n_train]
+        idxs_train = idxs_train[:n_train]
     theta_train, theta_val = theta[idxs_train], theta[idxs_val]
     y_train, y_val = y[idxs_train], y[idxs_val]
     y_err_train, y_err_val = y_err[idxs_train], y_err[idxs_val]
@@ -151,7 +151,8 @@ def test_likefree_inference():
     run_moment = False
     run_sbi = True
 
-    idxs_obs = np.arange(1)
+    #idxs_obs = np.arange(1)
+    idxs_obs = None
     evaluate_mean = True # this will be in additon to the idxs_obs!
     #data_mode = 'muchisimocksPk'
 
@@ -162,14 +163,15 @@ def test_likefree_inference():
     
     # train params
     tag_params = '_p5_n10000'
-    tag_biasparams = '_b1000_p0_n1'
-    #tag_biasparams = '_biaszen_p4_n10000'
+    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_biaszen_p4_n10000'
     n_rlzs_per_cosmo = 1
-    n_train = 9000
+    n_train = 10000
     
     # test params
     tag_params_test = '_quijote_p0_n1000'
     tag_biasparams_test = '_b1000_p0_n1'
+    #tag_biasparams_test = '_biaszen_p4_n1000'
         
     # this if-else is just so it's easier for me to switch between the two; may not need
     if data_mode == 'emuPk':
@@ -256,6 +258,7 @@ def test_likefree_inference():
             y_obs = y
         else:
             y_obs = y[idxs_obs]
+            
         #sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_data_test)
         # maybe should load this in as a separate dataset, but for now seems fine to do this way
         if evaluate_mean:
