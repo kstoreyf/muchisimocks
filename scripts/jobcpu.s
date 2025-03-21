@@ -1,11 +1,12 @@
 #!/bin/bash
 #SBATCH --qos=regular
+##SBATCH --job-name=generate_emupks_p5_n10000_biaszen_p4_n1000
 ##SBATCH --job-name=precompute_kaiser_p5_n10000_b1
 ##SBATCH --job-name=compute_pnn_emu_p5_n10000
 ##SBATCH --job-name=compute_pks_p5_n10000_b0000_cont
 ##SBATCH --job-name=compute_pks_p5_n10000_biaszen_p1_n10000_cont
 ##SBATCH --job-name=compute_pks_fixedcosmo_biaszen_p4_n1000
-#SBATCH --job-name=compute_pnns_p5_n10000_round3
+#SBATCH --job-name=compute_pnns_p5_n10000_round4
 ##SBATCH --job-name=compute_pnns_quijote_p0_n1000
 ##SBATCH --job-name=compute_pnns_test_p5_n1000
 ##SBATCH --job-name=emcee_emuPk_5param_n10000
@@ -18,7 +19,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=24             # tasks per instance
 ##SBATCH --mem=35G 	       # 
-#SBATCH --mem=45G #need >15 for compute_pks # 35 hit OOM for pnn
+#SBATCH --mem=50G #need >15 for compute_pks # 45 hit OOM for pnn
 ##SBATCH --mem=10G
 #SBATCH --output=logs/%x.out
 
@@ -37,9 +38,9 @@ source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile
 conda activate benv
 python compute_pnns.py
 #python run_inference.py
+#python generate_emuPks.py
 #python compute_biased_pks_fields.py
 #python data_creation_pipeline.py 4
 #python identify_bad_mocks.py
 #python compute_theoretical_quantities.py
 
-#python cuda_minimal.py

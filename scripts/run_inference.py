@@ -36,8 +36,8 @@ def train_likefree_inference():
     #data_mode = 'muchisimocksPk'
     n_train = 10000 #if None, uses all
     tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
-    tag_biasparams = '_b1000_p0_n1'
-    #tag_biasparams = '_biaszen_p4_n10000'
+    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_biaszen_p4_n10000'
     n_rlzs_per_cosmo = 1
     
     if data_mode == 'emuPk':
@@ -60,6 +60,7 @@ def train_likefree_inference():
                                       kwargs=kwargs_data)
     mask = data_loader.get_Pk_mask(tag_data, Pk=y)
     print(mask)
+    print(f"Masked {np.sum(mask)} out of {len(mask)} bins")
 
     k, y, y_err = k[mask], y[:,mask], y_err[:,mask]
     print(k.shape, y.shape, y_err.shape)
@@ -156,15 +157,14 @@ def test_likefree_inference():
     evaluate_mean = True # this will be in additon to the idxs_obs!
     #data_mode = 'muchisimocksPk'
 
-
     ### Select trained model
     data_mode = 'emuPk'
     #data_mode = 'muchisimocksPk'
     
     # train params
     tag_params = '_p5_n10000'
-    tag_biasparams = '_b1000_p0_n1'
-    #tag_biasparams = '_biaszen_p4_n10000'
+    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_biaszen_p4_n10000'
     n_rlzs_per_cosmo = 1
     n_train = 10000
     

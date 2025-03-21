@@ -13,19 +13,18 @@ import utils
 def main():
 
     n_data = 10000
-    #tag_params = f'_p5_n{n_data}'
-    # TODO change to tag_params, & tag_biasparams ?
-    #tag_params = f'_test_p5_n{n_data}'
     
     tag_params = f'_p5_n{n_data}'
-    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_biaszen_p4_n10000'
       
     #tag_params = f'_quijote_p0_n{n_data}'
     #tag_biasparams = '_b1000_p0_n1'  
-    
-    #tag_biasparams = '_biaszen_p4_n1000'
+
+    #tag_params = f'_test_p5_n{n_data}'
+    #tag_biasparams = '_b1000_p0_n1'  
+
     tag_mocks = tag_params + tag_biasparams
-    #tag_params = f'_fixedcosmo_n{n_data}'
 
     box_size = 1000.
     tag_errG = f'_boxsize{int(box_size)}'
@@ -45,6 +44,7 @@ def main():
     fn_rands = f'{dir_emuPk}/randints.npy'
     
     ### Read in parameters
+    # these are the same parameter sets as used for the muchisimocks library!
     dir_params = '../data/params'
     fn_params = f'{dir_params}/params_lh{tag_params}.txt'
     fn_params_fixed = f'{dir_params}/params_fixed{tag_params}.txt'
@@ -76,8 +76,7 @@ def main():
                                fn_emuPk_noisy=fn_emuPk_noisy)
 
     
-#def generate_pks(theta, bias_params, param_names, emu,
-#                 fn_emuk=None, fn_emuPk=None, mode_bias_vector='single', overwrite=False):
+# TODO generate the pnns and then recombine them w the bias params
 def generate_pks(emu, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed,
                  fn_emuk=None, fn_emuPk=None, n_data=None, overwrite=False):
     
@@ -153,6 +152,12 @@ def draw_noisy_pk_realizations(Pk_noiseless, gaussian_error_pk, n_rlzs_per_cosmo
         rng = np.random.default_rng(42)
         
     print(f"Drawing noisy Pk for {fn_emuPk_noisy}...")
+    idx_neg = np.where(gaussian_error_pk<0)
+    print(f"{idx_neg[0].shape[0]}/{gaussian_error_pk.shape[0]} have negative gaussian error, replacing w 0")
+    # sometimes the pk is negative and then the gaussian error is negative
+    # just make that error 0 for now so we can do these draws; these bins
+    # will get masked out in the training part anyway
+    gaussian_error_pk[idx_neg] = 0
     Pk = rng.normal(Pk_noiseless, gaussian_error_pk)    
     for _ in range(n_rlzs_per_cosmo-1):
         # i think first set should be equiv to orig?

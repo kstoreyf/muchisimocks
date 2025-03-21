@@ -264,14 +264,20 @@ def load_data_emuPk(tag_mocks, tag_errG='', tag_datagen='', tag_noiseless='',
 def get_Pk_mask(tag_data, tag_mask='', k=None, Pk=None):
     dir_masks = '../data/masks'
     fn_mask = f'{dir_masks}/mask{tag_data}{tag_mask}.txt'
+    print(f"fn_mask: {fn_mask}")
     if os.path.exists(fn_mask):
+        print(f"Loading from {fn_mask} (already exists)")
         return np.loadtxt(fn_mask, dtype=bool)
     else:
         if Pk is not None:
             mask = np.all(Pk>0, axis=0)
         else:
+            assert k is not None, "must pass either Pk or k, if mask doesn't yet exist!"
+            print("No Pk provided and no mask exists, using all bins")
             mask = np.ones(len(k), dtype=int)
+        print(f"Saving mask to {fn_mask}")
         np.savetxt(fn_mask, mask.astype(int), fmt='%i')
+    print(f"Mask masks out {np.sum(~mask)} Pk bins")
     return mask
 
 
