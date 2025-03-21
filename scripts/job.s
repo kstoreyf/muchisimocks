@@ -1,12 +1,15 @@
 #!/bin/bash
 #SBATCH --qos=regular
-#SBATCH --job-name=datagen_p5_n10000_idx1004
-#SBATCH --time=00:30:00
+##SBATCH --job-name=datagen_p5_n10000_idx1004
+##SBATCH --job-name=run_inf_sbi_p5_n10000_b1000_p0_n1_quijote_p0_n1000_b1000_p0_n1_samp10000
+##SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n10000_quijote_p0_n1000_biaszen_p4_n1000_nsf_samp10000
+#SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n10000_quijote_p0_n1000_b1000_p0_n1_nsf
+#SBATCH --time=12:00:00
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=8             # tasks per instance
-#SBATCH --mem=35G 	       # 30 hit OOM error
+#SBATCH --mem=20G 	       # 35 for datagen (30 hit oom)
 #SBATCH --output=logs/%x.out
 
 
@@ -24,9 +27,12 @@ echo "Instance index is ${SLURM_ARRAY_TASK_ID}."
 source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile.d/conda.sh
 conda activate benv
 
-idx_LH_start=1004
-idx_LH_end=$((idx_LH_start+1))
-echo "idx_LH_start=${idx_LH_start}, idx_LH_end=${idx_LH_end}"
-python data_creation_pipeline.py ${idx_LH_start} ${idx_LH_end}
+python run_inference.py
+
+#idx_LH_start=1004
+#idx_LH_end=$((idx_LH_start+1))
+#echo "idx_LH_start=${idx_LH_start}, idx_LH_end=${idx_LH_end}"
+#python data_creation_pipeline.py ${idx_LH_start} ${idx_LH_end}
+
 #python cuda_minimal.py
 #python compute_biased_pks_fields.py

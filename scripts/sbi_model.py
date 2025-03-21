@@ -78,7 +78,7 @@ class SBIModel():
         self.dict_bounds = dict_bounds
 
         
-    def run(self, max_epochs=500):
+    def run(self, max_epochs=1000):
 
         if self.run_mode == 'single':
             # get prior
@@ -94,10 +94,14 @@ class SBIModel():
             # https://sbi-dev.github.io/sbi/latest/tutorials/03_density_estimators/#changing-hyperparameters-of-density-estimators
             # SimBIG uses an ensemble of 5 NSFs
             
+            learning_rate = 1e-4
+            training_batch_size = 32
+            num_hidden_features = 64
                 
             density_estimator_build_fun = posterior_nn(
                 model='maf',
-                # hidden_features=num_hidden_features,
+                #model='nsf', # posteriors were messier, larger (and i think error is overestimated already w maf)
+                hidden_features=num_hidden_features,
                 # num_transforms=num_transforms,
                 # num_blocks=num_blocks
             )
@@ -122,9 +126,9 @@ class SBIModel():
             print("Training")
             density_estimator = inference.train(
                 max_num_epochs=max_epochs,
-                # training_batch_size=training_batch_size,
+                training_batch_size=training_batch_size,
                 validation_fraction=validation_fraction,
-                learning_rate=1e-3,
+                learning_rate=learning_rate,
                 show_train_summary=True
                 )
             
@@ -191,15 +195,20 @@ class SBIModel():
         with open(fn_scaler_y, "rb") as f:
             self.scaler_y = pickle.load(f)
         
-        
+    
     def evaluate(self, y_obs_unscaled, n_samples=10000):
+        # convergence tests show 10,000 is probably good enough, tho for some
+        # parameters there is fluctuation bw 10k, 30k, 100k
+        # (see notebooks/2025-01-24_inference_muchisimocksPk.ipynb)
         y_obs = self.scaler_y.scale(y_obs_unscaled)
         # model is built with float32 so need the data to be here too
         y_obs = np.float32(y_obs)
-        #samples = self.posterior.sample((n_samples,), x=y_obs)
-        print(y_obs_unscaled)
-        print(y_obs)
-        samples = self.posterior.sample_batched((n_samples,), x=y_obs)
+        if y_obs.ndim == 1:
+            samples = self.posterior.sample((n_samples,), x=y_obs)
+        elif y_obs.ndim == 2:
+            samples = self.posterior.sample_batched((n_samples,), x=y_obs)
+        else:
+            raise ValueError(f"y_obs has wrong number of dims! should be 1 or 2 (y_obs.ndim)={y_obs.ndim}")
         return samples
     
     

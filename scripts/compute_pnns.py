@@ -46,9 +46,15 @@ def parse_args():
     
 
 def run_loop():
-    #tag_params = '_quijote_p0_n1000'
+    ## main training set
     n_mocks = 10000
     tag_params = f'_p5_n{n_mocks}'
+    ## fixed cosmo test set
+    #n_mocks = 1000
+    #tag_params = f'_quijote_p0_n{n_mocks}'
+    ## variable cosmo test set
+    #n_mocks = 1000
+    #tag_params = f'_test_p5_n{n_mocks}'
     overwrite = False
     n_threads = 24
     k_min = 0.01

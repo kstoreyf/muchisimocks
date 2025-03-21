@@ -5,17 +5,21 @@
 ##SBATCH --job-name=compute_pks_p5_n10000_b0000_cont
 ##SBATCH --job-name=compute_pks_p5_n10000_biaszen_p1_n10000_cont
 ##SBATCH --job-name=compute_pks_fixedcosmo_biaszen_p4_n1000
-##SBATCH --job-name=compute_pnns_p5_n10000
+#SBATCH --job-name=compute_pnns_p5_n10000_round3
+##SBATCH --job-name=compute_pnns_quijote_p0_n1000
+##SBATCH --job-name=compute_pnns_test_p5_n1000
 ##SBATCH --job-name=emcee_emuPk_5param_n10000
 ##SBATCH --job-name=timetest_datagen_nthreads8
 ##SBATCH --job-name=id_bad_idxs
-#SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n10000_quijote_p0_n1000_biaszen_p4_n1000
+##SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n10000_quijote_p0_n1000_biaszen_p4_n1000
+##SBATCH --job-name=run_inf_sbi_p5_n10000_b1000_p0_n1_quijote_p0_n1000_b1000_p0_n1
 #SBATCH --time=24:00:00 # max 24h
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=24             # tasks per instance
 ##SBATCH --mem=35G 	       # 
-#SBATCH --mem=35G #need >15 for compute_pks # 25 hit OOM for pnn
+#SBATCH --mem=45G #need >15 for compute_pks # 35 hit OOM for pnn
+##SBATCH --mem=10G
 #SBATCH --output=logs/%x.out
 
 
@@ -31,8 +35,8 @@ echo "Instance index is ${SLURM_ARRAY_TASK_ID}."
 # via https://stackoverflow.com/a/65183109
 source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile.d/conda.sh
 conda activate benv
-#python compute_pnns.py
-python run_inference.py
+python compute_pnns.py
+#python run_inference.py
 #python compute_biased_pks_fields.py
 #python data_creation_pipeline.py 4
 #python identify_bad_mocks.py

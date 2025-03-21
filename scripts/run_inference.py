@@ -21,7 +21,7 @@ import generate_params_lh as gplh
 
 
 def main():
-    #train_likefree_inference()
+    train_likefree_inference()
     test_likefree_inference()
     #run_likelihood_inference()
 
@@ -32,12 +32,12 @@ def train_likefree_inference():
     run_sbi = True
 
     ### Set up data
-    #data_mode = 'emuPk'
-    data_mode = 'muchisimocksPk'
+    data_mode = 'emuPk'
+    #data_mode = 'muchisimocksPk'
     n_train = 10000 #if None, uses all
     tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
-    #tag_biasparams = '_b1000_p0_n1'
-    tag_biasparams = '_biaszen_p4_n10000'
+    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_biaszen_p4_n10000'
     n_rlzs_per_cosmo = 1
     
     if data_mode == 'emuPk':
@@ -158,13 +158,13 @@ def test_likefree_inference():
 
 
     ### Select trained model
-    #data_mode = 'emuPk'
-    data_mode = 'muchisimocksPk'
+    data_mode = 'emuPk'
+    #data_mode = 'muchisimocksPk'
     
     # train params
     tag_params = '_p5_n10000'
-    #tag_biasparams = '_b1000_p0_n1'
-    tag_biasparams = '_biaszen_p4_n10000'
+    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_biaszen_p4_n10000'
     n_rlzs_per_cosmo = 1
     n_train = 10000
     
@@ -181,9 +181,8 @@ def test_likefree_inference():
         # test
         tag_errG = '_boxsize1000'
         tag_noiseless = ''
-        #tag_noiseless = '_noiseless'
+        #tag_noiseless = '_noiseless' # if use noiseless, set evaluate_mean=False (?)
         tag_datagen_test = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
-        #evaluate_mean = False # will want to use with fixed cosmo muchisimocks
         kwargs_data_test = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
                             'tag_errG': tag_errG,
                             'tag_datagen': tag_datagen,
@@ -247,6 +246,7 @@ def test_likefree_inference():
     if run_sbi:
         #n_train = 8000
         tag_inf = f'{tag_data_train}_ntrain{n_train}'
+        #tag_inf = f'{tag_data_train}_ntrain{n_train}_nsf'
         #tag_inf = '_emuPk_2param_boxsize500_nrlzs1_ntrain8000'
         sbi_network = sbi_model.SBIModel(
                     tag_sbi=tag_inf, run_mode='load',
@@ -259,12 +259,14 @@ def test_likefree_inference():
         else:
             y_obs = y[idxs_obs]
             
-        #sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_data_test)
         # maybe should load this in as a separate dataset, but for now seems fine to do this way
         if evaluate_mean:
             y_mean = np.mean(y, axis=0)        
             sbi_network.evaluate_test_set(y_test_unscaled=np.atleast_2d(y_mean), tag_test=f'{tag_data_test}_mean')
-    
+        
+        # run on full test set
+        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_data_test)
+
 
 def run_likelihood_inference():
 

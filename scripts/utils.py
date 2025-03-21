@@ -210,7 +210,9 @@ def get_samples_mn(idx_obs, tag_inf, tag_test=''):
 def get_samples_sbi(idx_obs, tag_inf, tag_test=''):
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
+    print(f"fn_samples = {fn_samples_test_pred}")
     samples_arr = np.load(fn_samples_test_pred)
+    print(samples_arr.shape)
     param_names = np.loadtxt(f'{dir_sbi}/param_names.txt', dtype=str)
     if samples_arr.ndim == 2:
         return samples_arr, param_names
