@@ -22,7 +22,7 @@ import generate_params_lh as gplh
 
 def main():
     train_likefree_inference()
-    test_likefree_inference()
+    #test_likefree_inference()
     #run_likelihood_inference()
 
 
@@ -32,8 +32,8 @@ def train_likefree_inference():
     run_sbi = True
 
     ### Set up data
-    data_mode = 'emuPk'
-    #data_mode = 'muchisimocksPk'
+    #data_mode = 'emuPk'
+    data_mode = 'muchisimocksPk'
     n_train = 10000 #if None, uses all
     tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
     #tag_biasparams = '_b1000_p0_n1'
@@ -137,13 +137,37 @@ def train_likefree_inference():
         print(f"Saved results to {moment_network.dir_mn}")
     
     if run_sbi:
-        run_mode = 'single'
-        tag_inf = f'{tag_data}_ntrain{n_train}'
-        sbi_network = sbi_model.SBIModel(theta_train=theta_train, y_train_unscaled=y_train, y_err_train_unscaled=y_err_train,
-                    theta_val=theta_val, y_val_unscaled=y_val, y_err_val_unscaled=y_err_val,
-                    tag_sbi=tag_inf, run_mode=run_mode,
-                    param_names=param_names, dict_bounds=dict_bounds)
-        sbi_network.run()
+        # Run mode and sweep configuration
+        tag_run = ''
+        
+        #run_mode = 'single'
+        #sweep_name = None
+        run_mode = 'sweep'
+        sweep_name = 'sbi-rand10'
+        #run_mode = 'best'
+        #sweep_name = 'sbi-rand10'
+        
+        if run_mode == 'sweep':
+            tag_run += f'_sweep-{sweep_name}'
+        elif run_mode == 'best':
+            tag_run += f'_best-{sweep_name}'
+            
+        tag_inf = f'{tag_data}_ntrain{n_train}{tag_run}'
+        print("tag_inf (SBI):", tag_inf)
+        
+        sbi_network = sbi_model.SBIModel(
+                    theta_train=theta_train,
+                    y_train_unscaled=y_train,
+                    y_err_train_unscaled=y_err_train,
+                    theta_val=theta_val,
+                    y_val_unscaled=y_val,
+                    y_err_val_unscaled=y_err_val,
+                    tag_sbi=tag_inf,
+                    run_mode=run_mode,
+                    sweep_name=sweep_name,
+                    param_names=param_names,
+                    dict_bounds=dict_bounds)
+        sbi_network.run(max_epochs=2000)
 
 
         
@@ -158,13 +182,13 @@ def test_likefree_inference():
     #data_mode = 'muchisimocksPk'
 
     ### Select trained model
-    data_mode = 'emuPk'
-    #data_mode = 'muchisimocksPk'
+    #data_mode = 'emuPk'
+    data_mode = 'muchisimocksPk'
     
     # train params
     tag_params = '_p5_n10000'
-    #tag_biasparams = '_b1000_p0_n1'
-    tag_biasparams = '_biaszen_p4_n10000'
+    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_biaszen_p4_n10000'
     n_rlzs_per_cosmo = 1
     n_train = 10000
     
@@ -245,11 +269,22 @@ def test_likefree_inference():
         
     if run_sbi:
         #n_train = 8000
-        tag_inf = f'{tag_data_train}_ntrain{n_train}'
-        #tag_inf = f'{tag_data_train}_ntrain{n_train}_nsf'
-        #tag_inf = '_emuPk_2param_boxsize500_nrlzs1_ntrain8000'
+        tag_run = ''
+        
+        # For loading a model trained with wandb sweep
+        sweep_name = None
+        #sweep_name = 'sbi-rand10'
+        
+        if sweep_name is not None:
+            tag_run += f'_best-{sweep_name}'
+        
+        tag_inf = f'{tag_data_train}_ntrain{n_train}{tag_run}'
+        print("tag_inf (SBI test):", tag_inf)
+        
         sbi_network = sbi_model.SBIModel(
-                    tag_sbi=tag_inf, run_mode='load',
+                    tag_sbi=tag_inf,
+                    run_mode='load',
+                    sweep_name=sweep_name,
                     param_names=param_names_train,
                     )
         sbi_network.run() #need this to do the loading
