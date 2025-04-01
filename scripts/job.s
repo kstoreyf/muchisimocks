@@ -3,13 +3,18 @@
 ##SBATCH --job-name=datagen_p5_n10000_idx1004
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_b1000_p0_n1_quijote_p0_n1000_b1000_p0_n1_samp10000
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n10000_quijote_p0_n1000_biaszen_p4_n1000_nsf_samp10000
-#SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n10000_quijote_p0_n1000_b1000_p0_n1_nsf
-#SBATCH --time=12:00:00
+##SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n10000_quijote_p0_n1000_b1000_p0_n1_nsf
+##SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n100000_quijote_p0_n1000_b1000_p0_n1
+##SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n10000_test_p5_n1000_biaszen_p4_n1000
+##SBATCH --job-name=run_inf_sbi_p5_n10000_b1zen_n10000_test_p5_n1000_b1zen_p1_n1000
+#SBATCH --job-name=run_inf_sbi_p5_n10000_b1000_p0_n1_test_p5_n1000_b1000_p0_n1
+##SBATCH --job-name=run_inf_sbi_p5_n10000_b1zen_p1_n10000_best-sbi-rand10
+#SBATCH --time=24:00:00
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=8             # tasks per instance
-#SBATCH --mem=20G 	       # 35 for datagen (30 hit oom)
+#SBATCH --mem=30G 	       # 35 for datagen (30 hit oom)
 #SBATCH --output=logs/%x.out
 
 

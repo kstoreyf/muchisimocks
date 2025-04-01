@@ -9,7 +9,6 @@ from sbi.inference import NPE
 from sbi.utils import BoxUniform
 from sbi.neural_nets import posterior_nn
 import torch
-#from sbi.inference.callbacks import IterationCallback
 
 import scaler_custom as scl
 import generate_params_lh as gplh
@@ -39,7 +38,6 @@ class SBIModel():
         self.theta_train = theta_train
         self.y_train_unscaled = y_train_unscaled
         self.y_err_train_unscaled = y_err_train_unscaled
-        print('y_train_unscaled:',self.y_train_unscaled)
 
         self.theta_val = theta_val
         self.y_val_unscaled = y_val_unscaled
@@ -136,9 +134,9 @@ class SBIModel():
         elif self.run_mode == 'single':
             # Use default config for single run
             config = {
-                'learning_rate': 1e-4,
-                'hidden_features': 64,
-                'training_batch_size': 32,
+                'learning_rate': 1e-3,
+                'hidden_features': 128,
+                'training_batch_size': 64,
                 'model_type': 'maf',
                 'max_epochs': max_epochs,
             }
@@ -158,6 +156,8 @@ class SBIModel():
         """
         Fit the SBI model using the specified configuration
         """
+        
+        print(f"Fitting model for dir_sbi={self.dir_sbi}, run_mode={self.run_mode}, sweep_name={self.sweep_name}")
         print("wandb.config:", config)
         
         # get prior
@@ -188,11 +188,10 @@ class SBIModel():
         theta_train_and_val = np.concatenate((self.theta_train, self.theta_val), axis=0)
         y_train_and_val = np.concatenate((self.y_train, self.y_val), axis=0)
         validation_fraction = len(self.theta_val) / len(theta_train_and_val)
+        print(self.theta_val.shape, self.theta_train.shape)
         print(f"Validation fraction: {validation_fraction}")
+        print(self.theta_val)
         
-        print('theta:', theta_train_and_val)
-        print('y:', y_train_and_val)
-
         inference = NPE(prior=prior, density_estimator=density_estimator_build_fun)
         inference = inference.append_simulations(
             torch.tensor(theta_train_and_val, dtype=torch.float32),
@@ -255,7 +254,7 @@ class SBIModel():
             
     def load_posterior(self):
         fn_posterior = f'{self.dir_sbi}/posterior.p'
-        assert os.path.exists(fn_posterior), f"model_mean.keras not found in {self.dir_sbi}"
+        assert os.path.exists(fn_posterior), f"posterior.p not found in {self.dir_sbi}"
         print(f"Loading posterior from {fn_posterior}")
         with open(fn_posterior, "rb") as f:
             self.posterior = pickle.load(f)
@@ -276,7 +275,6 @@ class SBIModel():
         if self.y_test_unscaled is not None:
             self.y_test = self.scaler_y.scale(self.y_test_unscaled)
         
-        print('y_train scaled:',self.y_train)
         fn_scaler_y = f'{self.dir_sbi}/scaler_y.p'
         
         # need pickle for custom object!!

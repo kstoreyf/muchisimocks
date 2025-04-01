@@ -59,6 +59,9 @@ cosmo_dict_quijote = {
                 'tau'           :  0.0952,
                 }   
 
+biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl']    
+
+
 def idxs_train_val_test(random_ints, frac_train=0.8, frac_val=0.1, frac_test=0.1,
                         N_tot=None):
     print(frac_train, frac_val, frac_test)
@@ -179,7 +182,7 @@ def get_moments_test_sbi(tag_inf, tag_test='', param_names=None):
         #covs_test_pred = np.mean([np.cov(samples_arr[:,i,:].T) for i in range(samples_arr.shape[1])], axis=0)
     else:
         raise ValueError(f"Samples shape {samples_arr.shape} is weird!")
-    return theta_test_pred, covs_test_pred
+    return theta_test_pred, covs_test_pred, param_names
         
         
 def get_moments_test_mn(tag_inf, tag_test=''):

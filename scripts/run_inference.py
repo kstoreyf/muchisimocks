@@ -21,8 +21,8 @@ import generate_params_lh as gplh
 
 
 def main():
-    train_likefree_inference()
-    #test_likefree_inference()
+    #train_likefree_inference()
+    test_likefree_inference()
     #run_likelihood_inference()
 
 
@@ -35,9 +35,12 @@ def train_likefree_inference():
     #data_mode = 'emuPk'
     data_mode = 'muchisimocksPk'
     n_train = 10000 #if None, uses all
+    #n_train = None
     tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
     #tag_biasparams = '_b1000_p0_n1'
-    tag_biasparams = '_biaszen_p4_n10000'
+    tag_biasparams = '_b1zen_p1_n10000'
+    #tag_biasparams = '_biaszen_p4_n10000'
+    #tag_biasparams = '_biaszen_p4_n100000'
     n_rlzs_per_cosmo = 1
     
     if data_mode == 'emuPk':
@@ -55,7 +58,7 @@ def train_likefree_inference():
 
     ### Load data and parameters
     # don't need the fixed params for training!
-    k, y, y_err, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = \
+    k, y, y_err, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints_cosmo, random_ints_bias = \
                 data_loader.load_data(data_mode, tag_params, tag_biasparams,
                                       kwargs=kwargs_data)
     mask = data_loader.get_Pk_mask(tag_data, Pk=y)
@@ -71,10 +74,19 @@ def train_likefree_inference():
     dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
 
     theta, param_names = data_loader.param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
+    print(theta.shape)
     print(param_names)
 
+    if theta.shape[0]==len(random_ints_cosmo):
+        random_ints = random_ints_cosmo
+    elif theta.shape[0]==len(random_ints_bias):
+        random_ints = random_ints_bias
+    else:
+        raise ValueError("random int length and theta length mismatch")
+    
     # split into train and validation - but for SBI, these just get lumped back together
     # TODO deal properly with random ints - may break
+    # TODO for repeated bias param sets, need to be careful about how do this split !! think bout it
     idxs_train, idxs_val, _ = utils.idxs_train_val_test(random_ints, frac_train=0.9, frac_val=0.1, frac_test=0.0,
                         N_tot=len(theta))
     # fixing absolute size of validation set, as per chatgpt's advice: https://chatgpt.com/share/678e9ef1-a574-8002-adcb-4929630fbf01
@@ -142,17 +154,19 @@ def train_likefree_inference():
         
         #run_mode = 'single'
         #sweep_name = None
-        run_mode = 'sweep'
+        #run_mode = 'sweep'
+        run_mode = 'best'
         sweep_name = 'sbi-rand10'
-        #run_mode = 'best'
-        #sweep_name = 'sbi-rand10'
         
         if run_mode == 'sweep':
             tag_run += f'_sweep-{sweep_name}'
         elif run_mode == 'best':
             tag_run += f'_best-{sweep_name}'
             
-        tag_inf = f'{tag_data}_ntrain{n_train}{tag_run}'
+        tag_inf = tag_data
+        if n_train is not None:
+            tag_inf += f'_ntrain{n_train}'
+        tag_inf += tag_run
         print("tag_inf (SBI):", tag_inf)
         
         sbi_network = sbi_model.SBIModel(
@@ -177,8 +191,9 @@ def test_likefree_inference():
     run_sbi = True
 
     #idxs_obs = np.arange(1)
-    idxs_obs = None
-    evaluate_mean = True # this will be in additon to the idxs_obs!
+    idxs_obs = None # if none, all (unless evaluate mean)
+    # evaluate_mean will be INSTEAD OF idxs_obs! bc probs want either mean of fixed, or
+    # coverage test matching training (choose below)
     #data_mode = 'muchisimocksPk'
 
     ### Select trained model
@@ -187,16 +202,24 @@ def test_likefree_inference():
     
     # train params
     tag_params = '_p5_n10000'
-    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_b1zen_p1_n10000'
     #tag_biasparams = '_biaszen_p4_n10000'
+    #tag_biasparams = '_biaszen_p4_n100000'
     n_rlzs_per_cosmo = 1
     n_train = 10000
+    #n_train = 100000
     
     # test params
-    tag_params_test = '_quijote_p0_n1000'
-    tag_biasparams_test = '_b1000_p0_n1'
+    #evaluate_mean = True 
+    #tag_params_test = '_quijote_p0_n1000'
+    #tag_biasparams_test = '_b1000_p0_n1'
+    evaluate_mean = False
+    tag_params_test = '_test_p5_n1000'
+    #tag_biasparams_test = '_b1000_p0_n1'
+    tag_biasparams_test = '_b1zen_p1_n1000'
     #tag_biasparams_test = '_biaszen_p4_n1000'
-        
+    
     # this if-else is just so it's easier for me to switch between the two; may not need
     if data_mode == 'emuPk':
         # train
@@ -261,26 +284,31 @@ def test_likefree_inference():
                             run_mode_mean=run_mode_mean, run_mode_cov=run_mode_cov,
                             sweep_name_mean=sweep_name_mean, sweep_name_cov=sweep_name_cov)
         moment_network.run() #need this to do the loading
-        moment_network.evaluate_test_set(y_test_unscaled=y, tag_test=tag_data_test)
         
         if evaluate_mean:
             y_mean = np.mean(y, axis=0)
             moment_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test=f'{tag_data_test}_mean')
+        else:
+            moment_network.evaluate_test_set(y_test_unscaled=y, tag_test=tag_data_test)
+
         
     if run_sbi:
         #n_train = 8000
         tag_run = ''
         
         # For loading a model trained with wandb sweep
-        sweep_name = None
-        #sweep_name = 'sbi-rand10'
+        #sweep_name = None
+        sweep_name = 'sbi-rand10'
         
         if sweep_name is not None:
             tag_run += f'_best-{sweep_name}'
         
-        tag_inf = f'{tag_data_train}_ntrain{n_train}{tag_run}'
+        tag_inf = tag_data_train
+        if n_train is not None:
+            tag_inf += f'_ntrain{n_train}'
+        tag_inf += tag_run
         print("tag_inf (SBI test):", tag_inf)
-        
+
         sbi_network = sbi_model.SBIModel(
                     tag_sbi=tag_inf,
                     run_mode='load',
@@ -298,9 +326,9 @@ def test_likefree_inference():
         if evaluate_mean:
             y_mean = np.mean(y, axis=0)        
             sbi_network.evaluate_test_set(y_test_unscaled=np.atleast_2d(y_mean), tag_test=f'{tag_data_test}_mean')
-        
-        # run on full test set
-        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_data_test)
+        else:
+            # run on full test set
+            sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_data_test)
 
 
 def run_likelihood_inference():

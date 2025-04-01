@@ -11,11 +11,10 @@ import utils
 def load_data(data_mode, tag_params, tag_biasparams,
               kwargs={}):
     
-    tag_mocks = tag_params + tag_biasparams
     if data_mode == 'emuPk':
-        k, y, y_err = load_data_emuPk(tag_mocks, **kwargs)
+        k, y, y_err = load_data_emuPk(tag_params, tag_biasparams, **kwargs)
     elif data_mode == 'muchisimocksPk':
-        k, y, y_err = load_data_muchisimocksPk(tag_mocks, **kwargs)
+        k, y, y_err = load_data_muchisimocksPk(tag_params, tag_biasparams, **kwargs)
     else:
         raise ValueError(f"Data mode {data_mode} not recognized!")
                    
@@ -24,90 +23,148 @@ def load_data(data_mode, tag_params, tag_biasparams,
     return k, y, y_err, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
 
 
-def load_data_muchisimocksPk(tag_mocks, tag_datagen=''):       
+def get_bias_indices_for_idx(idx_LH, factor):
+    """
+    Get the bias parameter indices corresponding to a power spectrum index.
     
-    # if 'fixedcosmo' in tag_mocks:
-    #     param_dict = utils.cosmo_dict_quijote
-    # else:
-    #     dir_params = '../data/params'
-    #     fn_params = f'{dir_params}/params_lh{tag_mocks}.txt'
-    #     params_df = pd.read_csv(fn_params, index_col=0)
+    For a given idx_LH and factor, returns consecutive indices:
+    idx_LH=0, factor=10 -> [0, 1, 2, ..., 9]
+    idx_LH=1, factor=10 -> [10, 11, 12, ..., 19]
     
-    # NOTE for now theta is only cosmo params! 
-    # may want to add bias params too 
-    
-    #param_names = params_df.columns.tolist()
-    #idxs_LH = params_df.index.tolist()
+    Args:
+        idx_LH (int): The power spectrum index
+        factor (int): The factor relating number of bias parameters to number of power spectra
+        
+    Returns:
+        list: List of bias parameter indices
+    """
+    start_idx = idx_LH * factor
+    end_idx = (idx_LH + 1) * factor
+    return list(range(start_idx, end_idx))
 
+
+def check_df_lengths(params_df, biasparams_df):
+    """
+    Check the length relationship between params_df and biasparams_df.
+    
+    Args:
+        params_df (pd.DataFrame): DataFrame containing cosmological parameters
+        biasparams_df (pd.DataFrame): DataFrame containing bias parameters
+        
+    Returns:
+        tuple: (factor, longer_df)
+            - factor: The integer factor relating the lengths (1 if same length)
+            - longer_df: String indicating which DataFrame is longer ('params', 'bias', or 'same')
+    """
+    if params_df is None or biasparams_df is None:
+        return 1, 'same'
+    
+    n_params = len(params_df)
+    n_biasparams = len(biasparams_df)
+    
+    if n_params == n_biasparams:
+        return 1, 'same'
+    
+    if n_params > n_biasparams:
+        factor = n_params / n_biasparams
+        if not factor.is_integer():
+            raise ValueError(f"params_df length ({n_params}) is not an integer multiple of biasparams_df length ({n_biasparams})")
+        return int(factor), 'params'
+    else:
+        factor = n_biasparams / n_params
+        if not factor.is_integer():
+            raise ValueError(f"biasparams_df length ({n_biasparams}) is not an integer multiple of params_df length ({n_params})")
+        return int(factor), 'bias'
+
+
+def load_data_muchisimocksPk(tag_params, tag_biasparams, tag_datagen=''):
+    
+    print("Loading muchisimocks data")
+    tag_mocks = tag_params + tag_biasparams
     dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_datagen}'
-    #idxs_LH = np.array([idx_LH for idx_LH in params_df.index.values 
+    if os.path.exists(dir_pks):
+        mode_pk = 'pk'
+    else:
+        dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pnns_mlib/pnns{tag_params}'
+        mode_pk = 'pnn'
+    
+    # Load bias parameters regardless of mode
+    biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
+    print(tag_biasparams)
+
+    # using regexp bc not loading params_df here (tho could reorg if decide i need)
+    idxs_LH = [int(re.search(fr'{mode_pk}_(\d+)\.npy', file_name).group(1))
+                     for file_name in os.listdir(dir_pks) if re.search(fr'{mode_pk}_(\d+)\.npy', file_name)]
+    idxs_LH = np.sort(np.array(idxs_LH)) # now doing regexp, need to sort
+    #idxs_LH = np.array([idx_LH for idx_LH in params_df.index.values
     #                    if os.path.exists(f"{dir_pks}/pk_{idx_LH}.npy")])
     
-    # using regexp bc not loading params_df here (tho could reorg if decide i need)
-    idxs_LH = [int(re.search(r'pk_(\d+)\.npy', file_name).group(1)) 
-               for file_name in os.listdir(dir_pks) if re.search(r'pk_(\d+)\.npy', file_name)]
-    idxs_LH = np.sort(np.array(idxs_LH)) # now doing regexp, need to sort
-
     assert len(idxs_LH) > 0, f"No pks found in {dir_pks}!"
+    
+    # Check the relationship between biasparams_df and idxs_LH
+    N = len(idxs_LH)
+    factor = 1
+    if biasparams_df is not None:
+        n_biasparams = len(biasparams_df)
+        
+        if n_biasparams < N:
+            raise ValueError(f"biasparams_df length ({n_biasparams}) is shorter than idxs_LH length ({N})")
+        elif n_biasparams > N:
+            # Check if they're related by an integer factor
+            factor = n_biasparams / N
+            if not factor.is_integer():
+                raise ValueError(f"biasparams_df length ({n_biasparams}) is not an integer multiple of idxs_LH length ({N})")
+            factor = int(factor)
+            print(f"biasparams_df is {factor}x longer than idxs_LH. Will map multiple bias parameters to each idx_LH.")
 
     #theta, Pk, gaussian_error_pk = [], [], []
     Pk, gaussian_error_pk = [], []
-    for idx_LH in idxs_LH:
+    for i, idx_LH in enumerate(idxs_LH):
         #if idx_LH%100 == 0:
             #print(f"Loading Pk {idx_LH}", flush=True)
-        fn_pk = f'{dir_pks}/pk_{idx_LH}.npy'
-        pk_obj = np.load(fn_pk, allow_pickle=True).item()
-        Pk.append(pk_obj['pk'])
-        gaussian_error_pk.append(pk_obj['pk_gaussian_error'])
-        # if 'fixedcosmo' in tag_mocks:
-        #     theta.append(param_dict.values)
-        # else:
-        #     param_vals = params_df.loc[idx_LH].values
-        #     theta.append(param_vals)
-
-    Pk = np.array(Pk)
-    #theta = np.array(theta)
-    gaussian_error_pk = np.array(gaussian_error_pk)
-    k = pk_obj['k'] # all ks should be same so just grab one
-    
-    return k, Pk, gaussian_error_pk
-
-
-# hopefully this will become irrelevant after refactor !! 
-def load_data_muchisimocksPk_fixedcosmo(tag_mocks, tag_pk, mode_bias_vector='single'):       
-   
-    idxs_mock = np.array([idx_mock for idx_mock in range(1000) if os.path.exists(f"/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}/pk_{idx_mock}.npy")])
-    
-    dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}'
-    if mode_bias_vector == 'single':
-        fn_bias_vector = f'{dir_pks}/bias_params.txt'
-        bias_vector = np.loadtxt(fn_bias_vector)
-    else:
-        # TODO update as needed
-        bias_vector = None
         
-    param_dict = utils.cosmo_dict_quijote
-
-
-    Pk, gaussian_error_pk = [], []
-    for idx_mock in idxs_mock:
-        fn_pk = f'{dir_pks}/pk_{idx_mock}.npy'
-        pk_obj = np.load(fn_pk, allow_pickle=True).item()
-        Pk.append(pk_obj['pk'])
-        gaussian_error_pk.append(pk_obj['pk_gaussian_error'])
+        fn_pk = f'{dir_pks}/{mode_pk}_{idx_LH}.npy'
+        
+        if mode_pk=='pk':
+            pk_obj = np.load(fn_pk, allow_pickle=True).item()
+            Pk.append(pk_obj['pk'])
+            gaussian_error_pk.append(pk_obj['pk_gaussian_error'])
+        elif mode_pk=='pnn':
+                
+            pnn_obj = np.load(fn_pk, allow_pickle=True)
+            # if n_biasparams == N:
+            #     # Same length - use direct mapping
+            #     bias_params_dict = biasparams_df.loc[idx_LH].to_dict()
+            #     bias_params_dict.update(biasparams_dict_fixed)
+            #     bias_params = [bias_params_dict[bpn] for bpn in utils.biasparam_names_ordered]
+            #     Pk.append(utils.pnn_to_pk(pk_obj, bias_params))
+            # else:
+            # Multiple bias parameters per idx_LH - get all corresponding indices
+            # For idx_LH=0, factor=10: indices 0-9
+            # For idx_LH=1, factor=10: indices 10-19
+            idxs_bias = get_bias_indices_for_idx(idx_LH, factor)
+            
+            for idx_bias in idxs_bias:
+                if biasparams_df is not None:
+                    bias_params_dict = biasparams_df.loc[idx_bias].to_dict()
+                else:
+                    # case where only fixed bias params
+                    bias_params_dict = {}
+                bias_params_dict.update(biasparams_dict_fixed)
+                bias_params = [bias_params_dict[bpn] for bpn in utils.biasparam_names_ordered]
+                Pk.append(utils.pnn_to_pk(pnn_obj, bias_params))
 
     Pk = np.array(Pk)
-    gaussian_error_pk = np.array(gaussian_error_pk)
-    k = pk_obj['k'] # all ks should be same so just grab one
-
-    # TODO do i want / need this here?
-    mask = np.all(Pk>0, axis=0)
-    print(f"{np.sum(np.any(Pk<=0, axis=1))}/{Pk.shape[0]} have at least one non-positive Pk value")
-    print(f"Masking columns {np.where(~mask)[0]}")
-    Pk = Pk[:,mask]
-    gaussian_error_pk = gaussian_error_pk[:,mask]
-    k = k[mask]
-    return param_dict, Pk, gaussian_error_pk, k, bias_vector
+    if mode_pk=='pk':
+        gaussian_error_pk = np.array(gaussian_error_pk)
+        k = pk_obj['k'] # all ks should be same so just grab one
+    elif mode_pk=='pnn':
+        # TODO calcualte gaussian error from pnn pks; but not using so for now just zeros
+        print("For now just using zeros for gaussian error, bc yerr not used in SBI")
+        gaussian_error_pk = np.zeros_like(Pk)
+        k = pnn_obj[0]['k']
+        
+    return k, Pk, gaussian_error_pk
 
 
 def load_params(tag_params=None, tag_biasparams=None,
@@ -167,24 +224,128 @@ def load_bias_params(tag_biasparams, dir_params='../data/params'):
     
     
 def param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=1):
+    """
+    Convert parameter DataFrames to a theta array that can be used for inference.
+    Handles cases where params_df and biasparams_df have different lengths.
+    
+    Args:
+        params_df (pd.DataFrame): DataFrame containing cosmological parameters
+        biasparams_df (pd.DataFrame): DataFrame containing bias parameters
+        n_rlzs_per_cosmo (int): Number of realizations per cosmology
+        
+    Returns:
+        tuple: (theta, param_names)
+            - theta: 2D numpy array of parameter values
+            - param_names: List of parameter names corresponding to columns in theta
+    """
     assert params_df is not None or biasparams_df is not None, "params_df or biasparams_df (or both) must be specified"
     param_names = []
-    if params_df is not None:
-        param_names.extend(params_df.columns.tolist())
-        theta_cosmo_orig = params_df.values
-        theta_cosmo = utils.repeat_arr_rlzs(theta_cosmo_orig, n_rlzs=n_rlzs_per_cosmo)
-    if biasparams_df is not None:
+    
+    # Base case: only one DataFrame provided
+    if params_df is None:
         param_names.extend(biasparams_df.columns.tolist())
         theta_bias_orig = biasparams_df.values
         theta_bias = utils.repeat_arr_rlzs(theta_bias_orig, n_rlzs=n_rlzs_per_cosmo)
-
-    if params_df is not None and biasparams_df is not None:
-        theta = np.concatenate((theta_cosmo, theta_bias), axis=1)
-    else:
-        theta = theta_cosmo if params_df is not None else theta_bias
-
-    return theta, param_names
+        return theta_bias, param_names
+    elif biasparams_df is None:
+        param_names.extend(params_df.columns.tolist())
+        theta_cosmo_orig = params_df.values
+        theta_cosmo = utils.repeat_arr_rlzs(theta_cosmo_orig, n_rlzs=n_rlzs_per_cosmo)
+        return theta_cosmo, param_names
     
+    # Both DataFrames provided - check relationship between their lengths
+    factor, longer_df = check_df_lengths(params_df, biasparams_df)
+    
+    # Add parameter names from both DataFrames
+    param_names.extend(params_df.columns.tolist())
+    param_names.extend(biasparams_df.columns.tolist())
+    
+    # Case: same length - original behavior
+    if longer_df == 'same':
+        theta_cosmo_orig = params_df.values
+        theta_cosmo = utils.repeat_arr_rlzs(theta_cosmo_orig, n_rlzs=n_rlzs_per_cosmo)
+        
+        theta_bias_orig = biasparams_df.values
+        theta_bias = utils.repeat_arr_rlzs(theta_bias_orig, n_rlzs=n_rlzs_per_cosmo)
+        
+        theta = np.concatenate((theta_cosmo, theta_bias), axis=1)
+        return theta, param_names
+    
+    # Case: bias parameters are longer - follow same logic as load_data_muchisimocksPk
+    if longer_df == 'bias':
+        # For each cosmology parameter set, we have multiple bias parameter sets
+        all_thetas = []
+        
+        for idx in params_df.index:
+            # Get the cosmology parameters for this index
+            cosmo_params = params_df.loc[idx].values
+            
+            # Get all corresponding bias parameter indices
+            bias_indices = get_bias_indices_for_idx(idx, factor)
+            
+            # For each bias parameter set, create a combined parameter set
+            for bias_idx in bias_indices:
+                if bias_idx in biasparams_df.index:
+                    bias_params = biasparams_df.loc[bias_idx].values
+                    combined_params = np.concatenate([cosmo_params, bias_params])
+                    all_thetas.append(combined_params)
+        
+        theta = np.array(all_thetas)
+        
+        # Apply realization repetition if needed
+        if n_rlzs_per_cosmo > 1:
+            theta = utils.repeat_arr_rlzs(theta, n_rlzs=n_rlzs_per_cosmo)
+        
+        return theta, param_names
+    
+    # Case: cosmo parameters are longer
+    elif longer_df == 'params':
+        # For each bias parameter set, we have multiple cosmology parameter sets
+        all_thetas = []
+        
+        for idx in biasparams_df.index:
+            # Get the bias parameters for this index
+            bias_params = biasparams_df.loc[idx].values
+            
+            # Get all corresponding cosmology parameter indices
+            cosmo_indices = get_bias_indices_for_idx(idx, factor)
+            
+            # For each cosmology parameter set, create a combined parameter set
+            for cosmo_idx in cosmo_indices:
+                if cosmo_idx in params_df.index:
+                    cosmo_params = params_df.loc[cosmo_idx].values
+                    combined_params = np.concatenate([cosmo_params, bias_params])
+                    all_thetas.append(combined_params)
+        
+        theta = np.array(all_thetas)
+        
+        # Apply realization repetition if needed
+        if n_rlzs_per_cosmo > 1:
+            theta = utils.repeat_arr_rlzs(theta, n_rlzs=n_rlzs_per_cosmo)
+        
+        return theta, param_names
+    
+    
+def load_theta_test(tag_params_test, tag_biasparams_test,
+                    cosmo_param_names_vary=None, bias_param_names_vary=None, n_rlzs_per_cosmo=1):
+    # in theory could make this load whichever of the params want, variable or fixed,
+    # but for now we want either completely fixed or completely varied, so this is fine
+    
+    # get parameter files
+    params_df_test, param_dict_fixed_test, biasparams_df_test, biasparams_dict_fixed_test, _, _ = load_params(tag_params_test, tag_biasparams_test)
+
+    # load test data
+    if 'p0' in tag_params_test and 'p0' in tag_biasparams_test:
+        msg = "If all fixed parameters in test set, need to specify which parameters to provide"
+        assert cosmo_param_names_vary is not None and bias_param_names_vary is not None, msg
+        # if both tests sets are entirely fixed, our theta is just the fixed data, repeated for each observation
+        theta_test = [param_dict_fixed_test[pname] for pname in cosmo_param_names_vary]
+        theta_test.extend([biasparams_dict_fixed_test[pname] for pname in bias_param_names_vary])
+    else:
+        # for when have a LH of varied bias parameters
+        theta_test, param_names = param_dfs_to_theta(params_df_test, biasparams_df_test, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
+        
+    return np.array(theta_test)
     
 
 def get_param_names(tag_params=None, tag_biasparams=None, dir_params='../data/params'):
@@ -217,9 +378,11 @@ def get_param_names(tag_params=None, tag_biasparams=None, dir_params='../data/pa
     return param_names
 
 
-def load_data_emuPk(tag_mocks, tag_errG='', tag_datagen='', tag_noiseless='',
+def load_data_emuPk(tag_params, tag_biasparams, tag_errG='', tag_datagen='', tag_noiseless='',
                     n_rlzs_per_cosmo=1, tag_mask=''):
     
+    tag_mocks = tag_params + tag_biasparams
+
     assert tag_errG is not None, "tag_errG must be specified"
     dir_emuPk = f'../data/emuPks/emuPks{tag_mocks}'
     

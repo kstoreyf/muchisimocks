@@ -42,10 +42,11 @@ def plot_hists_params(vals_arr, param_labels, xlabel_base='', label_arr=None,
             fig.legend(fontsize=12, bbox_to_anchor=(1.7, 0.9))
 
 
-
-def plot_hists_mean(fracdiffs_arr, param_labels, label_arr=None,
-                    color_arr=['salmon'], bins=20, xlim_auto=True,
+def plot_hists_mean(theta_pred_arr, theta_true_arr, param_labels, label_arr=None,
+                    color_arr=['salmon'], n_bins=20, xlim_auto=True,
                     alpha=0.5, histtype='bar'):
+    
+    fracdiffs_arr = theta_pred_arr/theta_true_arr - 1
     if fracdiffs_arr.ndim==2:
         fracdiffs_arr = np.array([fracdiffs_arr])
     n_params = fracdiffs_arr.shape[-1]
@@ -56,14 +57,79 @@ def plot_hists_mean(fracdiffs_arr, param_labels, label_arr=None,
             label = None
             if label_arr is not None:
                 label = label_arr[i]
+                
+            if np.all(np.isnan(fracdiffs[:,pp])):
+                continue
+            
+            if not xlim_auto:
+                mean = 0
+                i_good = ~np.isnan(fracdiffs_arr[:,:,pp])
+                std = np.std(fracdiffs_arr[i_good,pp])
+                n_std = 3
+                xmin = mean - n_std * std
+                xmax = mean + n_std * std
+                bins = np.linspace(xmin, xmax, n_bins)
+            else:
+                bins = n_bins
             plt.hist(fracdiffs[:,pp], bins=bins, alpha=alpha, 
                      color=color_arr[i], label=label, histtype=histtype,
                      lw=2)
         plt.xlabel(rf'$\Delta${param_labels[pp]}/{param_labels[pp]}', fontsize=14)
         plt.ylabel(r'$N$ in bin', fontsize=14)
         plt.axvline(0, color='grey')
-        if not xlim_auto:
-            plt.xlim(-np.max(abs(fracdiffs_arr[:,:,pp])), np.max(abs(fracdiffs[:,:,pp])))
+
+        if label_arr is not None:
+            fig.legend(fontsize=12, bbox_to_anchor=(1.7, 0.9))
+            
+
+
+def plot_hists_var(theta_true_arr, theta_pred_arr, var_pred_arr, param_labels,
+                   label_arr=None, color_arr=None, nbins=20, xlim_auto=True,
+                   alpha=0.5, histtype='bar', lw=2):
+    
+    if theta_true_arr.ndim==2:
+        theta_true_arr = np.array([theta_true_arr])
+        theta_pred_arr = np.array([theta_pred_arr])
+        covs_pred_arr = np.array([covs_pred_arr])
+    n_params = theta_true_arr.shape[-1]
+    
+    if label_arr is None:
+        label_arr = [None] * len(theta_true_arr)
+    if color_arr is None:
+        color_arr = ['salmon'] * len(theta_true_arr)
+    
+    # compute stats
+    diffs_arr = theta_pred_arr - theta_true_arr
+    sigmas_from_truth_arr = []
+    chi2s_arr = []
+    for i, vars_pred in enumerate(var_pred_arr):
+        sigmas_from_truth = []
+        for cc, var_pred in enumerate(vars_pred):
+            err = np.sqrt(var_pred)
+            diffs = diffs_arr[i]
+            sigmas_from_truth.append( diffs[cc]/err )
+        sigmas_from_truth_arr.append(sigmas_from_truth)
+    sigmas_from_truth_arr = np.array(sigmas_from_truth_arr)
+    chi2s_arr = np.array(chi2s_arr)
+        
+    #plot sigmas (1d)
+    x_normal = np.linspace(-3, 3, 30)
+    mean, variance = 0, 1
+    y_normal = np.exp(-np.square(x_normal-mean)/2*variance)/(np.sqrt(2*np.pi*variance))
+    xmin, xmax = -3, 3
+    for pp in range(n_params):
+        fig = plt.figure(figsize=(3,3))
+        plt.title(rf'{param_labels[pp]}')
+        for i in range(sigmas_from_truth_arr.shape[0]):
+            plt.hist(sigmas_from_truth_arr[i][:,pp], bins=np.linspace(xmin, xmax, nbins),
+                    color=color_arr[i], label=label_arr[i], alpha=alpha, density=True,
+                    histtype=histtype, lw=lw)
+        plt.xlabel(r'$\sigma_\text{MN}$')
+        plt.ylabel(r'normalized density', fontsize=12)
+
+        plt.axvline(0, color='grey')
+        plt.xlim(xmin, xmax)
+        plt.plot(x_normal, y_normal, color='black', lw=1, label=r'$\mathcal{N}(0,1)$')
         if label_arr is not None:
             fig.legend(fontsize=12, bbox_to_anchor=(1.7, 0.9))
 

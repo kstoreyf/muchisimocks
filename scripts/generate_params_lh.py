@@ -13,18 +13,24 @@ def main():
     
     # seed 42, at least for the p5 mocks
     seed = 42
-    overwrite = False
+    overwrite = False # probs keep false!!! don't want to overwrite param files
 
     n_samples = 1000
     
-    bounds_type = 'cosmo' #cosmo or bias
-    n_params_vary = 0
+    #bounds_type = 'cosmo' #cosmo or bias
+    #n_params_vary = 0
     #tag_bounds = '' #NOTE params are automatically tagged below; this is for '_test' or '_quijote' so far
-    #tag_bounds = '_test' 
-    tag_bounds = '_quijote'
+    tag_bounds = '_test'
+    #tag_bounds = '_quijote'
     
-    #bounds_type = 'bias'
+    # havent yet used 'test' to restrict bounds for bias params, only cosmo
+    # TODO should i be?
+    bounds_type = 'bias'
+    #n_params_vary = 4
     #tag_bounds = '_biaszen'
+    n_params_vary = 1
+    tag_bounds = '_b1zen'
+    #n_params_vary = 0
     #tag_bounds = '_b1000'
     
     if bounds_type == 'cosmo':
@@ -67,9 +73,7 @@ def main():
 
 
 def define_LH_bias(tag_bounds='biaszen'):
-    
-    param_names_ordered = ['b1', 'b2', 'bs2', 'bl']
-    
+        
     if 'biaswide' in tag_bounds:
         bounds_dict = {'b1'     :  [-5, 20],
                         'b2'    :  [-5, 10],
@@ -82,6 +86,9 @@ def define_LH_bias(tag_bounds='biaszen'):
                         'bs2'   :  [-2, 2],
                         'bl'   :  [-10, 10],
                     }
+    elif 'b1zen' in tag_bounds:
+        bounds_dict = {'b1'     :  [-1, 2],
+                    }
     else:
         bounds_dict = {}
     
@@ -91,10 +98,11 @@ def define_LH_bias(tag_bounds='biaszen'):
                     'bl'   :  0,
                 }
     
+    # used to make the separate test sets, to avoid edge effects
     if 'test' in tag_bounds:
         bounds_dict = restrict_bounds(bounds_dict, factor=0.05)
         
-    return param_names_ordered, bounds_dict, fiducial_dict
+    return utils.biasparam_names_ordered, bounds_dict, fiducial_dict
     
     
 def define_LH_cosmo(tag_bounds=''):
