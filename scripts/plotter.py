@@ -64,10 +64,13 @@ def plot_hists_mean(theta_pred_arr, theta_true_arr, param_labels, label_arr=None
             if not xlim_auto:
                 mean = 0
                 i_good = ~np.isnan(fracdiffs_arr[:,:,pp])
-                std = np.std(fracdiffs_arr[i_good,pp])
+                #std = np.std(fracdiffs_arr[i_good,pp])
+                p16 = np.percentile(fracdiffs_arr[i_good,pp], 16)
+                p84 = np.percentile(fracdiffs_arr[i_good,pp], 84)
+                psym = 0.5*(np.abs(p16) + np.abs(p84))
                 n_std = 3
-                xmin = mean - n_std * std
-                xmax = mean + n_std * std
+                xmin = mean - n_std * psym
+                xmax = mean + n_std * psym
                 bins = np.linspace(xmin, xmax, n_bins)
             else:
                 bins = n_bins

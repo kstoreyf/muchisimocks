@@ -21,7 +21,7 @@ import generate_params_lh as gplh
 
 
 def main():
-    #train_likefree_inference()
+    train_likefree_inference()
     test_likefree_inference()
     #run_likelihood_inference()
 
@@ -34,13 +34,14 @@ def train_likefree_inference():
     ### Set up data
     #data_mode = 'emuPk'
     data_mode = 'muchisimocksPk'
-    n_train = 10000 #if None, uses all
-    #n_train = None
+    #n_train = 10000
+    n_train = 600000
+    #n_train = None #if None, uses all (and no ntrain tag in tag_inf)
     tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
     #tag_biasparams = '_b1000_p0_n1'
-    tag_biasparams = '_b1zen_p1_n10000'
+    #tag_biasparams = '_b1zen_p1_n10000'
     #tag_biasparams = '_biaszen_p4_n10000'
-    #tag_biasparams = '_biaszen_p4_n100000'
+    tag_biasparams = '_biaszen_p4_n100000'
     n_rlzs_per_cosmo = 1
     
     if data_mode == 'emuPk':
@@ -152,11 +153,11 @@ def train_likefree_inference():
         # Run mode and sweep configuration
         tag_run = ''
         
-        #run_mode = 'single'
-        #sweep_name = None
+        run_mode = 'single'
+        sweep_name = None
         #run_mode = 'sweep'
-        run_mode = 'best'
-        sweep_name = 'sbi-rand10'
+        #run_mode = 'best'
+        #sweep_name = 'sbi-rand10'
         
         if run_mode == 'sweep':
             tag_run += f'_sweep-{sweep_name}'
@@ -203,12 +204,13 @@ def test_likefree_inference():
     # train params
     tag_params = '_p5_n10000'
     #tag_biasparams = '_b1000_p0_n1'
-    tag_biasparams = '_b1zen_p1_n10000'
+    #tag_biasparams = '_b1zen_p1_n10000'
     #tag_biasparams = '_biaszen_p4_n10000'
-    #tag_biasparams = '_biaszen_p4_n100000'
+    tag_biasparams = '_biaszen_p4_n100000'
     n_rlzs_per_cosmo = 1
-    n_train = 10000
+    #n_train = 10000
     #n_train = 100000
+    n_train = 600000
     
     # test params
     #evaluate_mean = True 
@@ -217,8 +219,8 @@ def test_likefree_inference():
     evaluate_mean = False
     tag_params_test = '_test_p5_n1000'
     #tag_biasparams_test = '_b1000_p0_n1'
-    tag_biasparams_test = '_b1zen_p1_n1000'
-    #tag_biasparams_test = '_biaszen_p4_n1000'
+    #tag_biasparams_test = '_b1zen_p1_n1000'
+    tag_biasparams_test = '_biaszen_p4_n1000'
     
     # this if-else is just so it's easier for me to switch between the two; may not need
     if data_mode == 'emuPk':
@@ -297,8 +299,8 @@ def test_likefree_inference():
         tag_run = ''
         
         # For loading a model trained with wandb sweep
-        #sweep_name = None
-        sweep_name = 'sbi-rand10'
+        sweep_name = None
+        #sweep_name = 'sbi-rand10'
         
         if sweep_name is not None:
             tag_run += f'_best-{sweep_name}'
