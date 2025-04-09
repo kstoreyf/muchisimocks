@@ -17,6 +17,7 @@ def main():
     #parse_args()
 
 def parse_args():
+fn_fields    
     parser = argparse.ArgumentParser()
     parser.add_argument('--tag_params', type=str, default='_quijote_p0_n1000',
                         help='Tag for parameter set')

@@ -306,23 +306,18 @@ def plot_field(tracer_field, normalize=False, vmin=None, vmax=None,
                 zslice_min=0, zslice_max=1, figsize=(6,6), log=False, symlog=False, 
                 overdensity=True, label_cbar=None):
 
-        print(np.min(tracer_field), np.max(tracer_field))
-
         if normalize:
             tracer_field /= np.max(np.abs(tracer_field))
-        print(np.min(tracer_field), np.max(tracer_field))
         
         if vmax is None:
             vmax = 3*np.std(tracer_field)
        
-        print(tracer_field.shape)
         if tracer_field.ndim==3:
             field_2d = np.mean(tracer_field[:,:,zslice_min:zslice_max], axis=-1)
         elif tracer_field.ndim==2:
             field_2d = tracer_field
         else:
             raise ValueError("field must be 2d or 3d!")
-        print(field_2d.shape)
 
         plt.figure(figsize=figsize, facecolor=(1,1,1,0))
         plt.title(title, fontsize=16)
