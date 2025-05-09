@@ -220,7 +220,8 @@ class SBIModel():
             show_train_summary=True,
             #callbacks=callbacks
             )
-        
+        print("Trained!")
+
         # Get the final training and validation losses
         train_log = inference._summary
         if train_log and len(train_log['training_loss']) > 0:
@@ -251,6 +252,9 @@ class SBIModel():
             config_dict = {k: v for k, v in vars(config).items() if not k.startswith('_')}
             with open(f"{self.dir_sbi}/config.pkl", "wb") as f:
                 pickle.dump(config_dict, f)
+            
+            print(f"Saved model to {self.dir_sbi}")
+
             
     def load_posterior(self):
         fn_posterior = f'{self.dir_sbi}/posterior.p'

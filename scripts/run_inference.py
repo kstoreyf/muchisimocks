@@ -34,14 +34,14 @@ def train_likefree_inference():
     ### Set up data
     #data_mode = 'emuPk'
     data_mode = 'muchisimocksPk'
-    #n_train = 10000
-    n_train = 600000
+    n_train = 6000
+    #n_train = 10
     #n_train = None #if None, uses all (and no ntrain tag in tag_inf)
     tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
     #tag_biasparams = '_b1000_p0_n1'
     #tag_biasparams = '_b1zen_p1_n10000'
     #tag_biasparams = '_biaszen_p4_n10000'
-    tag_biasparams = '_biaszen_p4_n100000'
+    tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
     n_rlzs_per_cosmo = 1
     
     if data_mode == 'emuPk':
@@ -59,7 +59,7 @@ def train_likefree_inference():
 
     ### Load data and parameters
     # don't need the fixed params for training!
-    k, y, y_err, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints_cosmo, random_ints_bias = \
+    k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints_cosmo, random_ints_bias = \
                 data_loader.load_data(data_mode, tag_params, tag_biasparams,
                                       kwargs=kwargs_data)
     mask = data_loader.get_Pk_mask(tag_data, Pk=y)
@@ -74,27 +74,31 @@ def train_likefree_inference():
     _, dict_bounds_bias, _ = gplh.define_LH_bias(tag_biasparams)
     dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
 
-    theta, param_names = data_loader.param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
-    print(theta.shape)
-    print(param_names)
-
-    if theta.shape[0]==len(random_ints_cosmo):
-        random_ints = random_ints_cosmo
-    elif theta.shape[0]==len(random_ints_bias):
-        random_ints = random_ints_bias
-    else:
-        raise ValueError("random int length and theta length mismatch")
-    
     # split into train and validation - but for SBI, these just get lumped back together
     # TODO deal properly with random ints - may break
     # TODO for repeated bias param sets, need to be careful about how do this split !! think bout it
-    idxs_train, idxs_val, _ = utils.idxs_train_val_test(random_ints, frac_train=0.9, frac_val=0.1, frac_test=0.0,
-                        N_tot=len(theta))
-    # fixing absolute size of validation set, as per chatgpt's advice: https://chatgpt.com/share/678e9ef1-a574-8002-adcb-4929630fbf01
+    # idxs_cosmo_train, idxs_cosmo_val, _ = utils.idxs_train_val_test(random_ints_cosmo, frac_train=0.9, frac_val=0.1, frac_test=0.0,
+    #                     N_tot=len(theta))
+    
     if n_train is None:
-        n_train = len(idxs_train) # just get what it is for the full set
-    else:
-        idxs_train = idxs_train[:n_train]
+        n_train = len(random_ints_cosmo)
+    # gets all the random ints less than ntrain, so guarantees we're not missing numbers
+    random_ints_cosmo = random_ints_cosmo[random_ints_cosmo<n_train]
+    # then these are split fractionally into train and val
+    idxs_cosmo_train, idxs_cosmo_val, _ = utils.idxs_train_val_test(random_ints_cosmo, frac_train=0.9, frac_val=0.1, frac_test=0.0)
+
+    # for each row in the index metadata of the full dataset, 
+    # if our intended training idx is in it, keep
+    idxs_all = np.arange(y.shape[0])
+    # first column of idxs_params is the cosmo index
+    idxs_train = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_train)]
+    idxs_val = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_val)]
+
+    theta, param_names = data_loader.param_dfs_to_theta(params_df, biasparams_df, 
+                                                        n_rlzs_per_cosmo=n_rlzs_per_cosmo)
+    print(theta.shape)
+    print(param_names)
+
     theta_train, theta_val = theta[idxs_train], theta[idxs_val]
     y_train, y_val = y[idxs_train], y[idxs_val]
     y_err_train, y_err_val = y_err[idxs_train], y_err[idxs_val]
@@ -152,21 +156,26 @@ def train_likefree_inference():
     if run_sbi:
         # Run mode and sweep configuration
         tag_run = ''
+        tag_inf = tag_data
+        if n_train is not None:
+            tag_inf += f'_ntrain{n_train}'
         
-        run_mode = 'single'
-        sweep_name = None
+        #run_mode = 'single'
+        #sweep_name = None
         #run_mode = 'sweep'
-        #run_mode = 'best'
-        #sweep_name = 'sbi-rand10'
+        run_mode = 'best'
+        sweep_name = 'sbi-rand10'
+        # TODO update so sweep name is as below
+        # rn it is the same sweep name not distinguishing the data! 
+        # so just pulling most recent one
+        # tag_sweep = '_rand10'
+        # sweep_name = tag_inf + tag_sweep
         
         if run_mode == 'sweep':
             tag_run += f'_sweep-{sweep_name}'
         elif run_mode == 'best':
             tag_run += f'_best-{sweep_name}'
             
-        tag_inf = tag_data
-        if n_train is not None:
-            tag_inf += f'_ntrain{n_train}'
         tag_inf += tag_run
         print("tag_inf (SBI):", tag_inf)
         
@@ -208,9 +217,7 @@ def test_likefree_inference():
     #tag_biasparams = '_biaszen_p4_n10000'
     tag_biasparams = '_biaszen_p4_n100000'
     n_rlzs_per_cosmo = 1
-    #n_train = 10000
-    #n_train = 100000
-    n_train = 600000
+    n_train = 6000
     
     # test params
     #evaluate_mean = True 
@@ -252,7 +259,7 @@ def test_likefree_inference():
     ### Load data and parameters
     # our setup is such that that the test set is a separate dataset, so no need to split
     # don't need theta either - just predicting, not comparing
-    k, y, y_err, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
+    k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
                 data_loader.load_data(data_mode, tag_params_test, tag_biasparams_test,
                                       kwargs=kwargs_data_test)
     k, y, y_err = k[mask], y[:,mask], y_err[:,mask]
@@ -299,8 +306,8 @@ def test_likefree_inference():
         tag_run = ''
         
         # For loading a model trained with wandb sweep
-        sweep_name = None
-        #sweep_name = 'sbi-rand10'
+        #sweep_name = None
+        sweep_name = 'sbi-rand10'
         
         if sweep_name is not None:
             tag_run += f'_best-{sweep_name}'
@@ -371,7 +378,8 @@ def run_likelihood_inference():
     
     ### Load data and parameters
     # theta nor random ints needed for likelihood inf
-    k, y, y_err, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
+    # TODO handle idxs_params
+    k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
                 data_loader.load_data(data_mode, tag_params, tag_biasparams,
                                       kwargs=kwargs_data)
                 

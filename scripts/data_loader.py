@@ -12,15 +12,15 @@ def load_data(data_mode, tag_params, tag_biasparams,
               kwargs={}):
     
     if data_mode == 'emuPk':
-        k, y, y_err = load_data_emuPk(tag_params, tag_biasparams, **kwargs)
+        k, y, y_err, idxs_params = load_data_emuPk(tag_params, tag_biasparams, **kwargs)
     elif data_mode == 'muchisimocksPk':
-        k, y, y_err = load_data_muchisimocksPk(tag_params, tag_biasparams, **kwargs)
+        k, y, y_err, idxs_params = load_data_muchisimocksPk(tag_params, tag_biasparams, **kwargs)
     else:
         raise ValueError(f"Data mode {data_mode} not recognized!")
                    
 
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams)
-    return k, y, y_err, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
+    return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
 
 
 def get_bias_indices_for_idx(idx_LH, factor):
@@ -118,7 +118,7 @@ def load_data_muchisimocksPk(tag_params, tag_biasparams, tag_datagen=''):
             print(f"biasparams_df is {factor}x longer than idxs_LH. Will map multiple bias parameters to each idx_LH.")
 
     #theta, Pk, gaussian_error_pk = [], [], []
-    Pk, gaussian_error_pk = [], []
+    Pk, gaussian_error_pk, idxs_params = [], [], []
     for i, idx_LH in enumerate(idxs_LH):
         #if idx_LH%100 == 0:
             #print(f"Loading Pk {idx_LH}", flush=True)
@@ -153,8 +153,10 @@ def load_data_muchisimocksPk(tag_params, tag_biasparams, tag_datagen=''):
                 bias_params_dict.update(biasparams_dict_fixed)
                 bias_params = [bias_params_dict[bpn] for bpn in utils.biasparam_names_ordered]
                 Pk.append(utils.pnn_to_pk(pnn_obj, bias_params))
+                idxs_params.append((idx_LH, idx_bias))
 
     Pk = np.array(Pk)
+    idxs_params= np.array(idxs_params)
     if mode_pk=='pk':
         gaussian_error_pk = np.array(gaussian_error_pk)
         k = pk_obj['k'] # all ks should be same so just grab one
@@ -164,7 +166,7 @@ def load_data_muchisimocksPk(tag_params, tag_biasparams, tag_datagen=''):
         gaussian_error_pk = np.zeros_like(Pk)
         k = pnn_obj[0]['k']
         
-    return k, Pk, gaussian_error_pk
+    return k, Pk, gaussian_error_pk, idxs_params
 
 
 def load_params(tag_params=None, tag_biasparams=None,
@@ -240,7 +242,7 @@ def param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=1):
     """
     assert params_df is not None or biasparams_df is not None, "params_df or biasparams_df (or both) must be specified"
     param_names = []
-    
+
     # Base case: only one DataFrame provided
     if params_df is None:
         param_names.extend(biasparams_df.columns.tolist())
@@ -412,6 +414,8 @@ def load_data_emuPk(tag_params, tag_biasparams, tag_errG='', tag_datagen='', tag
     gaussian_error_pk = utils.repeat_arr_rlzs(gaussian_error_pk_orig, n_rlzs=n_rlzs_per_cosmo)
     assert gaussian_error_pk.shape[0] == Pk.shape[0], "Number of pks and errors should be the same, something is wrong"
     
+    # doing this to align with load_data_muchisimocks; reconsider how to do in emu case
+    idxs_params = np.arange(Pk.shape[0])
     # mask = np.all(Pk>0, axis=0)
     # print("mask")
     # print(mask)
@@ -420,7 +424,7 @@ def load_data_emuPk(tag_params, tag_biasparams, tag_errG='', tag_datagen='', tag
     # k = k[mask]
     # print(len(k))
 
-    return k, Pk, gaussian_error_pk
+    return k, Pk, gaussian_error_pk, idxs_params
 
 
 # used to both remove nonpositive data, and to select certain k_bins
