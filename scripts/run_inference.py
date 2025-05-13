@@ -5,8 +5,9 @@ import numpy as np
 
 from multiprocessing import Pool, cpu_count
 
+import argparse
 import pandas as pd
-import time
+import yaml
 
 import sys
 sys.path.append('/dipc/kstoreyf/muchisimocks/scripts')
@@ -21,41 +22,53 @@ import generate_params_lh as gplh
 
 
 def main():
-    train_likefree_inference()
-    test_likefree_inference()
-    #run_likelihood_inference()
-
-
-
-def train_likefree_inference():
-    run_moment = False
-    run_sbi = True
-
-    ### Set up data
-    #data_mode = 'emuPk'
-    data_mode = 'muchisimocksPk'
-    n_train = 6000
-    #n_train = 10
-    #n_train = None #if None, uses all (and no ntrain tag in tag_inf)
-    tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
-    #tag_biasparams = '_b1000_p0_n1'
-    #tag_biasparams = '_b1zen_p1_n10000'
-    #tag_biasparams = '_biaszen_p4_n10000'
-    tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
-    n_rlzs_per_cosmo = 1
     
-    if data_mode == 'emuPk':
-        tag_errG = '_boxsize1000'
-        tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
-        kwargs_data = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
-                    'tag_errG': tag_errG,
-                    'tag_datagen': tag_datagen}
-    elif data_mode == 'muchisimocksPk':
-        tag_datagen = ''
-        kwargs_data = {'tag_datagen': tag_datagen}
+    parser = argparse.ArgumentParser(description="Run inference with config files.")
+    parser.add_argument("-tr", "--config-train", type=str, help="Path to the training YAML configuration file.")
+    parser.add_argument("-t", "--config-test", type=str, help="Path to the testing YAML configuration file.")
+    parser.add_argument("-l", "--config-runlike", type=str, help="Path to the runlike YAML configuration file.")
+    args = parser.parse_args()
 
-    # no tag_noiseless here for now, bc not training on noiseless data
-    tag_data = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
+    # Run training if a training config file is provided
+    if args.config_train:
+        with open(args.config_train, "r") as file:
+            train_config = yaml.safe_load(file)
+        train_likefree_inference(train_config)
+
+    # Run testing if a testing config file is provided
+    if args.config_test:
+        with open(args.config_test, "r") as file:
+            test_config = yaml.safe_load(file)
+        test_likefree_inference(test_config)
+
+    # WARNING not implemented yet !
+    if args.config_runlike:
+        print("Warning, this has not been implemented yet!")
+        with open(args.config_runlike, "r") as file:
+            runlike_config = yaml.safe_load(file)
+        run_likelihood_inference(runlike_config)
+
+    # If neither config is provided, print a message
+    if not args.config_train and not args.config_test and not args.config_runlike:
+        print("No configuration file provided. Please specify --config-train or --config-test.")
+    
+
+
+def train_likefree_inference(config):
+    """
+    Train function using parameters from the config file.
+    """
+
+    # Read settings from config file
+    data_mode = config["data_mode"]
+    n_train = config["n_train"]
+    tag_params = config["tag_params"]
+    tag_biasparams = config["tag_biasparams"]
+    kwargs_data = config["kwargs_data"]
+    run_mode = config["run_mode"]
+    sweep_name = config["sweep_name"]
+    tag_data = config["tag_data"]
+    tag_inf = config["tag_inf"]
 
     ### Load data and parameters
     # don't need the fixed params for training!
@@ -73,13 +86,10 @@ def train_likefree_inference():
     _, dict_bounds_cosmo, _ = gplh.define_LH_cosmo(tag_params)
     _, dict_bounds_bias, _ = gplh.define_LH_bias(tag_biasparams)
     dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
-
-    # split into train and validation - but for SBI, these just get lumped back together
-    # TODO deal properly with random ints - may break
-    # TODO for repeated bias param sets, need to be careful about how do this split !! think bout it
-    # idxs_cosmo_train, idxs_cosmo_val, _ = utils.idxs_train_val_test(random_ints_cosmo, frac_train=0.9, frac_val=0.1, frac_test=0.0,
-    #                     N_tot=len(theta))
     
+    
+    ### Subsampling (ntrain and train/val)
+    # downsample based on n_train    
     if n_train is None:
         n_train = len(random_ints_cosmo)
     # gets all the random ints less than ntrain, so guarantees we're not missing numbers
@@ -95,7 +105,7 @@ def train_likefree_inference():
     idxs_val = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_val)]
 
     theta, param_names = data_loader.param_dfs_to_theta(params_df, biasparams_df, 
-                                                        n_rlzs_per_cosmo=n_rlzs_per_cosmo)
+                                                        n_rlzs_per_cosmo=config["n_rlzs_per_cosmo"])
     print(theta.shape)
     print(param_names)
 
@@ -103,162 +113,50 @@ def train_likefree_inference():
     y_train, y_val = y[idxs_train], y[idxs_val]
     y_err_train, y_err_val = y_err[idxs_train], y_err[idxs_val]
         
-    ### Run inference
-    if run_moment:
-        #tag_inf = f'{tag_data}_ntrain{n_train}_scalecovminmax'
-        #tag_inf = f'{tag_data}_ntrain{n_train}_eigs'
-        tag_run = ''
-        
-        run_mode_mean = 'best'
-        sweep_name_mean = 'rand10'
-        #run_mode_mean = 'sweep'
-        #sweep_name_mean = 'biaszenp4rand10'
-        # run_mode_mean = 'load'
-        # tag_run += '_best-rand10'
-        # sweep_name_mean = None
-        
-        #run_mode_cov = 'single'
-        #sweep_name_cov = None
-        #run_mode_cov = 'sweep'
-        run_mode_cov = 'best'
-        sweep_name_cov = 'rand10'
-        # run_mode_cov = 'load'
-        # tag_run += '_bestcov-rand10'
-        # sweep_name_cov = None
-        
-        if run_mode_mean == 'sweep':
-            tag_run += f'_sweep-{sweep_name_mean}'
-        elif run_mode_mean == 'best':
-            tag_run += f'_best-{sweep_name_mean}'
-
-        if run_mode_cov == 'sweep':
-            tag_run += f'_sweepcov-{sweep_name_cov}'
-        elif run_mode_cov == 'best':
-            tag_run += f'_bestcov-{sweep_name_cov}'
-            
-        tag_inf = f'{tag_data}_ntrain{n_train}_direct{tag_run}'
-        print("tag_inf", tag_inf)
-        # run_mode_mean = 'single'
-        # sweep_name_mean = None
-        # run_mode_cov = None
-        # sweep_name_cov = None
-        # tag_inf = f'{tag_data}_ntrain{n_train}_direct'
-        
-        moment_network = mn.MomentNetwork(theta_train=theta_train, y_train_unscaled=y_train, y_err_train_unscaled=y_err_train,
-                    theta_val=theta_val, y_val_unscaled=y_val, y_err_val_unscaled=y_err_val,
-                    tag_mn=tag_inf,
-                    run_mode_mean=run_mode_mean, run_mode_cov=run_mode_cov,
-                    sweep_name_mean=sweep_name_mean, sweep_name_cov=sweep_name_cov)
-        #moment_network.run(max_epochs_mean=5, max_epochs_cov=5)
-        moment_network.run(max_epochs_mean=2000, max_epochs_cov=2000)
-        print(f"Saved results to {moment_network.dir_mn}")
+    ### Run inference (now only sbi)
+    # Run mode and sweep configuration
+    print("tag_inf (SBI):", tag_inf)
     
-    if run_sbi:
-        # Run mode and sweep configuration
-        tag_run = ''
-        tag_inf = tag_data
-        if n_train is not None:
-            tag_inf += f'_ntrain{n_train}'
-        
-        #run_mode = 'single'
-        #sweep_name = None
-        #run_mode = 'sweep'
-        run_mode = 'best'
-        sweep_name = 'sbi-rand10'
-        # TODO update so sweep name is as below
-        # rn it is the same sweep name not distinguishing the data! 
-        # so just pulling most recent one
-        # tag_sweep = '_rand10'
-        # sweep_name = tag_inf + tag_sweep
-        
-        if run_mode == 'sweep':
-            tag_run += f'_sweep-{sweep_name}'
-        elif run_mode == 'best':
-            tag_run += f'_best-{sweep_name}'
-            
-        tag_inf += tag_run
-        print("tag_inf (SBI):", tag_inf)
-        
-        sbi_network = sbi_model.SBIModel(
-                    theta_train=theta_train,
-                    y_train_unscaled=y_train,
-                    y_err_train_unscaled=y_err_train,
-                    theta_val=theta_val,
-                    y_val_unscaled=y_val,
-                    y_err_val_unscaled=y_err_val,
-                    tag_sbi=tag_inf,
-                    run_mode=run_mode,
-                    sweep_name=sweep_name,
-                    param_names=param_names,
-                    dict_bounds=dict_bounds)
-        sbi_network.run(max_epochs=2000)
+    sbi_network = sbi_model.SBIModel(
+                theta_train=theta_train,
+                y_train_unscaled=y_train,
+                y_err_train_unscaled=y_err_train,
+                theta_val=theta_val,
+                y_val_unscaled=y_val,
+                y_err_val_unscaled=y_err_val,
+                tag_sbi=tag_inf,
+                run_mode=run_mode,
+                sweep_name=sweep_name,
+                param_names=param_names,
+                dict_bounds=dict_bounds)
+    sbi_network.run(max_epochs=2000)
 
 
         
         
-def test_likefree_inference():
-    run_moment = False
-    run_sbi = True
+def test_likefree_inference(config):
+    """
+    Test function using parameters from the config file."""
 
-    #idxs_obs = np.arange(1)
-    idxs_obs = None # if none, all (unless evaluate mean)
-    # evaluate_mean will be INSTEAD OF idxs_obs! bc probs want either mean of fixed, or
-    # coverage test matching training (choose below)
-    #data_mode = 'muchisimocksPk'
-
-    ### Select trained model
-    #data_mode = 'emuPk'
-    data_mode = 'muchisimocksPk'
+    # Read settings from config file
+    data_mode = config["data_mode"]
+    tag_params = config["tag_params"]
+    tag_biasparams = config["tag_biasparams"]
+    evaluate_mean = config["evaluate_mean"]
+    idxs_obs = config["idxs_obs"]
+    kwargs_data_test = config["kwargs_data_test"]
+    tag_params_test = config["tag_params_test"]
+    tag_biasparams_test = config["tag_biasparams_test"]
+    tag_data_train = config["tag_data_train"]
+    tag_data_test = config["tag_data_test"]
+    tag_inf_train = config["tag_inf_train"]
+    sweep_name = config["sweep_name"]
     
-    # train params
-    tag_params = '_p5_n10000'
-    #tag_biasparams = '_b1000_p0_n1'
-    #tag_biasparams = '_b1zen_p1_n10000'
-    #tag_biasparams = '_biaszen_p4_n10000'
-    tag_biasparams = '_biaszen_p4_n100000'
-    n_rlzs_per_cosmo = 1
-    n_train = 6000
-    
-    # test params
-    #evaluate_mean = True 
-    #tag_params_test = '_quijote_p0_n1000'
-    #tag_biasparams_test = '_b1000_p0_n1'
-    evaluate_mean = False
-    tag_params_test = '_test_p5_n1000'
-    #tag_biasparams_test = '_b1000_p0_n1'
-    #tag_biasparams_test = '_b1zen_p1_n1000'
-    tag_biasparams_test = '_biaszen_p4_n1000'
-    
-    # this if-else is just so it's easier for me to switch between the two; may not need
-    if data_mode == 'emuPk':
-        # train
-        tag_errG = '_boxsize1000'
-        tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
-        # test
-        tag_errG = '_boxsize1000'
-        tag_noiseless = ''
-        #tag_noiseless = '_noiseless' # if use noiseless, set evaluate_mean=False (?)
-        tag_datagen_test = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
-        kwargs_data_test = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
-                            'tag_errG': tag_errG,
-                            'tag_datagen': tag_datagen,
-                            'tag_noiseless': tag_noiseless}
-    elif data_mode == 'muchisimocksPk':
-        # train
-        tag_datagen = ''
-        # test
-        tag_noiseless = ''
-        tag_datagen_test = ''
-        kwargs_data_test = {'tag_datagen': tag_datagen}
-    
-    # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
-    tag_data_train = '_'+data_mode + tag_params + tag_biasparams + tag_datagen
-    tag_data_test = '_'+data_mode + tag_params_test + tag_biasparams_test + tag_datagen_test + tag_noiseless
-    mask = data_loader.get_Pk_mask(tag_data_train)
-
+    # n_rlzs_per_cosmo = kwargs_data_test["n_rlzs_per_cosmo"]
     ### Load data and parameters
     # our setup is such that that the test set is a separate dataset, so no need to split
     # don't need theta either - just predicting, not comparing
+    mask = data_loader.get_Pk_mask(tag_data_train)
     k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
                 data_loader.load_data(data_mode, tag_params_test, tag_biasparams_test,
                                       kwargs=kwargs_data_test)
@@ -266,78 +164,26 @@ def test_likefree_inference():
 
     param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams)
 
-    ### Run inference
-    if run_moment:
-        #tag_inf = f'{tag_data}_ntrain{n_train}_scalecovminmax'
-        #tag_inf = f'{tag_data}_ntrain{n_train}_eigs'
-        tag_run = ''
+    sbi_network = sbi_model.SBIModel(
+                tag_sbi=tag_inf_train,
+                run_mode='load',
+                sweep_name=sweep_name,
+                param_names=param_names_train,
+                )
+    sbi_network.run() #need this to do the loading
+    # TODO make this work for both emu and muchisimocks # ?? not sure what this means rn
+    if idxs_obs is None:
+        y_obs = y
+    else:
+        y_obs = y[idxs_obs]
         
-        run_mode_mean = 'load'
-        tag_run += '_best-rand10'
-        sweep_name_mean = None
-        
-        run_mode_cov = 'load'
-        tag_run += '_bestcov-rand10'
-        sweep_name_cov = None
-
-        tag_inf = f'{tag_data_train}_ntrain{n_train}_direct{tag_run}'
-        print("tag_inf", tag_inf)
-        # run_mode_mean = 'single'
-        # sweep_name_mean = None
-        # run_mode_cov = None
-        # sweep_name_cov = None
-        # tag_inf = f'{tag_data}_ntrain{n_train}_direct'
-        
-        moment_network = mn.MomentNetwork(
-                            tag_mn=tag_inf,
-                            run_mode_mean=run_mode_mean, run_mode_cov=run_mode_cov,
-                            sweep_name_mean=sweep_name_mean, sweep_name_cov=sweep_name_cov)
-        moment_network.run() #need this to do the loading
-        
-        if evaluate_mean:
-            y_mean = np.mean(y, axis=0)
-            moment_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test=f'{tag_data_test}_mean')
-        else:
-            moment_network.evaluate_test_set(y_test_unscaled=y, tag_test=tag_data_test)
-
-        
-    if run_sbi:
-        #n_train = 8000
-        tag_run = ''
-        
-        # For loading a model trained with wandb sweep
-        #sweep_name = None
-        sweep_name = 'sbi-rand10'
-        
-        if sweep_name is not None:
-            tag_run += f'_best-{sweep_name}'
-        
-        tag_inf = tag_data_train
-        if n_train is not None:
-            tag_inf += f'_ntrain{n_train}'
-        tag_inf += tag_run
-        print("tag_inf (SBI test):", tag_inf)
-
-        sbi_network = sbi_model.SBIModel(
-                    tag_sbi=tag_inf,
-                    run_mode='load',
-                    sweep_name=sweep_name,
-                    param_names=param_names_train,
-                    )
-        sbi_network.run() #need this to do the loading
-        # TODO make this work for both emu and muchisimocks # ?? not sure what this means rn
-        if idxs_obs is None:
-            y_obs = y
-        else:
-            y_obs = y[idxs_obs]
-            
-        # maybe should load this in as a separate dataset, but for now seems fine to do this way
-        if evaluate_mean:
-            y_mean = np.mean(y, axis=0)        
-            sbi_network.evaluate_test_set(y_test_unscaled=np.atleast_2d(y_mean), tag_test=f'{tag_data_test}_mean')
-        else:
-            # run on full test set
-            sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_data_test)
+    # maybe should load this in as a separate dataset, but for now seems fine to do this way
+    if evaluate_mean:
+        y_mean = np.mean(y, axis=0)        
+        sbi_network.evaluate_test_set(y_test_unscaled=np.atleast_2d(y_mean), tag_test=f'{tag_data_test}_mean')
+    else:
+        # run on full test set
+        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_data_test)
 
 
 def run_likelihood_inference():
@@ -497,22 +343,6 @@ def scale_y_data(y_train, y_val, y_test,
         return y_train_scaled, y_val_scaled, y_test_scaled, scaler
     else:
         return y_train_scaled, y_val_scaled, y_test_scaled
-
-
-
-
-# def get_test_data(idx_test):
-#     pk_data_unscaled = Pk_test_scaled[idx_test]
-#     pk_data = Pk_test_scaled[idx_test]
-
-#     err_1p = 0.01*pk_data_unscaled
-#     err_1p_scaled = scaler.scale_error(err_1p, pk_data_unscaled)
-#     err_gaussian_scaled = gaussian_error_pk_test_scaled[idx_test]
-#     var = err_gaussian_scaled**2 + err_1p_scaled**2
-#     cov_inv = np.diag(1/var)
-
-
-
 
 
 if __name__=='__main__':
