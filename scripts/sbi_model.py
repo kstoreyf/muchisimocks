@@ -20,7 +20,7 @@ class SBIModel():
                      theta_val=None, y_val_unscaled=None, y_err_val_unscaled=None,
                      theta_test=None, y_test_unscaled=None, y_err_test_unscaled=None,
                      param_names=None, dict_bounds=None, run_mode='single',
-                     tag_sbi='', n_threads=8,
+                     tag_sbi='', n_threads=8, func_scaler_y='log_minmax',
                      sweep_name=None,
                      ):
         
@@ -55,7 +55,7 @@ class SBIModel():
         self.param_names = param_names
         
         if self.y_train_unscaled is not None:
-            self.setup_scaler_y()
+            self.setup_scaler_y(func_scaler_y=func_scaler_y)
             self.n_dim = self.y_train.shape[1]
             #self.n_dim = self.y_train.shape[1:]
             print(self.n_dim)
@@ -270,8 +270,9 @@ class SBIModel():
         with open(fn_param_names, "r") as f:
             self.param_names = np.loadtxt(f, dtype=str)
 
-    def setup_scaler_y(self):
-        self.scaler_y = scl.Scaler('log_minmax')
+    def setup_scaler_y(self, func_scaler_y='log_minmax'):
+        
+        self.scaler_y = scl.Scaler(func_scaler_y)
         self.scaler_y.fit(self.y_train_unscaled)
         
         self.y_train = self.scaler_y.scale(self.y_train_unscaled)

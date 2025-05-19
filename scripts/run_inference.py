@@ -61,6 +61,9 @@ def train_likefree_inference(config):
 
     # Read settings from config file
     data_mode = config["data_mode"]
+    statistics = config["statistics"]
+    # for now before i extend to multiple!
+    statistic = statistics[0]
     n_train = config["n_train"]
     tag_params = config["tag_params"]
     tag_biasparams = config["tag_biasparams"]
@@ -73,20 +76,15 @@ def train_likefree_inference(config):
     ### Load data and parameters
     # don't need the fixed params for training!
     k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints_cosmo, random_ints_bias = \
-                data_loader.load_data(data_mode, tag_params, tag_biasparams,
+                data_loader.load_data(data_mode, statistic, 
+                                      tag_params, tag_biasparams,
                                       kwargs=kwargs_data)
-    mask = data_loader.get_Pk_mask(tag_data, Pk=y)
-    print(mask)
-    print(f"Masked {np.sum(mask)} out of {len(mask)} bins")
-
-    k, y, y_err = k[mask], y[:,mask], y_err[:,mask]
-    print(k.shape, y.shape, y_err.shape)
+    k, y, y_err = data_loader.mask_data(statistic, tag_data, k, y, y_err)
 
     # get bounds dict
     _, dict_bounds_cosmo, _ = gplh.define_LH_cosmo(tag_params)
     _, dict_bounds_bias, _ = gplh.define_LH_bias(tag_biasparams)
     dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
-    
     
     ### Subsampling (ntrain and train/val)
     # downsample based on n_train    
@@ -128,8 +126,10 @@ def train_likefree_inference(config):
                 run_mode=run_mode,
                 sweep_name=sweep_name,
                 param_names=param_names,
-                dict_bounds=dict_bounds)
-    sbi_network.run(max_epochs=2000)
+                dict_bounds=dict_bounds,
+                )
+    #sbi_network.run(max_epochs=2000)
+    sbi_network.run(max_epochs=10)
 
 
         
@@ -140,6 +140,9 @@ def test_likefree_inference(config):
 
     # Read settings from config file
     data_mode = config["data_mode"]
+    statistics = config["statistics"]
+    # for now before i extend to multiple!
+    statistic = statistics[0]
     tag_params = config["tag_params"]
     tag_biasparams = config["tag_biasparams"]
     evaluate_mean = config["evaluate_mean"]
@@ -156,11 +159,11 @@ def test_likefree_inference(config):
     ### Load data and parameters
     # our setup is such that that the test set is a separate dataset, so no need to split
     # don't need theta either - just predicting, not comparing
-    mask = data_loader.get_Pk_mask(tag_data_train)
     k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
-                data_loader.load_data(data_mode, tag_params_test, tag_biasparams_test,
+                data_loader.load_data(data_mode, statistic,
+                                      tag_params_test, tag_biasparams_test,
                                       kwargs=kwargs_data_test)
-    k, y, y_err = k[mask], y[:,mask], y_err[:,mask]
+    k, y, y_err = data_loader.mask_data(statistic, tag_data_train, k, y, y_err)
 
     param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams)
 

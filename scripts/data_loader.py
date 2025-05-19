@@ -8,16 +8,17 @@ import utils
 
 
 
-def load_data(data_mode, tag_params, tag_biasparams,
+def load_data(data_mode, statistic, tag_params, tag_biasparams,
               kwargs={}):
     
     if data_mode == 'emuPk':
         k, y, y_err, idxs_params = load_data_emuPk(tag_params, tag_biasparams, **kwargs)
-    elif data_mode == 'muchisimocksPk':
-        k, y, y_err, idxs_params = load_data_muchisimocksPk(tag_params, tag_biasparams, **kwargs)
+    elif data_mode == 'muchisimocks':
+        k, y, y_err, idxs_params = load_data_muchisimocks(statistic,
+                                        tag_params, tag_biasparams, **kwargs)
     else:
         raise ValueError(f"Data mode {data_mode} not recognized!")
-                   
+
 
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams)
     return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
@@ -77,71 +78,94 @@ def check_df_lengths(params_df, biasparams_df):
         return int(factor), 'bias'
 
 
-def load_data_muchisimocksPk(tag_params, tag_biasparams, tag_datagen=''):
+def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen='',
+                           mode_precomputed=None):
     
     print("Loading muchisimocks data")
     tag_mocks = tag_params + tag_biasparams
-    dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_datagen}'
-    if os.path.exists(dir_pks):
-        mode_pk = 'pk'
+    
+    dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_mocks}{tag_datagen}'
+    
+    # this will differ if not precomputed
+    stat_name = statistic
+    if os.path.exists(dir_statistics):
+        # If the precomputed directory exists, use it
+        mode_precomputed = True
     else:
-        dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pnns_mlib/pnns{tag_params}'
-        mode_pk = 'pnn'
+        if statistic == 'pk':
+            stat_name = 'pnn'
+        dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{stat_name}s_mlib/{stat_name}s{tag_mocks}{tag_datagen}'
+        mode_precomputed = False
     
     # Load bias parameters regardless of mode
+    params_df, param_dict_fixed = load_cosmo_params(tag_params)
     biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
     print(tag_biasparams)
 
     # using regexp bc not loading params_df here (tho could reorg if decide i need)
-    idxs_LH = [int(re.search(fr'{mode_pk}_(\d+)\.npy', file_name).group(1))
-                     for file_name in os.listdir(dir_pks) if re.search(fr'{mode_pk}_(\d+)\.npy', file_name)]
+    idxs_LH = [int(re.search(fr'{stat_name}_(\d+)\.npy', file_name).group(1))
+                     for file_name in os.listdir(dir_statistics) if re.search(fr'{stat_name}_(\d+)\.npy', file_name)]
     idxs_LH = np.sort(np.array(idxs_LH)) # now doing regexp, need to sort
     #idxs_LH = np.array([idx_LH for idx_LH in params_df.index.values
-    #                    if os.path.exists(f"{dir_pks}/pk_{idx_LH}.npy")])
+    #                    if os.path.exists(f"{dir_statistics}/pk_{idx_LH}.npy")])
     
-    assert len(idxs_LH) > 0, f"No pks found in {dir_pks}!"
+    assert len(idxs_LH) > 0, f"No pks found in {dir_statistics}!"
     
     # Check the relationship between biasparams_df and idxs_LH
-    N = len(idxs_LH)
-    factor = 1
-    if biasparams_df is not None:
-        n_biasparams = len(biasparams_df)
+    factor, longer_df = check_df_lengths(params_df, biasparams_df)
+
+    # N = len(idxs_LH)
+    # factor = 1
+    # if biasparams_df is not None:
+    #     n_biasparams = len(biasparams_df)
         
-        if n_biasparams < N:
-            raise ValueError(f"biasparams_df length ({n_biasparams}) is shorter than idxs_LH length ({N})")
-        elif n_biasparams > N:
-            # Check if they're related by an integer factor
-            factor = n_biasparams / N
-            if not factor.is_integer():
-                raise ValueError(f"biasparams_df length ({n_biasparams}) is not an integer multiple of idxs_LH length ({N})")
-            factor = int(factor)
-            print(f"biasparams_df is {factor}x longer than idxs_LH. Will map multiple bias parameters to each idx_LH.")
+    #     if n_biasparams < N:
+    #         raise ValueError(f"biasparams_df length ({n_biasparams}) is shorter than idxs_LH length ({N})")
+    #     elif n_biasparams > N:
+    #         # Check if they're related by an integer factor
+    #         factor = n_biasparams / N
+    #         if not factor.is_integer():
+    #             raise ValueError(f"biasparams_df length ({n_biasparams}) is not an integer multiple of idxs_LH length ({N})")
+    #         factor = int(factor)
+    #         print(f"biasparams_df is {factor}x longer than idxs_LH. Will map multiple bias parameters to each idx_LH.")
 
     #theta, Pk, gaussian_error_pk = [], [], []
-    Pk, gaussian_error_pk, idxs_params = [], [], []
+    stat_arr, error_arr, idxs_params = [], [], []
     for i, idx_LH in enumerate(idxs_LH):
         #if idx_LH%100 == 0:
             #print(f"Loading Pk {idx_LH}", flush=True)
         
-        fn_pk = f'{dir_pks}/{mode_pk}_{idx_LH}.npy'
+        fn_stat = f'{dir_statistics}/{stat_name}_{idx_LH}.npy'
         
-        if mode_pk=='pk':
-            pk_obj = np.load(fn_pk, allow_pickle=True).item()
-            Pk.append(pk_obj['pk'])
-            gaussian_error_pk.append(pk_obj['pk_gaussian_error'])
-        elif mode_pk=='pnn':
-                
-            pnn_obj = np.load(fn_pk, allow_pickle=True)
-            # if n_biasparams == N:
-            #     # Same length - use direct mapping
-            #     bias_params_dict = biasparams_df.loc[idx_LH].to_dict()
-            #     bias_params_dict.update(biasparams_dict_fixed)
-            #     bias_params = [bias_params_dict[bpn] for bpn in utils.biasparam_names_ordered]
-            #     Pk.append(utils.pnn_to_pk(pk_obj, bias_params))
-            # else:
-            # Multiple bias parameters per idx_LH - get all corresponding indices
-            # For idx_LH=0, factor=10: indices 0-9
-            # For idx_LH=1, factor=10: indices 10-19
+        if mode_precomputed:
+            if statistic == 'pk':
+                pk_obj = np.load(fn_stat, allow_pickle=True).item()
+                k = pk_obj['k'] # all ks should be same so just grab one
+                stat, error = pk_obj['pk'], pk_obj['pk_gaussian_error']
+                error_arr.append(error)
+            elif statistic == 'bispec':
+                bispec_obj = np.load(fn_stat, allow_pickle=True).item()
+                # multiply by the weight and normalize to get a 
+                # better behaved stat
+                n_grid = 128
+                norm = n_grid**3
+                k = bispec_obj['k123']
+                stat = norm * bispec_obj['weight']*bispec_obj['bispectrum']['b0']
+            
+            stat_arr.append(stat)
+            # if just one bias param per idx_cosmo, then just use the same
+            idxs_params.append((idx_LH, idx_LH))
+            
+        else:
+            # if not precomputed, we'll have to load the bias params separately   
+            
+            if statistic == 'pk':
+                pnn_obj = np.load(fn_stat, allow_pickle=True)
+                k = pnn_obj[0]['k']
+            else:
+                raise ValueError(f"Statistic {statistic} not recognized for non-precomputed mode!")    
+            
+            assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
             idxs_bias = get_bias_indices_for_idx(idx_LH, factor)
             
             for idx_bias in idxs_bias:
@@ -152,21 +176,35 @@ def load_data_muchisimocksPk(tag_params, tag_biasparams, tag_datagen=''):
                     bias_params_dict = {}
                 bias_params_dict.update(biasparams_dict_fixed)
                 bias_params = [bias_params_dict[bpn] for bpn in utils.biasparam_names_ordered]
-                Pk.append(utils.pnn_to_pk(pnn_obj, bias_params))
+                
+                if statistic == 'pk':
+                    stat = utils.pnn_to_pk(pnn_obj, bias_params)
+                stat_arr.append(stat)
                 idxs_params.append((idx_LH, idx_bias))
 
-    Pk = np.array(Pk)
+    stat_arr = np.array(stat_arr)
     idxs_params= np.array(idxs_params)
-    if mode_pk=='pk':
-        gaussian_error_pk = np.array(gaussian_error_pk)
-        k = pk_obj['k'] # all ks should be same so just grab one
-    elif mode_pk=='pnn':
-        # TODO calcualte gaussian error from pnn pks; but not using so for now just zeros
-        print("For now just using zeros for gaussian error, bc yerr not used in SBI")
-        gaussian_error_pk = np.zeros_like(Pk)
-        k = pnn_obj[0]['k']
+    
+    if len(error_arr)==0:
+        error_arr = np.zeros_like(stat_arr)
         
-    return k, Pk, gaussian_error_pk, idxs_params
+    return k, stat_arr, error_arr, idxs_params
+
+
+def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
+    if statistic == 'pk':
+        mask = get_Pk_mask(tag_data, tag_mask=tag_mask, k=k, Pk=y)
+    else:
+        print("No mask for this statistic, using all data")
+        mask = [False]*y.shape[-1]
+    print(f"Masked {np.sum(mask)} out of {len(mask)} bins")
+    if k.ndim == 1:
+        k_masked = k[mask]
+    elif k.ndim == 2:
+        k_masked = k[:,mask]
+    else:
+        raise ValueError(f"Unexpected k shape: {k.shape}")
+    return k_masked, y[:,mask], y_err[:,mask]
 
 
 def load_params(tag_params=None, tag_biasparams=None,

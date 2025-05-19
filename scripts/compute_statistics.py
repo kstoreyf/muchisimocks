@@ -174,22 +174,26 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4,
         assert tag_biasparams is not None, "tag_biasparams must be provided for bispectrum computation"
         assert len(biasparams_df) == len(params_df), "Not yet implemented to have diff length biasparams_df and params_df"
         
-        biasparam_dict = biasparams_dict_fixed.copy()
-        if biasparams_df is not None:
-            biasparam_dict.update(biasparams_df.loc[idx_mock].to_dict())
-        bias_vector = [biasparam_dict[name] for name in utils.biasparam_names_ordered]
-        tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
-        
-        bspec, bk_corr = compute_bispectrum(base_bispec, tracer_field)
-        k123 = bspec.get_ks()
-        weight = k123.prod(axis=0)
-        bispec_results_dict = {
-            'k123': k123,
-            'bispectrum': bk_corr,
-            'weight': weight,
-        }
+        factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
+        idxs_bias = data_loader.get_bias_indices_for_idx(idx_LH, factor)
+            
+        for idx_bias in idxs_bias:
+            biasparam_dict = biasparams_dict_fixed.copy()
+            if biasparams_df is not None:
+                biasparam_dict.update(biasparams_df.loc[idx_mock].to_dict())
+            bias_vector = [biasparam_dict[name] for name in utils.biasparam_names_ordered]
+            tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
+            
+            bspec, bk_corr = compute_bispectrum(base_bispec, tracer_field)
+            k123 = bspec.get_ks()
+            weight = k123.prod(axis=0)
+            bispec_results_dict = {
+                'k123': k123,
+                'bispectrum': bk_corr,
+                'weight': weight,
+            }
 
-        np.save(fn_statistic, bispec_results_dict)
+            np.save(fn_statistic, bispec_results_dict)
         
     end = time.time()
     print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
