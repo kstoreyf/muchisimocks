@@ -12,6 +12,7 @@ import torch
 
 import scaler_custom as scl
 import generate_params_lh as gplh
+import utils
 
 
 class SBIModel():
@@ -19,8 +20,8 @@ class SBIModel():
     def __init__(self, theta_train=None, y_train_unscaled=None, y_err_train_unscaled=None,
                      theta_val=None, y_val_unscaled=None, y_err_val_unscaled=None,
                      theta_test=None, y_test_unscaled=None, y_err_test_unscaled=None,
-                     param_names=None, dict_bounds=None, run_mode='single',
-                     tag_sbi='', n_threads=8, func_scaler_y='log_minmax',
+                     statistics=None, param_names=None, dict_bounds=None, 
+                     run_mode='single', tag_sbi='', n_threads=8, 
                      sweep_name=None,
                      ):
         
@@ -53,20 +54,24 @@ class SBIModel():
         # parameter names, but it seems that they can't save them
         assert param_names is not None, 'need parameter names'
         self.param_names = param_names
+        assert len(statistics) > 0, 'Pass statistics! (Needed for scaler)'
+        self.statistics = statistics
         
         if self.y_train_unscaled is not None:
-            self.setup_scaler_y(func_scaler_y=func_scaler_y)
+            self.setup_scalers_y()
             self.n_dim = self.y_train.shape[1]
             #self.n_dim = self.y_train.shape[1:]
-            print(self.n_dim)
+            print('ndim:', self.n_dim)
         elif self.y_test_unscaled is not None:
-            self.n_dim = self.y_test_unscaled.shape[1]
+            # better way to do this now that might have multiple statistics?
+            self.n_dim = np.sum([y_test_i.shape[1] for y_test_i in self.y_test_unscaled])
+            #self.n_dim = self.y_test_unscaled.shape[1]
             #self.n_dim = self.y_test.shape[1:]
             
         # If we don't have training data, we'll probs want the scaler
         # (but maybe there's a better place for this...?)
         if self.y_train_unscaled is None:
-            self.load_scaler_y()
+            self.load_scalers_y()
             
         if self.theta_train is not None:
             self.n_params = self.theta_train.shape[1]
@@ -188,9 +193,8 @@ class SBIModel():
         theta_train_and_val = np.concatenate((self.theta_train, self.theta_val), axis=0)
         y_train_and_val = np.concatenate((self.y_train, self.y_val), axis=0)
         validation_fraction = len(self.theta_val) / len(theta_train_and_val)
-        print(self.theta_val.shape, self.theta_train.shape)
+        print('theta_train shape:', self.theta_train.shape, 'theta_val shape:', self.theta_val.shape)
         print(f"Validation fraction: {validation_fraction}")
-        print(self.theta_val)
         
         inference = NPE(prior=prior, density_estimator=density_estimator_build_fun)
         inference = inference.append_simulations(
@@ -270,47 +274,81 @@ class SBIModel():
         with open(fn_param_names, "r") as f:
             self.param_names = np.loadtxt(f, dtype=str)
 
-    def setup_scaler_y(self, func_scaler_y='log_minmax'):
+
+    def setup_scalers_y(self):
         
-        self.scaler_y = scl.Scaler(func_scaler_y)
-        self.scaler_y.fit(self.y_train_unscaled)
-        
-        self.y_train = self.scaler_y.scale(self.y_train_unscaled)
-        self.y_val = self.scaler_y.scale(self.y_val_unscaled)
+        self.scalers_y = []
+        # these have length the number of data samples
+        self.y_train = np.empty((len(self.y_train_unscaled[0]), 0))
+        self.y_val = np.empty((len(self.y_val_unscaled[0]), 0))
+        print(f"y_train shape: {self.y_train.shape}")
+                
+        for i, statistic in enumerate(self.statistics):
+            
+            func_scaler_y = utils.statistics_scaler_funcs[statistic]
+            
+            scaler_y = scl.Scaler(func_scaler_y)
+            print("statistic:", statistic)
+            print(f"min and max before scaling: {np.min(self.y_train_unscaled[i]):3f}, {np.max(self.y_train_unscaled[i]):3f}")
+            
+            scaler_y.fit(self.y_train_unscaled[i])
+            self.scalers_y.append(scaler_y)
+            
+            y_train_i = scaler_y.scale(self.y_train_unscaled[i])
+            y_val_i = scaler_y.scale(self.y_val_unscaled[i])
+
+            self.y_train = np.concatenate((self.y_train, y_train_i), axis=1)
+            self.y_val = np.concatenate((self.y_val, y_val_i), axis=1)
+            if self.y_test_unscaled is not None:
+                y_test_i = scaler_y.scale(self.y_test_unscaled[i])
+                self.y_test = np.concatenate((self.y_test, y_test_i), axis=1)
+            
+            print(f"min and max after scaling: {np.min(scaler_y.scale(self.y_train_unscaled[i])):3f}, {np.max(scaler_y.scale(self.y_train_unscaled[i])):3f}")
+            
+            # save scaler - need pickle for custom object!!
+            fn_scaler_y = f'{self.dir_sbi}/scaler_y_{statistic}.p'
+            with open(fn_scaler_y, "wb") as f:
+                pickle.dump(scaler_y, f)
+                
         if self.y_test_unscaled is not None:
-            self.y_test = self.scaler_y.scale(self.y_test_unscaled)
-        
-        fn_scaler_y = f'{self.dir_sbi}/scaler_y.p'
-        
-        # need pickle for custom object!!
-        with open(fn_scaler_y, "wb") as f:
-            pickle.dump(self.scaler_y, f)
+            print(f"y_test shape: {self.y_test.shape}")
+                
 
+    def load_scalers_y(self):
 
-    def load_scaler_y(self):
-        fn_scaler_y = f'{self.dir_sbi}/scaler_y.p'
-        #self.scaler_cov = np.load(fn_scaler_cov, allow_pickle=True)
-        with open(fn_scaler_y, "rb") as f:
-            self.scaler_y = pickle.load(f)
+        self.scalers_y = []
+        for i, statistic in enumerate(self.statistics):
+            fn_scaler_y = f'{self.dir_sbi}/scaler_y_{statistic}.p'
+            with open(fn_scaler_y, "rb") as f:
+                self.scalers_y.append(pickle.load(f))
+        print(f"Loaded scalers from {self.dir_sbi}")
         
     
     def evaluate(self, y_obs_unscaled, n_samples=10000):
         # convergence tests show 10,000 is probably good enough, tho for some
         # parameters there is fluctuation bw 10k, 30k, 100k
         # (see notebooks/2025-01-24_inference_muchisimocksPk.ipynb)
-        y_obs = self.scaler_y.scale(y_obs_unscaled)
-        # model is built with float32 so need the data to be here too
-        y_obs = np.float32(y_obs)
-        if y_obs.ndim == 1:
-            samples = self.posterior.sample((n_samples,), x=y_obs)
-        elif y_obs.ndim == 2:
-            samples = self.posterior.sample_batched((n_samples,), x=y_obs)
+        if y_obs_unscaled[0].ndim == 1:
+            n_data = 1
         else:
-            raise ValueError(f"y_obs has wrong number of dims! should be 1 or 2 (y_obs.ndim)={y_obs.ndim}")
+            n_data = y_obs_unscaled[0].shape[0]
+        y_obs = np.empty((n_data, 0))
+        for i, y_obs_unscaled_i in enumerate(y_obs_unscaled):
+            if y_obs_unscaled[0].ndim == 1:
+                y_obs_unscaled_i = np.expand_dims(y_obs_unscaled_i, axis=0)
+            y_test_i = self.scalers_y[i].scale(y_obs_unscaled_i)
+            y_obs = np.concatenate((y_obs, y_test_i), axis=1
+                                   )
+        print(f"Testing on y_obs with shape: {y_obs.shape}")
+        # model is built with float32 so need the data to be here too
+        y_obs = np.float32(np.array(y_obs))
+        # using samples_batched bc always putting into 2d first (if were 2d, "samples")
+        samples = self.posterior.sample_batched((n_samples,), x=y_obs)
         return samples
     
     
     def evaluate_test_set(self, y_test_unscaled=None, tag_test=''):
+        print(f"Evaluating test set with tag {tag_test}")
         if y_test_unscaled is None:
             y_test_unscaled = self.y_test_unscaled
         samples_test_pred = self.evaluate(y_test_unscaled)

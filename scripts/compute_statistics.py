@@ -114,6 +114,12 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4,
         tag_biasparams=None,
         base_bispec=None):
 
+    if statistic == 'pnn':
+        precompute = False
+    if statistic == 'bispec':
+        precompute = True
+        assert base_bispec is not None, "base_bispec must be provided for bispectrum computation"
+
     print(f"Starting muchisimocks {statistic} computation for idx_mock={idx_mock}", flush=True)
 
     if tag_biasparams is not None:
@@ -135,11 +141,27 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4,
 
     # We only compute for the specified idx_mock
     fn_fields = f'{dir_mocks}/{subdir_prefix}{idx_mock}/bias_fields_eul_deconvolved_{idx_mock}.npy'
-    fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
-
-    if os.path.exists(fn_statistic) and not overwrite:
-        print(f"Statistic {fn_statistic} exists and overwrite={overwrite}, exiting")
-        return
+    
+    # TODO HERE still working on this!
+    if precompute:
+        # this will be done for bias params
+        factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
+        idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, factor)
+        for idx_bias in idxs_bias:
+            fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
+            exist_all = True
+            if not os.path.exists(fn_statistic) or overwrite:
+                exist_all = False
+        if exist_all:
+            print(f"All statistics for '{dir_statistics}/{statistic}_{idx_mock} exists and overwrite={overwrite}, exiting")
+            return
+    else:
+        fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
+        if os.path.exists(fn_statistic) and not overwrite:
+            print(f"Statistic {fn_statistic} exists and overwrite={overwrite}, exiting")
+            return
+        else:
+            print(f"Computing statistic {fn_statistic} (overwrite={overwrite})")
 
     start = time.time()
     try:
@@ -172,10 +194,11 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4,
     if statistic == 'bispec':
         
         assert tag_biasparams is not None, "tag_biasparams must be provided for bispectrum computation"
-        assert len(biasparams_df) == len(params_df), "Not yet implemented to have diff length biasparams_df and params_df"
+        if params_df is not None and biasparams_df is not None:
+            assert len(biasparams_df) == len(params_df), f"Not yet implemented to have diff length biasparams_df ({len(biasparams_df)}) and params_df ({len(params_df)})"
         
         factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
-        idxs_bias = data_loader.get_bias_indices_for_idx(idx_LH, factor)
+        idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, factor)
             
         for idx_bias in idxs_bias:
             biasparam_dict = biasparams_dict_fixed.copy()

@@ -16,16 +16,17 @@
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_b1000_p0_n1_quijote_p0_n1000_b1000_p0_n1
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_b1zen_n10000_ntrain10000_best-sbi-rand10_test_p5_n1000_b1zen_p1_n1000
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_b1000_p0_n1_test_p5_n1000_b1000_p0_n1
-#SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n100000_ntrain100000_test_p5_n1000_biaszen_p4_n1000
-#SBATCH --time=24:00:00 # max 24h
+##SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n100000_ntrain100000_test_p5_n1000_biaszen_p4_n1000
+#SBATCH --job-name=run_inf_TRAIN_muchisimocks_pk_bispec_p5_n10000_biaszen_p4_n10000_ntrain10000_TEST_muchisimocks_pk_bispec_test_p5_n1000_biaszen_p4_n1000.yaml
+
+#SBATCH --time=20:00:00 # max 24h
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=24             # tasks per instance
-#SBATCH --mem=35G 	       # 
+##SBATCH --mem=35G 	       # 
 ##SBATCH --mem=50G #need >15 for compute_pks # 45 hit OOM for pnn
-##SBATCH --mem=10G
+#SBATCH --mem=35G
 #SBATCH --output=logs/%x.out
-
 
 echo "Current date and time: $(date)"
 echo "Slurm job id is ${SLURM_JOB_ID}"
@@ -39,8 +40,12 @@ echo "Instance index is ${SLURM_ARRAY_TASK_ID}."
 # via https://stackoverflow.com/a/65183109
 source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile.d/conda.sh
 conda activate benv
+
+python run_inference.py \
+	--config-test=../configs/configs_test/config_TRAIN_muchisimocks_pk_bispec_p5_n10000_biaszen_p4_n10000_ntrain10000_TEST_muchisimocks_pk_bispec_test_p5_n1000_biaszen_p4_n1000.yaml
+
 #python compute_pnns.py
-python run_inference.py
+#python run_inference.py
 #python generate_emuPks.py
 #python compute_biased_pks_fields.py
 #python data_creation_pipeline.py 4

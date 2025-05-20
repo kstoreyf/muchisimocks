@@ -8,17 +8,30 @@ import utils
 
 
 
-def load_data(data_mode, statistic, tag_params, tag_biasparams,
+def load_data(data_mode, statistics, tag_params, tag_biasparams,
+              tag_data=None,
               kwargs={}):
     
     if data_mode == 'emuPk':
         k, y, y_err, idxs_params = load_data_emuPk(tag_params, tag_biasparams, **kwargs)
     elif data_mode == 'muchisimocks':
-        k, y, y_err, idxs_params = load_data_muchisimocks(statistic,
-                                        tag_params, tag_biasparams, **kwargs)
+        k, y, y_err = [], [], []
+        for statistic in statistics:
+            # idxs_params should be the same for all so will just grab last one
+            k_i, y_i, y_err_i, idxs_params = load_data_muchisimocks(statistic,
+                                            tag_params, tag_biasparams, **kwargs)
+            print(f"Loaded {statistic} data with shape {y_i.shape}")
+            if tag_data is None:
+                print("No tag_data provided, so not masking data")
+            else:
+                k_i, y_i, y_err_i = mask_data(statistic, tag_data, k_i, y_i, y_err_i)
+
+            k.append(k_i)
+            y.append(y_i)
+            y_err.append(y_err_i)
+
     else:
         raise ValueError(f"Data mode {data_mode} not recognized!")
-
 
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams)
     return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
@@ -94,7 +107,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
     else:
         if statistic == 'pk':
             stat_name = 'pnn'
-        dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{stat_name}s_mlib/{stat_name}s{tag_mocks}{tag_datagen}'
+        dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{stat_name}s_mlib/{stat_name}s{tag_params}{tag_datagen}'
         mode_precomputed = False
     
     # Load bias parameters regardless of mode
@@ -128,6 +141,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
     #             raise ValueError(f"biasparams_df length ({n_biasparams}) is not an integer multiple of idxs_LH length ({N})")
     #         factor = int(factor)
     #         print(f"biasparams_df is {factor}x longer than idxs_LH. Will map multiple bias parameters to each idx_LH.")
+    print("dir statistics", dir_statistics)
 
     #theta, Pk, gaussian_error_pk = [], [], []
     stat_arr, error_arr, idxs_params = [], [], []
@@ -150,7 +164,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
                 n_grid = 128
                 norm = n_grid**3
                 k = bispec_obj['k123']
-                stat = norm * bispec_obj['weight']*bispec_obj['bispectrum']['b0']
+                stat = norm**3 * bispec_obj['weight']*bispec_obj['bispectrum']['b0']
             
             stat_arr.append(stat)
             # if just one bias param per idx_cosmo, then just use the same
@@ -183,6 +197,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
                 idxs_params.append((idx_LH, idx_bias))
 
     stat_arr = np.array(stat_arr)
+    error_arr = np.array(error_arr)
     idxs_params= np.array(idxs_params)
     
     if len(error_arr)==0:
@@ -196,8 +211,8 @@ def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
         mask = get_Pk_mask(tag_data, tag_mask=tag_mask, k=k, Pk=y)
     else:
         print("No mask for this statistic, using all data")
-        mask = [False]*y.shape[-1]
-    print(f"Masked {np.sum(mask)} out of {len(mask)} bins")
+        mask = [True]*y.shape[-1]
+    print(f"Masked {np.sum(~np.array(mask))} out of {len(mask)} bins")
     if k.ndim == 1:
         k_masked = k[mask]
     elif k.ndim == 2:
@@ -465,6 +480,7 @@ def load_data_emuPk(tag_params, tag_biasparams, tag_errG='', tag_datagen='', tag
     return k, Pk, gaussian_error_pk, idxs_params
 
 
+# TODO make mask saving more robust
 # used to both remove nonpositive data, and to select certain k_bins
 def get_Pk_mask(tag_data, tag_mask='', k=None, Pk=None):
     dir_masks = '../data/masks'

@@ -63,7 +63,7 @@ def train_likefree_inference(config):
     data_mode = config["data_mode"]
     statistics = config["statistics"]
     # for now before i extend to multiple!
-    statistic = statistics[0]
+    #statistic = statistics[0]
     n_train = config["n_train"]
     tag_params = config["tag_params"]
     tag_biasparams = config["tag_biasparams"]
@@ -76,10 +76,10 @@ def train_likefree_inference(config):
     ### Load data and parameters
     # don't need the fixed params for training!
     k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints_cosmo, random_ints_bias = \
-                data_loader.load_data(data_mode, statistic, 
+                data_loader.load_data(data_mode, statistics, 
                                       tag_params, tag_biasparams,
+                                      tag_data=tag_data,
                                       kwargs=kwargs_data)
-    k, y, y_err = data_loader.mask_data(statistic, tag_data, k, y, y_err)
 
     # get bounds dict
     _, dict_bounds_cosmo, _ = gplh.define_LH_cosmo(tag_params)
@@ -97,19 +97,29 @@ def train_likefree_inference(config):
 
     # for each row in the index metadata of the full dataset, 
     # if our intended training idx is in it, keep
-    idxs_all = np.arange(y.shape[0])
+    # y_shape is (n_stats, n_idxs, n_bins) (inhomogeneous!)
+    idxs_all = np.arange(len(y[0]))
     # first column of idxs_params is the cosmo index
     idxs_train = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_train)]
     idxs_val = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_val)]
 
     theta, param_names = data_loader.param_dfs_to_theta(params_df, biasparams_df, 
                                                         n_rlzs_per_cosmo=config["n_rlzs_per_cosmo"])
-    print(theta.shape)
+    print('theta shape:', theta.shape)
     print(param_names)
 
     theta_train, theta_val = theta[idxs_train], theta[idxs_val]
-    y_train, y_val = y[idxs_train], y[idxs_val]
-    y_err_train, y_err_val = y_err[idxs_train], y_err[idxs_val]
+    y_train, y_val, y_err_train, y_err_val = [], [], [], []
+    for i_stat in range(len(statistics)):
+        print(f"y train shape for statistic {statistics[i_stat]}:", y[i_stat][idxs_train].shape)
+        y_train.append(y[i_stat][idxs_train])
+        y_val.append(y[i_stat][idxs_val])
+        y_err_train.append(y_err[i_stat][idxs_train])
+        y_err_val.append(y_err[i_stat][idxs_val])    
+        
+    print("y_train shape:", len(y_train), len(y_train[0]), len(y_train[0][0]))
+    # y_train, y_val = y[:,idxs_train], y[:,idxs_val]
+    # y_err_train, y_err_val = y_err[:,idxs_train], y_err[:,idxs_val]
         
     ### Run inference (now only sbi)
     # Run mode and sweep configuration
@@ -126,10 +136,11 @@ def train_likefree_inference(config):
                 run_mode=run_mode,
                 sweep_name=sweep_name,
                 param_names=param_names,
+                statistics=statistics,
                 dict_bounds=dict_bounds,
                 )
-    #sbi_network.run(max_epochs=2000)
-    sbi_network.run(max_epochs=10)
+    sbi_network.run(max_epochs=2000)
+    #sbi_network.run(max_epochs=10)
 
 
         
@@ -142,11 +153,12 @@ def test_likefree_inference(config):
     data_mode = config["data_mode"]
     statistics = config["statistics"]
     # for now before i extend to multiple!
-    statistic = statistics[0]
+    #statistic = statistics[0]
     tag_params = config["tag_params"]
     tag_biasparams = config["tag_biasparams"]
     evaluate_mean = config["evaluate_mean"]
     idxs_obs = config["idxs_obs"]
+    #idxs_obs = [0,1,2]
     kwargs_data_test = config["kwargs_data_test"]
     tag_params_test = config["tag_params_test"]
     tag_biasparams_test = config["tag_biasparams_test"]
@@ -155,15 +167,17 @@ def test_likefree_inference(config):
     tag_inf_train = config["tag_inf_train"]
     sweep_name = config["sweep_name"]
     
+    print(statistics, tag_params, tag_biasparams)
+    print(tag_params_test, tag_biasparams_test)
     # n_rlzs_per_cosmo = kwargs_data_test["n_rlzs_per_cosmo"]
     ### Load data and parameters
     # our setup is such that that the test set is a separate dataset, so no need to split
     # don't need theta either - just predicting, not comparing
     k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
-                data_loader.load_data(data_mode, statistic,
+                data_loader.load_data(data_mode, statistics,
                                       tag_params_test, tag_biasparams_test,
+                                      tag_data=tag_data_train, #this goes to mask
                                       kwargs=kwargs_data_test)
-    k, y, y_err = data_loader.mask_data(statistic, tag_data_train, k, y, y_err)
 
     param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams)
 
@@ -172,18 +186,25 @@ def test_likefree_inference(config):
                 run_mode='load',
                 sweep_name=sweep_name,
                 param_names=param_names_train,
+                statistics=statistics,
                 )
     sbi_network.run() #need this to do the loading
     # TODO make this work for both emu and muchisimocks # ?? not sure what this means rn
     if idxs_obs is None:
         y_obs = y
     else:
-        y_obs = y[idxs_obs]
-        
+        y_obs = []
+        for i_stat in range(len(statistics)):
+            y_obs.append(y[i_stat][idxs_obs])
+
     # maybe should load this in as a separate dataset, but for now seems fine to do this way
     if evaluate_mean:
-        y_mean = np.mean(y, axis=0)        
-        sbi_network.evaluate_test_set(y_test_unscaled=np.atleast_2d(y_mean), tag_test=f'{tag_data_test}_mean')
+        # make array of arrays-of-means of each stat
+        y_mean = []
+        for i_stat in range(len(statistics)):
+            y_mean_i = np.mean(y[i_stat], axis=0)
+            y_mean.append(y_mean_i)
+        sbi_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test=f'{tag_data_test}_mean')
     else:
         # run on full test set
         sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_data_test)

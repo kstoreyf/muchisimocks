@@ -3,8 +3,8 @@
 ##SBATCH --job-name=datagen_p5_n10000_step10_round8
 ##SBATCH --job-name=datagen_fixedcosmo_step10
 ##SBATCH --job-name=datagen_test_p5_n1000_step10
-#SBATCH --job-name=bispec_p5_n1000_step100_round2
-#SBATCH --time=0:20:00 # time per task, but doing Nsteps 
+#SBATCH --job-name=bispec_test_p5_n1000_step10
+#SBATCH --time=0:10:00 # time per task, but doing Nsteps 
 #SBATCH --nodes=1              # nodes per instance
 ##SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1
@@ -32,7 +32,7 @@ echo "Instance index is ${SLURM_ARRAY_TASK_ID}."
 source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile.d/conda.sh
 conda activate benv
 i=$((SLURM_ARRAY_TASK_ID-SLURM_ARRAY_TASK_MIN))
-step_size=100
+step_size=10
 echo "i=${i}"
 idx_mock_start=$((SLURM_ARRAY_TASK_MIN + i*step_size))
 idx_mock_end=$((idx_mock_start + step_size))
@@ -40,4 +40,8 @@ echo "idx_mock_start=${idx_mock_start}, idx_mock_end=${idx_mock_end}"
 #python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end}
 #python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fixed
 #python cuda_minimal.py
-python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n10000 
+# train
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n10000 
+# test
+python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _test_p5_n1000 --tag_biasparams _biaszen_p4_n1000 
+

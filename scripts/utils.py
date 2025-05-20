@@ -61,6 +61,10 @@ cosmo_dict_quijote = {
 
 biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl']    
 
+statistics_scaler_funcs = {'pk': 'log_minmax',
+                           'bispec': 'minmax',
+                          }
+
 
 def idxs_train_val_test(random_ints, frac_train=0.8, frac_val=0.1, frac_test=0.1,
                         N_tot=None):

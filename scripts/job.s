@@ -13,8 +13,10 @@
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_b1zen_n10000_test_p5_n1000_b1zen_p1_n1000
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_b1000_p0_n1_test_p5_n1000_b1000_p0_n1
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_b1zen_p1_n10000_best-sbi-rand10
-#SBATCH --job-name=run_inf_TRAIN_muchisimocksPk_p5_n10000_biaszen_p4_n100000_ntrain1000_best-sbi-rand10_TEST_muchisimocksPk_test_p5_n1000_biaszen_p4_n1000.yaml
-#SBATCH --time=24:00:00
+##SBATCH --job-name=run_inf_TRAIN_muchisimocksPk_p5_n10000_biaszen_p4_n100000_ntrain1000_best-sbi-rand10_TEST_muchisimocksPk_test_p5_n1000_biaszen_p4_n1000.yaml
+##SBATCH --job-name=run_inf_train_muchisimocks_bispec_p5_n10000_biaszen_p4_n10000_ntrain10000
+#SBATCH --job-name=run_inf_TRAIN_muchisimocks_bispec_p5_n10000_biaszen_p4_n10000_ntrain10000_TEST_muchisimocks_bispec_quijote_p0_n1000_b1000_p0_n1_mean
+#SBATCH --time=0:10:00
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1
@@ -40,8 +42,11 @@ conda activate benv
 #python run_inference.py
 
 python run_inference.py \
-	--config-train=../configs/configs_train/config_muchisimocksPk_p5_n10000_biaszen_p4_n100000_ntrain1000_best-sbi-rand10.yaml \
-	--config-test=../configs/configs_test/config_TRAIN_muchisimocksPk_p5_n10000_biaszen_p4_n100000_ntrain1000_best-sbi-rand10_TEST_muchisimocksPk_test_p5_n1000_biaszen_p4_n1000.yaml
+	#--config-train=../configs/configs_train/#config_muchisimocks_bispec_p5_n10000_biaszen_p4_n10000_ntrain10000.yaml \
+	#--config-test=../configs/configs_test/config_TRAIN_muchisimocks_bispec_p5_n10000_biaszen_p4_n10000_ntrain10000_TEST_muchisimocks_bispec_quijote_p0_n1000_b1000_p0_n1_mean.yaml
+	#--config-train=../configs/configs_train/config_muchisimocksPk_p5_n10000_biaszen_p4_n100000_ntrain1000_best-sbi-rand10.yaml \
+	#--config-test=../configs/configs_test/config_TRAIN_muchisimocksPk_p5_n10000_biaszen_p4_n100000_ntrain1000_best-sbi-rand10_TEST_muchisimocksPk_test_p5_n1000_biaszen_p4_n1000.yaml
+	--config-test=../configs/configs_test/config_TRAIN_muchisimocks_bispec_p5_n10000_biaszen_p4_n10000_ntrain10000_TEST_muchisimocks_bispec_quijote_p0_n1000_b1000_p0_n1_mean.yaml
 
 #idx_LH_start=1004
 #idx_LH_end=$((idx_LH_start+1))

@@ -1,11 +1,18 @@
 import os
 import yaml
 
+'''
+Generates a YAML configuration file for inference.
+
+Some example commands:
+python compute_statistics.py --statistic bispec --idx_mock_start 0 --idx_mock_end 1 --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1
+'''
+
 
 def main():
     overwrite = False
     #overwrite = True
-    generate_train_config(overwrite=overwrite)
+    #generate_train_config(overwrite=overwrite)
     generate_test_config(overwrite=overwrite)
     
     
@@ -15,8 +22,9 @@ def generate_train_config(dir_config='../configs/configs_train',
     Generates a YAML configuration file for training.
     """
     data_mode = 'muchisimocks'
-    statistics = ['bispec']
-    n_train = 1000
+    #statistics = ['pk', 'bispec']
+    statistics = ['pk']
+    n_train = 10000
     #n_train = 10
     #n_train = None #if None, uses all (and no ntrain tag in tag_inf)
     tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
@@ -29,8 +37,10 @@ def generate_train_config(dir_config='../configs/configs_train',
     tag_errG = None
     
     # running inferece params
-    run_mode = 'best'
-    sweep_name = 'sbi-rand10'
+    run_mode = 'single'
+    sweep_name = None
+    #run_mode = 'best'
+    #sweep_name = 'sbi-rand10'
     # tag_sweep = '_rand10'
     # sweep_name = tag_inf + tag_sweep
         
@@ -92,6 +102,8 @@ def generate_test_config(dir_config='../configs/configs_test',
     ### Select trained model
     #data_mode = 'emuPk'
     data_mode = 'muchisimocks'
+    #statistics = ['pk', 'bispec']
+    #statistics = ['pk']
     statistics = ['bispec']
     
     ### train params
@@ -101,17 +113,17 @@ def generate_test_config(dir_config='../configs/configs_test',
     tag_biasparams = '_biaszen_p4_n10000'
     #tag_biasparams = '_biaszen_p4_n100000'
     n_rlzs_per_cosmo = 1
-    n_train = 1000
+    n_train = 10000
     # For loading a model trained with wandb sweep; best of that sweep will be used
-    #sweep_name = None
-    sweep_name = 'sbi-rand10'
+    sweep_name = None
+    #sweep_name = 'sbi-rand10'
     
     ### test params
     idxs_obs = None # if none, all (unless evaluate mean)
     ## settings for fixed cosmo
-    #evaluate_mean = True 
-    #tag_params_test = '_quijote_p0_n1000'
-    #tag_biasparams_test = '_b1000_p0_n1'
+    # evaluate_mean = True 
+    # tag_params_test = '_quijote_p0_n1000'
+    # tag_biasparams_test = '_b1000_p0_n1'
     ## settings for coverage test
     evaluate_mean = False
     tag_params_test = '_test_p5_n1000'
