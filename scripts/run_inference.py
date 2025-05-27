@@ -210,65 +210,42 @@ def test_likefree_inference(config):
         sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_data_test)
 
 
-def run_likelihood_inference():
+def run_likelihood_inference(config):
+    """
+    Run likelihood-based inference using parameters from the config file.
+    """
+    mcmc_framework = config.get('mcmc_framework', 'dynesty')
+    idxs_obs = config.get('idxs_obs', [0])
+    evaluate_mean = config.get('evaluate_mean', False)
+    data_mode = config['data_mode']
+    statistics = config['statistics']
+    tag_params = config['tag_params']
+    tag_biasparams = config['tag_biasparams']
+    tag_data = config.get('tag_data', None)
+    tag_inf = config['tag_inf']
+    cosmo_param_names_vary = config.get('cosmo_param_names_vary', [])
+    bias_param_names_vary = config.get('bias_param_names_vary', [])
+    kwargs_data = config.get('kwargs_data', {})
+    assert len(statistics)==1 and statistics[0]=='pk', "Currently only pk is supported for likelihood inference"
 
-    mcmc_framework = 'dynesty'
-    #mcmc_framework = 'emcee'
-    
-    # for likelihood methods only
-    idxs_obs = np.arange(1)
-    evaluate_mean = False # if true, idx_obs ignored and mean of whole test dataset taken
-
-    ### Set up data
-    #data_mode = 'muchisimocksPk'
-    data_mode = 'emuPk'
-    #tag_params = '_p2_n10000' 
-    tag_params = '_quijote_p0_n1000'
-    tag_biasparams = '_b1000_p0_n1'
-    n_rlzs_per_cosmo = 1
-    tag_errG = '_boxsize1000'
-    #tag_noiseless = ''
-    tag_noiseless = '_noiseless' # for emulator, probs want to use noiseless rather than evaluate mean
-    tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
-    tag_data = '_'+data_mode + tag_params + tag_biasparams + tag_datagen + tag_noiseless
-
-    # for likelihood methods, we decide which parameters to sample over! 
-    # (will have to change when have a test set not generated with these params, e.g. hydro)
-    #cosmo_param_names_vary = ['omega_cold', 'sigma8_cold']
-    cosmo_param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
-    bias_param_names_vary = []
-    tag_inf = f'{tag_data}_mcmctest_p{len(cosmo_param_names_vary)}_b{len(bias_param_names_vary)}'
-            
-    kwargs_data = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
-                   'tag_errG': tag_errG,
-                   'tag_datagen': tag_datagen,
-                   'tag_noiseless': tag_noiseless}
     if evaluate_mean:
         assert 'p0' in tag_params, "If you're evaluating the mean, don't you want fixed cosmo?"
     
-    ### Load data and parameters
-    # theta nor random ints needed for likelihood inf
-    # TODO handle idxs_params
+    # Load data and parameters
     k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
-                data_loader.load_data(data_mode, tag_params, tag_biasparams,
-                                      kwargs=kwargs_data)
-                
-    ### get covariance
-    tag_params_cov = '_p2_n10000'
-    tag_biasparams_cov = '_b1000_p0_n1'
-    kwargs_data_cov = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
-                   'tag_errG': tag_errG,
-                   'tag_datagen': tag_datagen,
-                   'tag_noiseless': ''} #don't want noiseless here bc want to match SBI training
-    k_cov, y_cov, y_err_cov, params_df_cov, cosmo_param_dict_fixed_cov, biasparams_df_cov, bias_param_dict_fixed_cov, random_ints_cov, random_ints_bias_cov = \
-                data_loader.load_data(data_mode, tag_params_cov, tag_biasparams_cov,
-                                      kwargs=kwargs_data_cov)
-    cov = np.cov(y_cov.T)
+        data_loader.load_data(data_mode, statistics,
+                              tag_params, tag_biasparams, 
+                              tag_data=tag_data, 
+                              kwargs=kwargs_data)
 
-    
-    
+    # for now only pk implemented, so just take first
+    k = k[0]
+    y = y[0]
+    y_err = y_err[0]
+
     if evaluate_mean:
         print("Evaluating mean of test set! idxs_obs ignored")
+        # make array of arrays-of-means of each stat
         ys_obs = np.array([np.mean(y, axis=0)])
         ys_err_obs = np.array([np.mean(y_err, axis=0)]) # is it fine to take the mean of the err?
     else:
@@ -286,54 +263,45 @@ def run_likelihood_inference():
     # not using training data for likelihood methods, so unclear how to scale; 
     # let's just do log for now
     # (maybe really should take reasonable bounds from training data?)
-    scaler = scl.Scaler('log')
-    scaler.fit(ys_obs)
-    ys_obs_scaled = scaler.scale(ys_obs)
-    ys_err_obs_scaled = scaler.scale_error(ys_err_obs, ys_obs)
-           
+    scaler_y = scl.Scaler('log')
+    scaler_y.fit(ys_obs)
+    ys_obs_scaled = scaler_y.scale(ys_obs)
+    ys_err_obs_scaled = scaler_y.scale_error(ys_err_obs, ys_obs)
+
     dir_emus_lbias = '/home/kstoreyf/external' #hyperion path
     emu, emu_bounds, emu_param_names_all = utils.load_emu(dir_emus_lbias=dir_emus_lbias)    
     
     for i in range(len(ys_obs)):
-    
         if evaluate_mean:
             idx_obs = 0 #shouldn't matter because should just be using fixed set! 
             tag_obs = '_mean'
         else:
             idx_obs = idxs_obs[i]
-            tag_obs = None # will be automatic
-                
-        # get single observation
+            tag_obs = f'_idx{idx_obs}'
         y_obs_unscaled = ys_obs[i]
         y_obs = ys_obs_scaled[i]
-        
-        # gather the fixed parameters (may be from the varied df bc for likelihood approach
-        # we can choose which params to fix and sample, indep of test parameters)
         cosmo_param_dict_fixed_obs = cosmo_param_dict_fixed.copy()
         if params_df is not None:
             cosmo_param_dict_fixed_obs.update(params_df.loc[idx_obs].to_dict())
         for pn in cosmo_param_names_vary:
-            cosmo_param_dict_fixed.pop(pn)
-        
+            cosmo_param_dict_fixed_obs.pop(pn, None)
         bias_param_dict_fixed_obs = bias_param_dict_fixed.copy()
         if biasparams_df is not None:
             bias_param_dict_fixed_obs.update(biasparams_df.loc[idx_obs].to_dict())
         for pn in bias_param_names_vary:
-            bias_param_dict_fixed_obs.pop(pn)  
-
+            bias_param_dict_fixed_obs.pop(pn, None)
+            
         # construct covariance matrix
         err_1p = 0.01*y_obs_unscaled
-        err_1p_scaled = scaler.scale_error(err_1p, y_obs_unscaled)
+        err_1p_scaled = scaler_y.scale_error(err_1p, y_obs_unscaled)
         err_gaussian_scaled = ys_err_obs_scaled[i]
         var = err_gaussian_scaled**2 + err_1p_scaled**2
         cov_inv = np.diag(1/var)
-        #cov_inv = np.diag(np.ones(len(y_data)))
-        #tag_inf += f'_covnone'
-    
+        
         import mcmc
-        mcmc.evaluate_mcmc(idx_obs, y_obs, cov_inv, scaler, 
+        mcmc.evaluate_mcmc(idx_obs, y_obs, cov_inv, scaler_y, 
                 emu, k, 
-                cosmo_param_dict_fixed, bias_param_dict_fixed, 
+                cosmo_param_dict_fixed_obs, bias_param_dict_fixed_obs, 
                 cosmo_param_names_vary, bias_param_names_vary,
                 dict_bounds_cosmo, dict_bounds_bias,
                 tag_inf=tag_inf, tag_obs=tag_obs, 

@@ -11,11 +11,19 @@ import PolyBin3D as pb
 import data_loader
 import utils
 
+"""
+This script computes statistics (e.g., PNN or bispectrum) for mock data.
+
+Some example commands:
+python compute_statistics.py --statistic bispec --idx_mock_start 0 --idx_mock_end 1 --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1
+
+"""
 
 
 def main():
     #run_loop()
     parse_args()
+    
 
 def parse_args():
     parser = argparse.ArgumentParser()

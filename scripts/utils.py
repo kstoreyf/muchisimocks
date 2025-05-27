@@ -59,6 +59,7 @@ cosmo_dict_quijote = {
                 'tau'           :  0.0952,
                 }   
 
+cosmo_param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
 biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl']    
 
 statistics_scaler_funcs = {'pk': 'log_minmax',

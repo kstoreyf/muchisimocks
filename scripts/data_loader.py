@@ -454,6 +454,8 @@ def load_data_emuPk(tag_params, tag_biasparams, tag_errG='', tag_datagen='', tag
 
     Pk = np.load(fn_emuPk, allow_pickle=True)   
     k = np.genfromtxt(fn_emuk)
+    print(fn_emuPk)
+    print(Pk.shape)
 
     #params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed = load_params(tag_params, tag_biasparams)
     #theta_noiseless = np.genfromtxt(fn_emuPk_params, delimiter=',', names=True)

@@ -1,0 +1,17 @@
+bias_param_names_vary: []
+cosmo_param_names_vary:
+- omega_cold
+data_mode: muchisimocks
+evaluate_mean: true
+idxs_obs: null
+kwargs_data:
+  tag_datagen: ''
+mcmc_framework: dynesty
+n_rlzs_per_cosmo: 1
+statistics:
+- pk
+tag_biasparams: _b1000_p0_n1
+tag_data: _muchisimocks_pk_quijote_p0_n1000_b1000_p0_n1
+tag_datagen: ''
+tag_inf: _muchisimocks_pk_quijote_p0_n1000_b1000_p0_n1_mean_pvary1_bvary0
+tag_params: _quijote_p0_n1000

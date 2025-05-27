@@ -1,19 +1,19 @@
 import os
 import yaml
 
+import utils
+
 '''
 Generates a YAML configuration file for inference.
-
-Some example commands:
-python compute_statistics.py --statistic bispec --idx_mock_start 0 --idx_mock_end 1 --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1
 '''
 
 
 def main():
-    overwrite = False
-    #overwrite = True
+    #overwrite = False
+    overwrite = True
     #generate_train_config(overwrite=overwrite)
-    generate_test_config(overwrite=overwrite)
+    #generate_test_config(overwrite=overwrite)
+    generate_runlike_config(overwrite=overwrite)
     
     
 def generate_train_config(dir_config='../configs/configs_train',
@@ -80,6 +80,7 @@ def generate_train_config(dir_config='../configs/configs_train',
         "n_rlzs_per_cosmo": n_rlzs_per_cosmo,
     }
             
+    os.makedirs(dir_config, exist_ok=True)
     fn_config = f"{dir_config}/config{tag_inf}.yaml"
     if not overwrite and os.path.exists(fn_config):
         print(f"Config file already exists: {fn_config}")
@@ -137,10 +138,10 @@ def generate_test_config(dir_config='../configs/configs_test',
         tag_errG = '_boxsize1000'
         tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
         # test
-        tag_errG = '_boxsize1000'
+        tag_errG_test = '_boxsize1000'
         tag_noiseless = ''
         #tag_noiseless = '_noiseless' # if use noiseless, set evaluate_mean=False (?)
-        tag_datagen_test = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
+        tag_datagen_test = f'{tag_errG_test}_nrlzs{n_rlzs_per_cosmo}'
         kwargs_data_test = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
                             'tag_errG': tag_errG,
                             'tag_datagen': tag_datagen,
@@ -156,7 +157,6 @@ def generate_test_config(dir_config='../configs/configs_test',
                             }
     
     # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
-
     tag_stats = f'_{"_".join(statistics)}'    
     tag_data_train = '_'+data_mode + tag_stats + tag_params + tag_biasparams + tag_datagen
     tag_data_test = '_'+data_mode + tag_stats + tag_params_test + tag_biasparams_test + tag_datagen_test + tag_noiseless
@@ -196,6 +196,7 @@ def generate_test_config(dir_config='../configs/configs_test',
         "n_rlzs_per_cosmo": n_rlzs_per_cosmo,
     }
     
+    os.makedirs(dir_config, exist_ok=True)
     fn_config = f"{dir_config}/config{tag_test}.yaml"
     if not overwrite and os.path.exists(fn_config):
         print(f"Config file already exists: {fn_config}")
@@ -207,6 +208,88 @@ def generate_test_config(dir_config='../configs/configs_test',
         with open(fn_config, "w") as file:
             yaml.dump(config, file, default_flow_style=False)
         print(f"Testing config file written: {fn_config}")
+
+
+def generate_runlike_config(dir_config='../configs/configs_runlike', overwrite=False):
+    """
+    Generates a YAML configuration file for likelihood-based inference.
+    """
+    #data_mode = 'emuPk'  # or 'muchisimocksPk'
+    data_mode = 'muchisimocks'
+    statistics = ['pk'] 
+    # i think i should make these "test" because no training, just evaluation!
+    tag_params = '_quijote_p0_n1000'
+    tag_biasparams = '_b1000_p0_n1'
+    n_rlzs_per_cosmo = 1
+
+    # Parameters to vary
+    n_cosmo_params_vary = 5  # Number of cosmological parameters to vary
+    n_bias_params_vary = 0  # Number of bias parameters to vary
+    cosmo_param_names_vary = utils.cosmo_param_names_ordered[:n_cosmo_params_vary]
+    bias_param_names_vary = utils.biasparam_names_ordered[:n_bias_params_vary]
+    mcmc_framework = 'dynesty'  # or 'emcee'
+    evaluate_mean = True
+    #idxs_obs = [0]  # or None for all or evaluate_mean=True
+    idxs_obs = None
+
+    # this if-else is just so it's easier for me to switch between the two; may not need
+    if data_mode == 'emuPk':
+        tag_errG = '_boxsize1000'
+        tag_noiseless = ''
+        #tag_noiseless = '_noiseless' # if use noiseless, set evaluate_mean=False (?)
+        tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
+        kwargs_data = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
+                            'tag_errG': tag_errG,
+                            'tag_datagen': tag_datagen,
+                            'tag_noiseless': tag_noiseless}
+    elif data_mode == 'muchisimocks':
+        # train
+        tag_datagen = ''
+        # test
+        tag_noiseless = ''
+        tag_datagen = ''
+        kwargs_data = {
+                            'tag_datagen': tag_datagen,
+                            }
+    
+    tag_stats = f'_{"_".join(statistics)}'    
+    tag_data = '_'+data_mode + tag_stats + tag_params + tag_biasparams + tag_datagen
+    if evaluate_mean:
+        tag_mean = '_mean'
+    else:
+        tag_mean = ''
+
+    tag_inf = f'{tag_data}{tag_mean}_pvary{len(cosmo_param_names_vary)}_bvary{len(bias_param_names_vary)}'
+
+    config = {
+        'data_mode': data_mode,
+        'statistics': statistics,
+        'tag_params': tag_params,
+        'tag_biasparams': tag_biasparams,
+        'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
+        'tag_datagen': tag_datagen,
+        'tag_data': tag_data,
+        'tag_inf': tag_inf,
+        'cosmo_param_names_vary': cosmo_param_names_vary,
+        'bias_param_names_vary': bias_param_names_vary,
+        'mcmc_framework': mcmc_framework,
+        'evaluate_mean': evaluate_mean,
+        'idxs_obs': idxs_obs,
+        'kwargs_data': kwargs_data
+    }
+
+    os.makedirs(dir_config, exist_ok=True)
+    fn_config = f"{dir_config}/config{tag_inf}.yaml"
+    if not overwrite and os.path.exists(fn_config):
+        print(f"Config file already exists: {fn_config}")
+        print("Set overwrite=True to overwrite the existing file.")
+        return
+    else:
+        if os.path.exists(fn_config):
+            print("Config file already exists but overwrite=True, overwriting. Hope you meant to do that!")
+        with open(fn_config, "w") as file:
+            yaml.dump(config, file, default_flow_style=False)
+        print(f"Runlike config file written: {fn_config}")
 
 
 if __name__ == "__main__":
