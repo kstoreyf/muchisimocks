@@ -21,8 +21,8 @@ python compute_statistics.py --statistic bispec --idx_mock_start 0 --idx_mock_en
 
 
 def main():
-    #run_loop()
-    parse_args()
+    run_loop()
+    #parse_args()
     
 
 def parse_args():
@@ -70,9 +70,9 @@ def parse_args():
 
 def run_loop():
     ## main training set
-    n_mocks = 10000
-    tag_params = f'_p5_n{n_mocks}'    
-    tag_biasparams = '_biaszen_p4_n10000'
+    #n_mocks = 10000
+    #tag_params = f'_p5_n{n_mocks}'    
+    #tag_biasparams = '_biaszen_p4_n10000'
 
     ## fixed cosmo test set
     #n_mocks = 1000
@@ -80,21 +80,27 @@ def run_loop():
     ## variable cosmo test set
     #n_mocks = 1000
     #tag_params = f'_test_p5_n{n_mocks}'
-    overwrite = True
+
+    ## fisher
+    tag_params = '_fisher_quijote'
+    tag_biasparams = None # for pnn, don't need biasparams
+    n_mocks = 21 #magic, i just know this number for fisher
+    
+    overwrite = False
     n_threads = 1
 
     box_size = 1000.0
     n_grid = 128
     
-    #statistic = 'pnn'
-    statistic = 'bispec'
+    statistic = 'pnn'
+    #statistic = 'bispec'
     if statistic == 'bispec':
         base = setup_bispsec(box_size, n_grid, n_threads)
     else:
         base = None
 
-    idxs_LH = [0]
-    #idxs_LH = np.arange(n_mocks)
+    #idxs_LH = [0]
+    idxs_LH = np.arange(n_mocks) 
     for idx_mock in idxs_LH:
         run(statistic, tag_params, idx_mock, 
             overwrite=overwrite, n_threads=n_threads, 
@@ -141,8 +147,10 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4,
 
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, _, _ = \
         data_loader.load_params(tag_params, tag_biasparams)
+    print(params_df)
+    print(param_dict_fixed)
 
-    if 'p0' in tag_params:
+    if 'p0' or 'fisher' in tag_params:
         subdir_prefix = 'mock'
     else:
         subdir_prefix = 'LH'

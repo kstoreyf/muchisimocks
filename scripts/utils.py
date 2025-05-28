@@ -26,7 +26,8 @@ color_dict_methods = {'mn': 'blue',
 label_dict_methods = {'mn': 'Moment Network',
                       'sbi': 'SBI',
                       'emcee': 'MCMC (emcee)',
-                      'dynesty': 'MCMC (dynesty)'}
+                      'dynesty': 'MCMC (dynesty)',
+                      'fisher': 'Fisher'}
 
 labels_pnn = ['$1 1$',
             '$1 \\delta$',
@@ -59,7 +60,7 @@ cosmo_dict_quijote = {
                 'tau'           :  0.0952,
                 }   
 
-cosmo_param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'ns', 'omega_baryon']
+cosmo_param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
 biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl']    
 
 statistics_scaler_funcs = {'pk': 'log_minmax',
@@ -159,6 +160,8 @@ def get_samples(idx_obs, inf_method, tag_inf, tag_test='', tag_obs=None):
         return get_samples_emcee(idx_obs, tag_inf, tag_obs=tag_obs)
     elif inf_method == 'dynesty':
         return get_samples_dynesty(idx_obs, tag_inf, tag_obs=tag_obs)
+    elif inf_method == 'fisher':
+        return get_samples_fisher(idx_obs, tag_inf, tag_test=tag_test)
     else:
         raise ValueError(f'Method {inf_method} not recognized!')
         
@@ -267,6 +270,22 @@ def get_samples_dynesty(idx_obs, tag_inf, tag_obs=None):
 
     param_names = np.loadtxt(f'{dir_dynesty}/param_names.txt', dtype=str)
     return samples, param_names
+
+
+def get_samples_fisher(idx_obs, tag_inf, tag_test=''):
+    dir_fisher = f'../results/results_fisher/fisher{tag_inf}'
+    fn_samples_test_pred = f'{dir_fisher}/samples_test{tag_test}_pred.npy'
+    print(f"fn_samples = {fn_samples_test_pred}")
+    samples_arr = np.load(fn_samples_test_pred)
+    print(samples_arr.shape)
+    param_names = np.loadtxt(f'{dir_fisher}/param_names.txt', dtype=str)
+    if samples_arr.ndim == 2:
+        return samples_arr, param_names
+    elif samples_arr.ndim == 3:
+        return samples_arr[:,idx_obs,:], param_names
+    else:
+        raise ValueError(f"Samples shape {samples_arr.shape} is weird!")
+    
 
 def repeat_arr_rlzs(arr, n_rlzs=1):
     arr_repeat = np.tile(arr, (n_rlzs,1))

@@ -11,9 +11,9 @@ Generates a YAML configuration file for inference.
 def main():
     #overwrite = False
     overwrite = True
-    #generate_train_config(overwrite=overwrite)
-    #generate_test_config(overwrite=overwrite)
-    generate_runlike_config(overwrite=overwrite)
+    generate_train_config(overwrite=overwrite)
+    generate_test_config(overwrite=overwrite)
+    #generate_runlike_config(overwrite=overwrite)
     
     
 def generate_train_config(dir_config='../configs/configs_train',
@@ -21,20 +21,20 @@ def generate_train_config(dir_config='../configs/configs_train',
     """
     Generates a YAML configuration file for training.
     """
-    data_mode = 'muchisimocks'
+    #data_mode = 'muchisimocks'
+    data_mode = 'emu'
     #statistics = ['pk', 'bispec']
     statistics = ['pk']
     n_train = 10000
     #n_train = 10
     #n_train = None #if None, uses all (and no ntrain tag in tag_inf)
-    tag_params = '_p5_n10000' #for emu, formerly tag_emuPk
+    tag_params = '_p5_n10000'
     #tag_biasparams = '_b1000_p0_n1'
     #tag_biasparams = '_b1zen_p1_n10000'
     tag_biasparams = '_biaszen_p4_n10000'
     #tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
     # emu-specific
     n_rlzs_per_cosmo = 1
-    tag_errG = None
     
     # running inferece params
     run_mode = 'single'
@@ -44,12 +44,14 @@ def generate_train_config(dir_config='../configs/configs_train',
     # tag_sweep = '_rand10'
     # sweep_name = tag_inf + tag_sweep
         
-    if data_mode == 'emuPk':
+    if data_mode == 'emu':
+        tag_errG = '_boxsize1000'
         tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
         kwargs_data = {'n_rlzs_per_cosmo': n_rlzs_per_cosmo,
                     'tag_errG': tag_errG,
                     'tag_datagen': tag_datagen}
     elif data_mode == 'muchisimocks':
+        tag_errG = None
         tag_datagen = ''
         kwargs_data = {'tag_datagen': tag_datagen}
 
@@ -71,7 +73,6 @@ def generate_train_config(dir_config='../configs/configs_train',
         "tag_params": tag_params,
         "tag_biasparams": tag_biasparams,
         "n_train": n_train,
-        "evaluate_mean": False,
         "kwargs_data": kwargs_data,
         "run_mode": run_mode,
         "sweep_name": sweep_name,
@@ -101,11 +102,11 @@ def generate_test_config(dir_config='../configs/configs_test',
     """
 
     ### Select trained model
-    #data_mode = 'emuPk'
-    data_mode = 'muchisimocks'
+    data_mode = 'emu'
+    #data_mode = 'muchisimocks'
     #statistics = ['pk', 'bispec']
-    #statistics = ['pk']
-    statistics = ['bispec']
+    statistics = ['pk']
+    #statistics = ['bispec']
     
     ### train params
     tag_params = '_p5_n10000'
@@ -122,18 +123,18 @@ def generate_test_config(dir_config='../configs/configs_test',
     ### test params
     idxs_obs = None # if none, all (unless evaluate mean)
     ## settings for fixed cosmo
-    # evaluate_mean = True 
-    # tag_params_test = '_quijote_p0_n1000'
-    # tag_biasparams_test = '_b1000_p0_n1'
+    evaluate_mean = True 
+    tag_params_test = '_quijote_p0_n1000'
+    tag_biasparams_test = '_b1000_p0_n1'
     ## settings for coverage test
-    evaluate_mean = False
-    tag_params_test = '_test_p5_n1000'
-    #tag_biasparams_test = '_b1000_p0_n1'
-    #tag_biasparams_test = '_b1zen_p1_n1000'
-    tag_biasparams_test = '_biaszen_p4_n1000'
+    # evaluate_mean = False
+    # tag_params_test = '_test_p5_n1000'
+    # #tag_biasparams_test = '_b1000_p0_n1'
+    # #tag_biasparams_test = '_b1zen_p1_n1000'
+    # tag_biasparams_test = '_biaszen_p4_n1000'
 
     # this if-else is just so it's easier for me to switch between the two; may not need
-    if data_mode == 'emuPk':
+    if data_mode == 'emu':
         # train
         tag_errG = '_boxsize1000'
         tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
@@ -214,7 +215,7 @@ def generate_runlike_config(dir_config='../configs/configs_runlike', overwrite=F
     """
     Generates a YAML configuration file for likelihood-based inference.
     """
-    #data_mode = 'emuPk'  # or 'muchisimocksPk'
+    #data_mode = 'emu'  # or 'muchisimocksPk'
     data_mode = 'muchisimocks'
     statistics = ['pk'] 
     # i think i should make these "test" because no training, just evaluation!
@@ -233,7 +234,7 @@ def generate_runlike_config(dir_config='../configs/configs_runlike', overwrite=F
     idxs_obs = None
 
     # this if-else is just so it's easier for me to switch between the two; may not need
-    if data_mode == 'emuPk':
+    if data_mode == 'emu':
         tag_errG = '_boxsize1000'
         tag_noiseless = ''
         #tag_noiseless = '_noiseless' # if use noiseless, set evaluate_mean=False (?)

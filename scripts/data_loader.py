@@ -12,26 +12,26 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
               tag_data=None,
               kwargs={}):
     
-    if data_mode == 'emuPk':
-        k, y, y_err, idxs_params = load_data_emuPk(tag_params, tag_biasparams, **kwargs)
-    elif data_mode == 'muchisimocks':
-        k, y, y_err = [], [], []
-        for statistic in statistics:
-            # idxs_params should be the same for all so will just grab last one
+    k, y, y_err = [], [], []
+    for statistic in statistics:
+        # idxs_params should be the same for all so will just grab last one
+        if data_mode == 'muchisimocks':
             k_i, y_i, y_err_i, idxs_params = load_data_muchisimocks(statistic,
                                             tag_params, tag_biasparams, **kwargs)
-            print(f"Loaded {statistic} data with shape {y_i.shape}")
-            if tag_data is None:
-                print("No tag_data provided, so not masking data")
-            else:
-                k_i, y_i, y_err_i = mask_data(statistic, tag_data, k_i, y_i, y_err_i)
+        elif data_mode == 'emu':
+            k_i, y_i, y_err_i, idxs_params = load_data_emu(statistic,
+                                            tag_params, tag_biasparams, **kwargs)
+        else:
+            raise ValueError(f"Data mode {data_mode} not recognized!")
+        print(f"Loaded {statistic} data with shape {y_i.shape}")
+        if tag_data is None:
+            print("No tag_data provided, so not masking data")
+        else:
+            k_i, y_i, y_err_i = mask_data(statistic, tag_data, k_i, y_i, y_err_i)
 
-            k.append(k_i)
-            y.append(y_i)
-            y_err.append(y_err_i)
-
-    else:
-        raise ValueError(f"Data mode {data_mode} not recognized!")
+        k.append(k_i)
+        y.append(y_i)
+        y_err.append(y_err_i)    
 
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams)
     return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
@@ -121,7 +121,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
     idxs_LH = np.sort(np.array(idxs_LH)) # now doing regexp, need to sort
     #idxs_LH = np.array([idx_LH for idx_LH in params_df.index.values
     #                    if os.path.exists(f"{dir_statistics}/pk_{idx_LH}.npy")])
-    
+    print(f"Found {len(idxs_LH)} {stat_name}s in {dir_statistics}")
     assert len(idxs_LH) > 0, f"No pks found in {dir_statistics}!"
     
     # Check the relationship between biasparams_df and idxs_LH
@@ -247,9 +247,13 @@ def load_params(tag_params=None, tag_biasparams=None,
     
     
 def load_cosmo_params(tag_params, dir_params='../data/params'):
-    fn_params = f'{dir_params}/params_lh{tag_params}.txt'
+    # TODO this is so messy! figure out what to do about lh prefix
+    if 'fisher' in tag_params:
+        fn_params = f'{dir_params}/params{tag_params}.txt'
+    else:
+        fn_params = f'{dir_params}/params_lh{tag_params}.txt'
     fn_params_fixed = f'{dir_params}/params_fixed{tag_params}.txt'
-    
+
     params_df = (
         pd.read_csv(fn_params, index_col=0)
         if os.path.exists(fn_params)
@@ -263,7 +267,10 @@ def load_cosmo_params(tag_params, dir_params='../data/params'):
     return params_df, param_dict_fixed
     
 def load_bias_params(tag_biasparams, dir_params='../data/params'):
-    fn_biasparams = f'{dir_params}/params_lh{tag_biasparams}.txt'
+    if 'fisher' in tag_biasparams:
+        fn_biasparams = f'{dir_params}/params{tag_biasparams}.txt'
+    else:
+        fn_biasparams = f'{dir_params}/params_lh{tag_biasparams}.txt'
     fn_biasparams_fixed = f'{dir_params}/params_fixed{tag_biasparams}.txt'
     biasparams_df = (
         pd.read_csv(fn_biasparams, index_col=0)
@@ -419,7 +426,10 @@ def get_param_names(tag_params=None, tag_biasparams=None, dir_params='../data/pa
     param_names = []
 
     if tag_params is not None:
-        fn_params = f'{dir_params}/params_lh{tag_params}.txt'
+        if 'fisher' in tag_params:
+            fn_params = f'{dir_params}/params{tag_params}.txt'
+        else:
+            fn_params = f'{dir_params}/params_lh{tag_params}.txt'
         if os.path.exists(fn_params):
             params_df = pd.read_csv(fn_params, index_col=0)
             param_names.extend(params_df.columns.tolist())
@@ -433,9 +443,10 @@ def get_param_names(tag_params=None, tag_biasparams=None, dir_params='../data/pa
     return param_names
 
 
-def load_data_emuPk(tag_params, tag_biasparams, tag_errG='', tag_datagen='', tag_noiseless='',
+def load_data_emu(statistic, tag_params, tag_biasparams, tag_errG='', tag_datagen='', tag_noiseless='',
                     n_rlzs_per_cosmo=1, tag_mask=''):
     
+    assert statistic=='pk', "Only implemented for pk for emu"
     tag_mocks = tag_params + tag_biasparams
 
     assert tag_errG is not None, "tag_errG must be specified"
@@ -470,7 +481,8 @@ def load_data_emuPk(tag_params, tag_biasparams, tag_errG='', tag_datagen='', tag
     assert gaussian_error_pk.shape[0] == Pk.shape[0], "Number of pks and errors should be the same, something is wrong"
     
     # doing this to align with load_data_muchisimocks; reconsider how to do in emu case
-    idxs_params = np.arange(Pk.shape[0])
+    #idxs_params = np.arange(Pk.shape[0])
+    idxs_params = np.array([(idx_LH, idx_LH) for idx_LH in range(Pk.shape[0])])
     # mask = np.all(Pk>0, axis=0)
     # print("mask")
     # print(mask)
@@ -646,7 +658,7 @@ def get_split(data_mode, split, theta, y, y_err, random_ints,
     n_emuPk = len(random_ints)
     idxs_train_orig = idxs_train.copy()
     idxs_train = []
-    if data_mode == 'emuPk':
+    if data_mode == 'emu':
         for n_rlz in range(n_rlzs_per_cosmo):
             idxs_train.extend(idxs_train_orig + n_rlz*n_emuPk)
     elif 'muchisimocks' in data_mode:

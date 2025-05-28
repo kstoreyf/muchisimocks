@@ -8,14 +8,19 @@ from scipy.stats import qmc
 import utils
 
 
-
 def main():
+    #generate_params_LH()
+    generate_params_fisher()
+
+
+
+def generate_params_LH():
     
     # seed 42, at least for the p5 mocks
     seed = 42
     overwrite = False # probs keep false!!! don't want to overwrite param files
 
-    n_samples = 1000
+    n_samples = 1000000
     
     #bounds_type = 'cosmo' #cosmo or bias
     #n_params_vary = 0
@@ -26,10 +31,10 @@ def main():
     # havent yet used 'test' to restrict bounds for bias params, only cosmo
     # TODO should i be?
     bounds_type = 'bias'
-    #n_params_vary = 4
-    #tag_bounds = '_biaszen'
-    n_params_vary = 1
-    tag_bounds = '_b1zen'
+    n_params_vary = 4
+    tag_bounds = '_biaszen'
+    #n_params_vary = 1
+    #tag_bounds = '_b1zen'
     #n_params_vary = 0
     #tag_bounds = '_b1000'
     
@@ -69,6 +74,102 @@ def main():
     if len(param_names_fixed) > 0:
         save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
     
+
+def generate_params_fisher():
+    
+    overwrite = True # probs keep false!!! don't want to overwrite param files
+    delta_fracextent = 0.05
+    n_deltas_per_side = 2
+    
+    bounds_type = 'cosmo' #cosmo or bias
+    #bounds_type = 'bias'
+    
+    #n_params_vary = 0
+    #tag_bounds = '' #NOTE params are automatically tagged below; this is for '_test' or '_quijote' so far
+    #tag_bounds = '_test'
+    n_params_vary = 5
+    tag_bounds = '_quijote'
+    
+    # havent yet used 'test' to restrict bounds for bias params, only cosmo
+    # TODO should i be?
+    # bounds_type = 'bias'
+    # n_params_vary = 4
+    # tag_bounds = '_biaszen'
+    #n_params_vary = 1
+    #tag_bounds = '_b1zen'
+    #n_params_vary = 0
+    #tag_bounds = '_b1000'
+    
+    tag_params = '_fisher'+tag_bounds
+    
+    dir_params = '../data/params'
+    fn_params = f'{dir_params}/params{tag_params}.txt'
+    if os.path.isfile(fn_params) and not overwrite:
+        print(f'Found existing params file: {fn_params}; stopping!')
+        return
+    
+    if bounds_type == 'cosmo':
+        param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
+        # for now we will always select the varying params in this order, for reproducibility
+        param_names_vary = param_names_vary[:n_params_vary]
+        param_names_ordered, bounds_dict, fiducial_dict = define_LH_cosmo(tag_bounds=tag_bounds)
+    elif bounds_type == 'bias':
+        param_names_vary = ['b1', 'b2', 'bs2', 'bl']
+        param_names_vary = param_names_vary[:n_params_vary]
+        param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(tag_bounds=tag_bounds)
+    else:
+        raise ValueError("pset must be 'cosmo' or 'bias'")
+    
+    ### Fisher deltas - changing one param at a time
+    # Compute deltas: 5% of the extent of each parameter
+    delta_units = []
+    for pn in param_names_vary:
+        extent = bounds_dict[pn][1] - bounds_dict[pn][0]
+        delta_units.append(delta_fracextent * extent)
+    delta_units = np.array(delta_units)
+    
+    # Prepare DataFrame
+    rows = []
+    
+    # Fiducial cosmology
+    theta_fiducial = np.array([fiducial_dict[pn] for pn in param_names_vary])
+    # Add the fiducial to dataset
+    row_fid = {p: v for p, v in zip(param_names_vary, theta_fiducial)}
+    row_fid['param_shifted'] = 'fiducial'
+    row_fid['n_deltas'] = 0
+    rows.append(row_fid)
+    
+    # now add the deltas
+    n_delta_arr = list(range(-n_deltas_per_side, 0)) + list(range(1, n_deltas_per_side+1))
+    
+    for i, pn in enumerate(param_names_vary):
+        #for n_delta, delta in zip([0.5, 1.0], [0.5*deltas[i], deltas[i]]):
+        for n_deltas in n_delta_arr:
+            delta = n_deltas * delta_units[i]
+            theta = theta_fiducial.copy()
+            theta[i] += delta
+            row = {p: v for p, v in zip(param_names_vary, theta)}
+            row['param_shifted'] = pn
+            row['n_deltas'] = n_deltas
+            rows.append(row)
+    
+    df = pd.DataFrame(rows)
+    
+    #### Save
+    Path(dir_params).mkdir(parents=True, exist_ok=True)
+    df.to_csv(fn_params)
+    print(f'Saved Fisher parameter grid to {fn_params}')    
+
+    ### now generate and save fixed params
+    fn_params_fixed = f'{dir_params}/params_fixed{tag_params}.txt'
+    if os.path.isfile(fn_params_fixed) and not overwrite:
+        print(f'Found existing fixed params: {fn_params_fixed}; stopping!')
+        return
+        
+    param_names_fixed = [pn for pn in param_names_ordered if pn not in param_names_vary]
+    if len(param_names_fixed) > 0:
+        save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
+
 
 
 
@@ -124,7 +225,12 @@ def define_LH_cosmo(tag_bounds=''):
     if 'test' in tag_bounds:
         bounds_dict = restrict_bounds(bounds_dict, factor=0.05)
     
-    fiducial_dict = utils.cosmo_dict_quijote
+    # added this check for quijote tag; so you know if this breaks,
+    # wasn't using before (always just returned this fiducial dict!)
+    if tag_bounds == '_quijote':
+        fiducial_dict = utils.cosmo_dict_quijote
+    else:
+        raise ValueError(f'Unknown tag_bounds {tag_bounds}')
 
     return param_names_ordered, bounds_dict, fiducial_dict
 

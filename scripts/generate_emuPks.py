@@ -76,6 +76,11 @@ def main():
                                fn_emuPk_noisy=fn_emuPk_noisy)
 
     
+    
+# k, pnn = emulator.get_nonlinear_pnn(k=k, **params)
+
+
+    
 # TODO generate the pnns and then recombine them w the bias params
 def generate_pks(emu, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed,
                  fn_emuk=None, fn_emuPk=None, n_data=None, overwrite=False):

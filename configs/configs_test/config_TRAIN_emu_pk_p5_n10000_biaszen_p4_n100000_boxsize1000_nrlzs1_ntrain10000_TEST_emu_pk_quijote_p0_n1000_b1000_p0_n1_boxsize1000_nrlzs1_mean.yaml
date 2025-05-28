@@ -1,0 +1,21 @@
+data_mode: emu
+evaluate_mean: true
+idxs_obs: null
+kwargs_data_test:
+  n_rlzs_per_cosmo: 1
+  tag_datagen: _boxsize1000_nrlzs1
+  tag_errG: _boxsize1000
+  tag_noiseless: ''
+n_rlzs_per_cosmo: 1
+n_train: 10000
+statistics:
+- pk
+sweep_name: null
+tag_biasparams: _biaszen_p4_n100000
+tag_biasparams_test: _b1000_p0_n1
+tag_data_test: _emu_pk_quijote_p0_n1000_b1000_p0_n1_boxsize1000_nrlzs1
+tag_data_train: _emu_pk_p5_n10000_biaszen_p4_n100000_boxsize1000_nrlzs1
+tag_inf_train: _emu_pk_p5_n10000_biaszen_p4_n100000_boxsize1000_nrlzs1_ntrain10000
+tag_params: _p5_n10000
+tag_params_test: _quijote_p0_n1000
+tag_test: _TRAIN_emu_pk_p5_n10000_biaszen_p4_n100000_boxsize1000_nrlzs1_ntrain10000_TEST_emu_pk_quijote_p0_n1000_b1000_p0_n1_boxsize1000_nrlzs1_mean

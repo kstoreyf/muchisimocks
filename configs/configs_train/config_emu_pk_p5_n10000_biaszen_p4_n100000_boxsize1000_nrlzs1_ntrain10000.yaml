@@ -1,0 +1,15 @@
+data_mode: emu
+kwargs_data:
+  n_rlzs_per_cosmo: 1
+  tag_datagen: _boxsize1000_nrlzs1
+  tag_errG: _boxsize1000
+n_rlzs_per_cosmo: 1
+n_train: 10000
+run_mode: single
+statistics:
+- pk
+sweep_name: null
+tag_biasparams: _biaszen_p4_n100000
+tag_data: _emu_pk_p5_n10000_biaszen_p4_n100000_boxsize1000_nrlzs1
+tag_inf: _emu_pk_p5_n10000_biaszen_p4_n100000_boxsize1000_nrlzs1_ntrain10000
+tag_params: _p5_n10000

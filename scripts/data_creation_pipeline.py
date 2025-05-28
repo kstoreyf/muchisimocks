@@ -29,32 +29,39 @@ def main():
     argparser = argparse.ArgumentParser()
     argparser.add_argument('idx_mock_start', type=int)
     argparser.add_argument('idx_mock_end', type=int, nargs='?', default=None)  
-    argparser.add_argument('--modecosmo', action='store', choices=['LH', 'fixed'], default='LH')
+    argparser.add_argument('--modecosmo', action='store', choices=['lh', 'fixed', 'fisher'], default='lh')
+    argparser.add_argument('--tag_params', action='store')
 
     args = argparser.parse_args()
     idx_mock_end = args.idx_mock_end
     if idx_mock_end is None:
         idx_mock_end = args.idx_mock_start + 1
     for idx_mock in range(args.idx_mock_start, idx_mock_end):
-        if args.modecosmo == 'LH':
-            run_LH(idx_mock)
-        if args.modecosmo == 'fixed':
+        if args.modecosmo == 'lh' or args.modecosmo == 'fisher':
+            run_creation(idx_mock, modecosmo=args.modecosmo, tag_params=args.tag_params)
+        elif args.modecosmo == 'fixed':
             run_fixedcosmo(idx_mock)
+        else:
+            raise ValueError(f"modecosmo {args.modecosmo} not recognized")
             
 
-def run_LH(idx_mock):
+def run_creation(idx_mock, modecosmo='lh', tag_params=None):
     
     print("Setting up", flush=True)
     n_grid = 512
     n_grid_target = 128
-
-    #tag_params = f'_p3_n50'
-    #tag_params = f'_p3_n10'
-    #tag_params = f'_p5_n10000'
-    tag_params = f'_test_p5_n1000'
-    tag_mocks = f'{tag_params}'
-    #tag_mocks = f'{tag_params}_timetests'
     box_size = 1000.
+
+    # main for LH: tag_params = f'_test_p5_n1000'
+    if modecosmo == 'lh':
+        tag_mocks = f'_lh{tag_params}'
+        seed = idx_mock
+        subdir_prefix='lh'
+    # main for fixed cosmo: tag_params = f'_fisher_quijote'
+    elif modecosmo == 'fisher':
+        tag_mocks = tag_params
+        seed = 0
+        subdir_prefix='mock'
 
     # uses 12 GB, indep of number of threads
     # 1 job: ~200s = ~3 min each for pos / vel
@@ -76,26 +83,29 @@ def run_LH(idx_mock):
     # TODO update so can handle fixedcosmo case in this same framework
     
     dir_params = '../data/params'
-    fn_params_orig = f'{dir_params}/params_lh{tag_params}.txt'
+    fn_params_orig = f'{dir_params}/params_{modecosmo}{tag_params}.txt'
     fn_params_fixed_orig = f'{dir_params}/params_fixed{tag_params}.txt'
     # copy parameters to mocks folder to make sure we know which params were used
-    fn_params = f'{dir_mocks}/params_lh{tag_params}.txt'
+    fn_params = f'{dir_mocks}/params_{modecosmo}{tag_params}.txt'
     fn_params_fixed = f'{dir_mocks}/params_fixed{tag_params}.txt'
     if not os.path.exists(fn_params):
         os.system(f'cp {fn_params_orig} {fn_params}')
     if not os.path.exists(fn_params_fixed):
         os.system(f'cp {fn_params_fixed_orig} {fn_params_fixed}')
-    params_df = pd.read_csv(fn_params, index_col=0)
+    params_df = pd.read_csv(fn_params)
+    # had to remove the index call when added fisher param option, not sure how worked before?
+    #params_df = pd.read_csv(fn_params, index_col=0) 
     param_dict_fixed = pd.read_csv(fn_params_fixed).loc[0].to_dict()
+    print(f"Loaded in params from {fn_params} and {fn_params_fixed}")
     
     param_dict = params_df.loc[idx_mock].to_dict()
     param_dict.update(param_dict_fixed)
-    seed = idx_mock
     print("param_dict:", param_dict, flush=True)
     
     run_single(param_dict, seed, idx_mock, dir_mocks,
                n_grid=n_grid, n_grid_target=n_grid_target, box_size=box_size,
-               n_threads_bacco=n_threads_bacco, n_workers_m2m=n_workers_m2m)
+               n_threads_bacco=n_threads_bacco, n_workers_m2m=n_workers_m2m,
+               subdir_prefix=subdir_prefix)
     
 
 def run_fixedcosmo(idx_mock):
@@ -128,10 +138,11 @@ def run_fixedcosmo(idx_mock):
                subdir_prefix='mock')
 
 
+
 def run_single(param_dict, seed, idx_mock, dir_mocks,
                n_grid=512, n_grid_target=128, box_size=1000.,
                n_threads_bacco=8, n_workers_m2m=0,
-               subdir_prefix='LH'):
+               subdir_prefix='lh'):
     
     deconvolve_lr_field = True
     run_zspace = True
