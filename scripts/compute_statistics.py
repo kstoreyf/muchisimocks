@@ -21,8 +21,8 @@ python compute_statistics.py --statistic bispec --idx_mock_start 0 --idx_mock_en
 
 
 def main():
-    run_loop()
-    #parse_args()
+    #run_loop()
+    parse_args()
     
 
 def parse_args():
@@ -124,7 +124,7 @@ def setup_bispsec(box_size, n_grid, n_threads):
     return base
     
     
-def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4, 
+def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1, 
         tag_biasparams=None,
         base_bispec=None):
 
@@ -147,10 +147,8 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4,
 
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, _, _ = \
         data_loader.load_params(tag_params, tag_biasparams)
-    print(params_df)
-    print(param_dict_fixed)
 
-    if 'p0' or 'fisher' in tag_params:
+    if 'p0' in tag_params or 'fisher' in tag_params:
         subdir_prefix = 'mock'
     else:
         subdir_prefix = 'LH'
@@ -158,7 +156,9 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4,
     # We only compute for the specified idx_mock
     fn_fields = f'{dir_mocks}/{subdir_prefix}{idx_mock}/bias_fields_eul_deconvolved_{idx_mock}.npy'
     
-    # TODO HERE still working on this!
+    # Checking here if we have remaining statistics to compute and if we need to load the fields at all
+    # (because loading fields takes some time, so want to check first if we'll need them;
+    # we'll also check later for the bispec case if we need to compute that particular one)
     if precompute:
         # this will be done for bias params
         factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
@@ -168,6 +168,8 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4,
             exist_all = True
             if not os.path.exists(fn_statistic) or overwrite:
                 exist_all = False
+                print(f"At least one statistic for '{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias} does not exist and overwrite={overwrite}, so continuing the computation")
+                break
         if exist_all:
             print(f"All statistics for '{dir_statistics}/{statistic}_{idx_mock} exists and overwrite={overwrite}, exiting")
             return
@@ -179,7 +181,8 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4,
         else:
             print(f"Computing statistic {fn_statistic} (overwrite={overwrite})")
 
-    start = time.time()
+    start_tot = time.time()
+    
     try:
         bias_terms_eul = np.load(fn_fields)
     except FileNotFoundError:
@@ -203,20 +206,31 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4,
     # TODO  check normalizaiton; n_grid_orig used for normalizing tracer
     # field once computed given bias coeffs; so maybe don't need here?
     if statistic == 'pnn':
+        start = time.time()
         power_all_terms = compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
                                                 n_threads=n_threads)
         np.save(fn_statistic, power_all_terms)
+        end = time.time()
+        print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
 
     if statistic == 'bispec':
         
         assert tag_biasparams is not None, "tag_biasparams must be provided for bispectrum computation"
         if params_df is not None and biasparams_df is not None:
-            assert len(biasparams_df) == len(params_df), f"Not yet implemented to have diff length biasparams_df ({len(biasparams_df)}) and params_df ({len(params_df)})"
+        #    assert len(biasparams_df) == len(params_df), f"Not yet implemented to have diff length biasparams_df ({len(biasparams_df)}) and params_df ({len(params_df)})"
+            assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
         
         factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
         idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, factor)
             
         for idx_bias in idxs_bias:
+            start = time.time()
+            # check if this particular stat already computed
+            fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
+            if os.path.exists(fn_statistic) and not overwrite:
+                print(f"Statistic {fn_statistic} exists and overwrite={overwrite}, continuing")
+                continue
+            
             biasparam_dict = biasparams_dict_fixed.copy()
             if biasparams_df is not None:
                 biasparam_dict.update(biasparams_df.loc[idx_mock].to_dict())
@@ -234,12 +248,15 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=4,
 
             np.save(fn_statistic, bispec_results_dict)
         
-    end = time.time()
-    print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+            end = time.time()
+            print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+            
+    end_tot = time.time()
+    print(f"Total time to compute {statistic}(s) for idx_mock={idx_mock} in time {end_tot-start_tot:.2f} s", flush=True)
 
 
 def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
-                        n_threads=8):
+                        n_threads=1):
 
     print("Computing the 15 PNN cross power spectra")
 

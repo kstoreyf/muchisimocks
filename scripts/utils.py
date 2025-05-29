@@ -61,7 +61,8 @@ cosmo_dict_quijote = {
                 }   
 
 cosmo_param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
-biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl']    
+biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl'] 
+param_names_all_ordered = cosmo_param_names_ordered + biasparam_names_ordered
 
 statistics_scaler_funcs = {'pk': 'log_minmax',
                            'bispec': 'minmax',

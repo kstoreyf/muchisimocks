@@ -77,29 +77,32 @@ def generate_params_LH():
 
 def generate_params_fisher():
     
-    overwrite = True # probs keep false!!! don't want to overwrite param files
+    overwrite = False # probs keep false!!! don't want to overwrite param files
     delta_fracextent = 0.05
     n_deltas_per_side = 2
     
-    bounds_type = 'cosmo' #cosmo or bias
-    #bounds_type = 'bias'
+    #bounds_type = 'cosmo' #cosmo or bias
+    bounds_type = 'bias'
     
     #n_params_vary = 0
     #tag_bounds = '' #NOTE params are automatically tagged below; this is for '_test' or '_quijote' so far
     #tag_bounds = '_test'
-    n_params_vary = 5
-    tag_bounds = '_quijote'
+    #n_params_vary = 5
+    #tag_bounds = '_quijote'
     
     # havent yet used 'test' to restrict bounds for bias params, only cosmo
     # TODO should i be?
     # bounds_type = 'bias'
-    # n_params_vary = 4
-    # tag_bounds = '_biaszen'
+    n_params_vary = 4
+    tag_bounds = '_biaszen'
     #n_params_vary = 1
     #tag_bounds = '_b1zen'
     #n_params_vary = 0
     #tag_bounds = '_b1000'
     
+    # for now choosing to not put pN in tag, bc usually will want to 
+    # vary all of that set
+    #tag_params = f'_fisher{tag_bounds}_p{len(param_names_vary)}
     tag_params = '_fisher'+tag_bounds
     
     dir_params = '../data/params'
@@ -109,13 +112,11 @@ def generate_params_fisher():
         return
     
     if bounds_type == 'cosmo':
-        param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
-        # for now we will always select the varying params in this order, for reproducibility
-        param_names_vary = param_names_vary[:n_params_vary]
+        # for now we will always select the varying params in this order, for easy reproducibility
+        param_names_vary = utils.cosmo_param_names_ordered[:n_params_vary]
         param_names_ordered, bounds_dict, fiducial_dict = define_LH_cosmo(tag_bounds=tag_bounds)
     elif bounds_type == 'bias':
-        param_names_vary = ['b1', 'b2', 'bs2', 'bl']
-        param_names_vary = param_names_vary[:n_params_vary]
+        param_names_vary = utils.biasparam_names_ordered[:n_params_vary]
         param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(tag_bounds=tag_bounds)
     else:
         raise ValueError("pset must be 'cosmo' or 'bias'")
@@ -132,7 +133,8 @@ def generate_params_fisher():
     rows = []
     
     # Fiducial cosmology
-    theta_fiducial = np.array([fiducial_dict[pn] for pn in param_names_vary])
+    # need float here bc in case the fiducial bias params are given as ints
+    theta_fiducial = np.array([float(fiducial_dict[pn]) for pn in param_names_vary])
     # Add the fiducial to dataset
     row_fid = {p: v for p, v in zip(param_names_vary, theta_fiducial)}
     row_fid['param_shifted'] = 'fiducial'
@@ -176,27 +178,27 @@ def generate_params_fisher():
 def define_LH_bias(tag_bounds='biaszen'):
         
     if 'biaswide' in tag_bounds:
-        bounds_dict = {'b1'     :  [-5, 20],
-                        'b2'    :  [-5, 10],
-                        'bs2'   :  [-10, 20],
-                        'bl'   :  [-20, 30],
+        bounds_dict = {'b1'     :  [-5.0, 20.0],
+                        'b2'    :  [-5.0, 10.0],
+                        'bs2'   :  [-10.0, 20.0],
+                        'bl'   :  [-20.0, 30.0],
                     }
     elif 'biaszen' in tag_bounds:
-        bounds_dict = {'b1'     :  [-1, 2],
-                        'b2'    :  [-2, 2],
-                        'bs2'   :  [-2, 2],
-                        'bl'   :  [-10, 10],
+        bounds_dict = {'b1'     :  [-1.0, 2.0],
+                        'b2'    :  [-2.0, 2.0],
+                        'bs2'   :  [-2.0, 2.0],
+                        'bl'   :  [-10.0, 10.0],
                     }
     elif 'b1zen' in tag_bounds:
-        bounds_dict = {'b1'     :  [-1, 2],
+        bounds_dict = {'b1'     :  [-1.0, 2.0],
                     }
     else:
         bounds_dict = {}
     
-    fiducial_dict = {'b1'     :  1,
-                    'b2'    :  0,
-                    'bs2'   :  0,
-                    'bl'   :  0,
+    fiducial_dict = {'b1'     :  1.0,
+                    'b2'    :  0.0,
+                    'bs2'   :  0.0,
+                    'bl'   :  0.0,
                 }
     
     # used to make the separate test sets, to avoid edge effects
@@ -225,12 +227,12 @@ def define_LH_cosmo(tag_bounds=''):
     if 'test' in tag_bounds:
         bounds_dict = restrict_bounds(bounds_dict, factor=0.05)
     
-    # added this check for quijote tag; so you know if this breaks,
-    # wasn't using before (always just returned this fiducial dict!)
-    if tag_bounds == '_quijote':
-        fiducial_dict = utils.cosmo_dict_quijote
-    else:
-        raise ValueError(f'Unknown tag_bounds {tag_bounds}')
+    fiducial_dict = utils.cosmo_dict_quijote
+    # not checking for bounds bc now these are the only two options (these bounds and quijote fid)
+    # if tag_bounds == '_quijote':
+    #     fiducial_dict = utils.cosmo_dict_quijote
+    # else:
+    #     raise ValueError(f'Unknown tag_bounds {tag_bounds}')
 
     return param_names_ordered, bounds_dict, fiducial_dict
 

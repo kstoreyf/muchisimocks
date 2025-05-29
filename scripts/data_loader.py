@@ -125,22 +125,10 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
     assert len(idxs_LH) > 0, f"No pks found in {dir_statistics}!"
     
     # Check the relationship between biasparams_df and idxs_LH
-    factor, longer_df = check_df_lengths(params_df, biasparams_df)
+    if 'fisher' not in tag_biasparams:
+        # only used later if not fisher
+        factor, longer_df = check_df_lengths(params_df, biasparams_df)
 
-    # N = len(idxs_LH)
-    # factor = 1
-    # if biasparams_df is not None:
-    #     n_biasparams = len(biasparams_df)
-        
-    #     if n_biasparams < N:
-    #         raise ValueError(f"biasparams_df length ({n_biasparams}) is shorter than idxs_LH length ({N})")
-    #     elif n_biasparams > N:
-    #         # Check if they're related by an integer factor
-    #         factor = n_biasparams / N
-    #         if not factor.is_integer():
-    #             raise ValueError(f"biasparams_df length ({n_biasparams}) is not an integer multiple of idxs_LH length ({N})")
-    #         factor = int(factor)
-    #         print(f"biasparams_df is {factor}x longer than idxs_LH. Will map multiple bias parameters to each idx_LH.")
     print("dir statistics", dir_statistics)
 
     #theta, Pk, gaussian_error_pk = [], [], []
@@ -179,8 +167,15 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
             else:
                 raise ValueError(f"Statistic {statistic} not recognized for non-precomputed mode!")    
             
-            assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
-            idxs_bias = get_bias_indices_for_idx(idx_LH, factor)
+            # figure out which bias indeces to use
+            if 'fisher' in tag_biasparams:
+                if params_df.iloc[idx_LH]['param_shifted']=='fiducial':
+                    idxs_bias = biasparams_df.index
+                else:
+                    idxs_bias = np.where(biasparams_df['param_shifted']=='fiducial')[0]
+            else:
+                assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
+                idxs_bias = get_bias_indices_for_idx(idx_LH, factor)
             
             for idx_bias in idxs_bias:
                 if biasparams_df is not None:
@@ -196,6 +191,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
                 stat_arr.append(stat)
                 idxs_params.append((idx_LH, idx_bias))
 
+    print(idxs_params)
     stat_arr = np.array(stat_arr)
     error_arr = np.array(error_arr)
     idxs_params= np.array(idxs_params)
