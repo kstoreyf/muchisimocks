@@ -111,6 +111,8 @@ def generate_pks(emu, params_df, param_dict_fixed, biasparams_df, biasparams_dic
         if params_df is not None:
             param_dict.update(params_df.loc[idx_mock].to_dict())
         
+        # TODO this only works in case that biasparams_df is same length as params_df!
+        # need to update to get proper idxs_bias
         biasparam_dict = biasparams_dict_fixed.copy()
         if biasparams_df is not None:
             biasparam_dict.update(biasparams_df.loc[idx_mock].to_dict())

@@ -11,7 +11,7 @@ from sbi.neural_nets import posterior_nn
 import torch
 
 import scaler_custom as scl
-import generate_params_lh as gplh
+import generate_params as genp
 import utils
 
 

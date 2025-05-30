@@ -460,3 +460,18 @@ def generate_randints(n_samples, fn_rands, rng=None, overwrite=False):
     np.save(fn_rands, random_ints)
     print(f"Saved random ints to {fn_rands}")
     return random_ints
+
+
+def compute_fisher_matrix(derivatives, covariance_matrix, param_names):
+    n_params = len(param_names)
+    fisher_matrix = np.zeros((n_params, n_params))
+    
+    # Invert covariance matrix
+    cov_inv = np.linalg.inv(covariance_matrix)
+    
+    for i, param_i in enumerate(param_names):
+        for j, param_j in enumerate(param_names):
+            fisher_matrix[i, j] = np.dot(derivatives[param_i], 
+                                       np.dot(cov_inv, derivatives[param_j]))
+    
+    return fisher_matrix

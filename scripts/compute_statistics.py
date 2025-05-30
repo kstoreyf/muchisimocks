@@ -83,8 +83,9 @@ def run_loop():
 
     ## fisher
     tag_params = '_fisher_quijote'
-    tag_biasparams = None # for pnn, don't need biasparams
-    n_mocks = 21 #magic, i just know this number for fisher
+    #tag_biasparams = None # for pnn, don't need biasparams
+    tag_biasparams = '_fisher_biaszen'
+    n_mocks = 21 #magic, i just know this number for fisher; TODO read it in
     
     overwrite = False
     n_threads = 1
@@ -159,13 +160,24 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
     # Checking here if we have remaining statistics to compute and if we need to load the fields at all
     # (because loading fields takes some time, so want to check first if we'll need them;
     # we'll also check later for the bispec case if we need to compute that particular one)
-    if precompute:
-        # this will be done for bias params
-        factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
-        idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, factor)
+    if precompute:                
+        # figure out which bias indices to use
+        if 'fisher' in tag_biasparams:
+            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='fisher',
+                                                params_df=params_df, biasparams_df=biasparams_df)
+        elif 'p0' in tag_biasparams:
+            idxs_bias = np.array([0]) #not really, but so loops don't break; dont use besides for looping
+        else:
+            factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
+            assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
+            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=factor)
+        
+        exist_all = True
         for idx_bias in idxs_bias:
-            fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
-            exist_all = True
+            if 'p0' in tag_biasparams:
+                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
+            else:
+                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
             if not os.path.exists(fn_statistic) or overwrite:
                 exist_all = False
                 print(f"At least one statistic for '{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias} does not exist and overwrite={overwrite}, so continuing the computation")
@@ -216,24 +228,22 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
     if statistic == 'bispec':
         
         assert tag_biasparams is not None, "tag_biasparams must be provided for bispectrum computation"
-        if params_df is not None and biasparams_df is not None:
-        #    assert len(biasparams_df) == len(params_df), f"Not yet implemented to have diff length biasparams_df ({len(biasparams_df)}) and params_df ({len(params_df)})"
-            assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
         
-        factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
-        idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, factor)
-            
+        # idxs_bias is gotten above, bc used it to check if files exist already
         for idx_bias in idxs_bias:
             start = time.time()
             # check if this particular stat already computed
-            fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
+            if 'p0' in tag_biasparams:
+                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
+            else:
+                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
             if os.path.exists(fn_statistic) and not overwrite:
                 print(f"Statistic {fn_statistic} exists and overwrite={overwrite}, continuing")
                 continue
             
             biasparam_dict = biasparams_dict_fixed.copy()
             if biasparams_df is not None:
-                biasparam_dict.update(biasparams_df.loc[idx_mock].to_dict())
+                biasparam_dict.update(biasparams_df.loc[idx_bias].to_dict())
             bias_vector = [biasparam_dict[name] for name in utils.biasparam_names_ordered]
             tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
             

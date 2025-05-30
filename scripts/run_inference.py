@@ -18,7 +18,7 @@ import sbi_model
 import scaler_custom as scl
 import data_loader
 
-import generate_params_lh as gplh
+import generate_params as genp
 
 
 def main():
@@ -82,8 +82,8 @@ def train_likefree_inference(config):
                                       kwargs=kwargs_data)
 
     # get bounds dict
-    _, dict_bounds_cosmo, _ = gplh.define_LH_cosmo(tag_params)
-    _, dict_bounds_bias, _ = gplh.define_LH_bias(tag_biasparams)
+    _, dict_bounds_cosmo, _ = genp.define_LH_cosmo(tag_params)
+    _, dict_bounds_bias, _ = genp.define_LH_bias(tag_biasparams)
     dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
     
     ### Subsampling (ntrain and train/val)
@@ -254,8 +254,8 @@ def run_likelihood_inference(config):
         ys_err_obs = y_err[idxs_obs]
         
     # get bounds
-    _, dict_bounds_cosmo, _ = gplh.define_LH_cosmo(tag_params)
-    _, dict_bounds_bias, _ = gplh.define_LH_bias(tag_biasparams)
+    _, dict_bounds_cosmo, _ = genp.define_LH_cosmo(tag_params)
+    _, dict_bounds_bias, _ = genp.define_LH_bias(tag_biasparams)
     print("bounds")
     print(dict_bounds_cosmo)
     print(dict_bounds_bias)
@@ -287,6 +287,8 @@ def run_likelihood_inference(config):
             cosmo_param_dict_fixed_obs.pop(pn, None)
         bias_param_dict_fixed_obs = bias_param_dict_fixed.copy()
         if biasparams_df is not None:
+            # TODO this only works in case that biasparams_df is same length as params_df!
+            # need to update to get proper idxs_bias
             bias_param_dict_fixed_obs.update(biasparams_df.loc[idx_obs].to_dict())
         for pn in bias_param_names_vary:
             bias_param_dict_fixed_obs.pop(pn, None)

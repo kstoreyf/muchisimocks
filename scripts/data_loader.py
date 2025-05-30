@@ -37,13 +37,19 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
     return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
 
 
-def get_bias_indices_for_idx(idx_LH, factor):
+def get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=None,
+                             params_df=None, biasparams_df=None):
     """
+    # TODO this should probs be combined with check_df_lengths function,
+    # but would have to revamp the params-to-theta function
     Get the bias parameter indices corresponding to a power spectrum index.
     
+    For LH:
     For a given idx_LH and factor, returns consecutive indices:
     idx_LH=0, factor=10 -> [0, 1, 2, ..., 9]
     idx_LH=1, factor=10 -> [10, 11, 12, ..., 19]
+    For Fisher:
+    Get so only one param is shifted each time
     
     Args:
         idx_LH (int): The power spectrum index
@@ -52,9 +58,20 @@ def get_bias_indices_for_idx(idx_LH, factor):
     Returns:
         list: List of bias parameter indices
     """
-    start_idx = idx_LH * factor
-    end_idx = (idx_LH + 1) * factor
-    return list(range(start_idx, end_idx))
+    
+    if modecosmo=='lh':
+        assert factor is not None, "factor must be provided"
+        start_idx = idx_mock * factor
+        end_idx = (idx_mock + 1) * factor
+        idxs_bias = list(range(start_idx, end_idx))
+    elif modecosmo=='fisher':
+        assert params_df is not None and biasparams_df is not None, "params_df and biasparams_df must be provided"
+        if params_df.iloc[idx_mock]['param_shifted']=='fiducial':
+            idxs_bias = biasparams_df.index
+        else:
+            idxs_bias = np.where(biasparams_df['param_shifted']=='fiducial')[0]        
+    return idxs_bias
+
 
 
 def check_df_lengths(params_df, biasparams_df):
@@ -113,12 +130,16 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
     # Load bias parameters regardless of mode
     params_df, param_dict_fixed = load_cosmo_params(tag_params)
     biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
-    print(tag_biasparams)
-
+    
+    #n_cosmos = int(re.search(r'n(\d+)', tag_params).group(1))
+    #idxs_LH = np.arange(n_cosmos)
+    # no ideal way to get this number...
+    #idxs_LH = np.array(params_df.index)
     # using regexp bc not loading params_df here (tho could reorg if decide i need)
-    idxs_LH = [int(re.search(fr'{stat_name}_(\d+)\.npy', file_name).group(1))
-                     for file_name in os.listdir(dir_statistics) if re.search(fr'{stat_name}_(\d+)\.npy', file_name)]
-    idxs_LH = np.sort(np.array(idxs_LH)) # now doing regexp, need to sort
+    idxs_LH = [int(re.search(fr'{stat_name}_(\d+)[^/]*\.npy', file_name).group(1))
+                     for file_name in os.listdir(dir_statistics) if re.search(fr'{stat_name}_(\d+)[^/]*\.npy', file_name)]
+    # need set bc for cases w multiple bias parameters per, want to only grab the cosmo
+    idxs_LH = np.sort(np.array(list(set(idxs_LH)))) # now doing regexp, need to sort
     #idxs_LH = np.array([idx_LH for idx_LH in params_df.index.values
     #                    if os.path.exists(f"{dir_statistics}/pk_{idx_LH}.npy")])
     print(f"Found {len(idxs_LH)} {stat_name}s in {dir_statistics}")
@@ -129,53 +150,56 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
         # only used later if not fisher
         factor, longer_df = check_df_lengths(params_df, biasparams_df)
 
-    print("dir statistics", dir_statistics)
-
     #theta, Pk, gaussian_error_pk = [], [], []
     stat_arr, error_arr, idxs_params = [], [], []
     for i, idx_LH in enumerate(idxs_LH):
         #if idx_LH%100 == 0:
             #print(f"Loading Pk {idx_LH}", flush=True)
         
-        fn_stat = f'{dir_statistics}/{stat_name}_{idx_LH}.npy'
+        # figure out which bias indices to use
+        if 'fisher' in tag_biasparams:
+            idxs_bias = get_bias_indices_for_idx(idx_LH, modecosmo='fisher', 
+                                                params_df=params_df, biasparams_df=biasparams_df)
+        else:
+            assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
+            idxs_bias = get_bias_indices_for_idx(idx_LH, modecosmo='lh', factor=factor)
         
         if mode_precomputed:
             if statistic == 'pk':
+                # TODO pk is old style where only 1-1 cosmo-bias, so this name format
+                fn_stat = f'{dir_statistics}/{stat_name}_{idx_LH}.npy'
                 pk_obj = np.load(fn_stat, allow_pickle=True).item()
                 k = pk_obj['k'] # all ks should be same so just grab one
                 stat, error = pk_obj['pk'], pk_obj['pk_gaussian_error']
+                stat_arr.append(stat)
                 error_arr.append(error)
+                # if just one bias param per idx_cosmo, then just use the same
+                idxs_params.append((idx_LH, idx_LH))
             elif statistic == 'bispec':
-                bispec_obj = np.load(fn_stat, allow_pickle=True).item()
-                # multiply by the weight and normalize to get a 
-                # better behaved stat
-                n_grid = 128
-                norm = n_grid**3
-                k = bispec_obj['k123']
-                stat = norm**3 * bispec_obj['weight']*bispec_obj['bispectrum']['b0']
-            
-            stat_arr.append(stat)
-            # if just one bias param per idx_cosmo, then just use the same
-            idxs_params.append((idx_LH, idx_LH))
-            
+                for idx_bias in idxs_bias:
+                    if biasparams_df is None:
+                        # if fixed bias params, it wont be in the name
+                        fn_stat = f'{dir_statistics}/{stat_name}_{idx_LH}.npy'
+                    else:
+                        fn_stat = f'{dir_statistics}/{stat_name}_{idx_LH}_b{idx_bias}.npy'
+                    bispec_obj = np.load(fn_stat, allow_pickle=True).item()
+                    # multiply by the weight and normalize to get a 
+                    # better behaved stat
+                    n_grid = 128
+                    norm = n_grid**3
+                    k = bispec_obj['k123']
+                    stat = norm**3 * bispec_obj['weight']*bispec_obj['bispectrum']['b0']
+                    stat_arr.append(stat)
+                    idxs_params.append((idx_LH, idx_bias))
         else:
-            # if not precomputed, we'll have to load the bias params separately   
             
             if statistic == 'pk':
+                # here we havent selected bias params yet
+                fn_stat = f'{dir_statistics}/{stat_name}_{idx_LH}.npy'
                 pnn_obj = np.load(fn_stat, allow_pickle=True)
                 k = pnn_obj[0]['k']
             else:
                 raise ValueError(f"Statistic {statistic} not recognized for non-precomputed mode!")    
-            
-            # figure out which bias indeces to use
-            if 'fisher' in tag_biasparams:
-                if params_df.iloc[idx_LH]['param_shifted']=='fiducial':
-                    idxs_bias = biasparams_df.index
-                else:
-                    idxs_bias = np.where(biasparams_df['param_shifted']=='fiducial')[0]
-            else:
-                assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
-                idxs_bias = get_bias_indices_for_idx(idx_LH, factor)
             
             for idx_bias in idxs_bias:
                 if biasparams_df is not None:
@@ -191,7 +215,6 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
                 stat_arr.append(stat)
                 idxs_params.append((idx_LH, idx_bias))
 
-    print(idxs_params)
     stat_arr = np.array(stat_arr)
     error_arr = np.array(error_arr)
     idxs_params= np.array(idxs_params)
@@ -299,6 +322,7 @@ def param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=1):
     assert params_df is not None or biasparams_df is not None, "params_df or biasparams_df (or both) must be specified"
     param_names = []
 
+    # TODO im sure this could be cleaned up a lot...
     # Base case: only one DataFrame provided
     if params_df is None:
         param_names.extend(biasparams_df.columns.tolist())
@@ -339,7 +363,7 @@ def param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=1):
             cosmo_params = params_df.loc[idx].values
             
             # Get all corresponding bias parameter indices
-            bias_indices = get_bias_indices_for_idx(idx, factor)
+            bias_indices = get_bias_indices_for_idx(idx, factor=factor)
             
             # For each bias parameter set, create a combined parameter set
             for bias_idx in bias_indices:
@@ -366,7 +390,7 @@ def param_dfs_to_theta(params_df, biasparams_df, n_rlzs_per_cosmo=1):
             bias_params = biasparams_df.loc[idx].values
             
             # Get all corresponding cosmology parameter indices
-            cosmo_indices = get_bias_indices_for_idx(idx, factor)
+            cosmo_indices = get_bias_indices_for_idx(idx, factor=factor)
             
             # For each cosmology parameter set, create a combined parameter set
             for cosmo_idx in cosmo_indices:
