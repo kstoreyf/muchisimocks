@@ -9,8 +9,8 @@ import utils
 
 
 def main():
-    #generate_params_LH()
-    generate_params_fisher()
+    generate_params_LH()
+    #generate_params_fisher()
 
 
 
@@ -20,23 +20,24 @@ def generate_params_LH():
     seed = 42
     overwrite = False # probs keep false!!! don't want to overwrite param files
 
-    n_samples = 1000000
+    #n_samples = 1000000
+    n_samples = 1
     
     #bounds_type = 'cosmo' #cosmo or bias
     #n_params_vary = 0
     #tag_bounds = '' #NOTE params are automatically tagged below; this is for '_test' or '_quijote' so far
-    tag_bounds = '_test'
+    #tag_bounds = '_test'
     #tag_bounds = '_quijote'
     
     # havent yet used 'test' to restrict bounds for bias params, only cosmo
     # TODO should i be?
     bounds_type = 'bias'
-    n_params_vary = 4
-    tag_bounds = '_biaszen'
+    # n_params_vary = 4
+    # tag_bounds = '_biaszen'
     #n_params_vary = 1
     #tag_bounds = '_b1zen'
-    #n_params_vary = 0
-    #tag_bounds = '_b1000'
+    n_params_vary = 0
+    tag_bounds = '_b0000'
     
     if bounds_type == 'cosmo':
         param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
@@ -195,11 +196,19 @@ def define_LH_bias(tag_bounds='biaszen'):
     else:
         bounds_dict = {}
     
-    fiducial_dict = {'b1'     :  1.0,
-                    'b2'    :  0.0,
-                    'bs2'   :  0.0,
-                    'bl'   :  0.0,
-                }
+    if 'b0000' in tag_bounds:
+        fiducial_dict = {'b1'     :  0.0,
+                        'b2'    :  0.0,
+                        'bs2'   :  0.0,
+                        'bl'   :  0.0,
+                    }
+    else:
+        # this will be fiducial for b1000, and all others
+        fiducial_dict = {'b1'     :  1.0,
+                        'b2'    :  0.0,
+                        'bs2'   :  0.0,
+                        'bl'   :  0.0,
+                    }
     
     # used to make the separate test sets, to avoid edge effects
     if 'test' in tag_bounds:

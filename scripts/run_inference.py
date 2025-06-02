@@ -25,7 +25,7 @@ def main():
     
     parser = argparse.ArgumentParser(description="Run inference with config files.")
     parser.add_argument("-tr", "--config-train", type=str, help="Path to the training YAML configuration file.")
-    parser.add_argument("-t", "--config-test", type=str, help="Path to the testing YAML configuration file.")
+    parser.add_argument("-te", "--config-test", type=str, help="Path to the testing YAML configuration file.")
     parser.add_argument("-l", "--config-runlike", type=str, help="Path to the runlike YAML configuration file.")
     args = parser.parse_args()
 

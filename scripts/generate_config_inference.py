@@ -9,9 +9,9 @@ Generates a YAML configuration file for inference.
 
 
 def main():
-    #overwrite = False
-    overwrite = True
-    generate_train_config(overwrite=overwrite)
+    overwrite = False
+    #overwrite = True
+    #generate_train_config(overwrite=overwrite)
     generate_test_config(overwrite=overwrite)
     #generate_runlike_config(overwrite=overwrite)
     
@@ -21,28 +21,29 @@ def generate_train_config(dir_config='../configs/configs_train',
     """
     Generates a YAML configuration file for training.
     """
-    #data_mode = 'muchisimocks'
-    data_mode = 'emu'
-    #statistics = ['pk', 'bispec']
-    statistics = ['pk']
-    n_train = 10000
+    data_mode = 'muchisimocks'
+    #data_mode = 'emu'
+    statistics = ['pk', 'bispec']
+    #statistics = ['pk']
+    #statistics = ['bispec']
+    n_train = 1000
+    n_train_sweep = 10000 # grab the hyperparams from the sweep trained on this many
     #n_train = 10
     #n_train = None #if None, uses all (and no ntrain tag in tag_inf)
     tag_params = '_p5_n10000'
     #tag_biasparams = '_b1000_p0_n1'
     #tag_biasparams = '_b1zen_p1_n10000'
-    tag_biasparams = '_biaszen_p4_n10000'
-    #tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
+    #tag_biasparams = '_biaszen_p4_n10000' #1-1 cosmo-bias params
+    tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
     # emu-specific
     n_rlzs_per_cosmo = 1
     
     # running inferece params
-    run_mode = 'single'
-    sweep_name = None
-    #run_mode = 'best'
-    #sweep_name = 'sbi-rand10'
-    # tag_sweep = '_rand10'
-    # sweep_name = tag_inf + tag_sweep
+    # run_mode = 'single'
+    # tag_sweep = None
+    run_mode = 'best'
+    #run_mode = 'sweep'
+    tag_sweep = '-rand10'
         
     if data_mode == 'emu':
         tag_errG = '_boxsize1000'
@@ -63,9 +64,16 @@ def generate_train_config(dir_config='../configs/configs_train',
     if n_train is not None:
         tag_inf += f'_ntrain{n_train}'
     if run_mode == 'sweep':
-        tag_inf += f'_sweep-{sweep_name}'
+        tag_inf += f'_sweep{tag_sweep}'
+        sweep_name = tag_inf
     elif run_mode == 'best':
-        tag_inf += f'_best-{sweep_name}'
+        # if want best, neeed the sweep name to match sweep,
+        # but new tag_inf will be best
+        # sweep name is tag_inf of sweep; reconstruct cuz is diff than this tag_inf
+        sweep_name = tag_data + f'_ntrain{n_train_sweep}_sweep{tag_sweep}'
+        tag_inf += f'_best{tag_sweep}'
+    elif run_mode == 'single':
+        sweep_name = None
             
     config = {
         "data_mode": data_mode,
@@ -102,27 +110,28 @@ def generate_test_config(dir_config='../configs/configs_test',
     """
 
     ### Select trained model
-    data_mode = 'emu'
-    #data_mode = 'muchisimocks'
+    #data_mode = 'emu'
+    data_mode = 'muchisimocks'
     #statistics = ['pk', 'bispec']
-    statistics = ['pk']
-    #statistics = ['bispec']
+    #statistics = ['pk']
+    statistics = ['bispec']
     
     ### train params
     tag_params = '_p5_n10000'
     #tag_biasparams = '_b1000_p0_n1'
     #tag_biasparams = '_b1zen_p1_n10000'
-    tag_biasparams = '_biaszen_p4_n10000'
-    #tag_biasparams = '_biaszen_p4_n100000'
+    #tag_biasparams = '_biaszen_p4_n10000' #1x
+    tag_biasparams = '_biaszen_p4_n100000' #10x
     n_rlzs_per_cosmo = 1
     n_train = 10000
+    n_train_sweep = 10000
     # For loading a model trained with wandb sweep; best of that sweep will be used
-    sweep_name = None
-    #sweep_name = 'sbi-rand10'
+    #tag_sweep = '-rand10'
+    tag_sweep = None
     
     ### test params
     idxs_obs = None # if none, all (unless evaluate mean)
-    ## settings for fixed cosmo
+    # ## settings for fixed cosmo
     evaluate_mean = True 
     tag_params_test = '_quijote_p0_n1000'
     tag_biasparams_test = '_b1000_p0_n1'
@@ -166,11 +175,12 @@ def generate_test_config(dir_config='../configs/configs_test',
     tag_inf_train = tag_data_train
     if n_train is not None:
         tag_inf_train += f'_ntrain{n_train}'
-    if sweep_name is not None:
-        # run_mode fixed to load for testing, bc always should be
-        # loading already trained model
-        # (best is for reading the best hyperparameters from a sweep and retraining and saving it)
-        tag_inf_train += f'_best-{sweep_name}'
+    # run_mode fixed to load for testing, bc always should be loading already trained model;
+    # (best is for training; will read the best hyperparameters from a sweep and retrain and save it)
+    if tag_sweep is not None:
+        sweep_name = tag_data_train + f'_ntrain{n_train_sweep}_best{tag_sweep}'
+    else:
+        sweep_name = None
     
     if evaluate_mean:
         tag_mean = '_mean'

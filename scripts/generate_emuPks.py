@@ -67,7 +67,7 @@ def main():
     dir_emus_lbias = '/home/kstoreyf/external'
     emu, emu_bounds, emu_param_names = utils.load_emu(dir_emus_lbias=dir_emus_lbias)
     
-    k, Pk_noiseless = generate_pks(emu, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, 
+    k, Pk_noiseless = generate_pks(emu, tag_biasparams, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, 
                                    fn_emuk=fn_emuk, fn_emuPk=fn_emuPk, n_data=n_data,
                          )
     gaussian_error_pk = compute_noise(k, Pk_noiseless, box_size, fn_emuPkerrG=fn_emuPkerrG)
@@ -82,7 +82,7 @@ def main():
 
     
 # TODO generate the pnns and then recombine them w the bias params
-def generate_pks(emu, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed,
+def generate_pks(emu, tag_biasparams, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed,
                  fn_emuk=None, fn_emuPk=None, n_data=None, overwrite=False):
     
     if os.path.exists(fn_emuk) and os.path.exists(fn_emuPk) and not overwrite:
@@ -94,8 +94,11 @@ def generate_pks(emu, params_df, param_dict_fixed, biasparams_df, biasparams_dic
     print(f"Generating emuPks for {fn_emuPk}...")
     #cosmo_params = utils.setup_cosmo_emu(cosmo='quijote')
     
-    biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl']
-    
+    # Check the relationship between biasparams_df and idxs_LH
+    if 'fisher' not in tag_biasparams:
+        # only used later if not fisher
+        factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
+        
     param_dict_fixed['expfactor'] = 1
     #cosmo_params['expfactor'] = 1
     #k = np.logspace(-2, np.log10(0.75), 30)
@@ -107,20 +110,37 @@ def generate_pks(emu, params_df, param_dict_fixed, biasparams_df, biasparams_dic
     if n_data is None:
         n_data = len(params_df)
     for idx_mock in range(n_data):
+        
+        # get cosmo params
         param_dict = param_dict_fixed.copy()
         if params_df is not None:
             param_dict.update(params_df.loc[idx_mock].to_dict())
         
-        # TODO this only works in case that biasparams_df is same length as params_df!
-        # need to update to get proper idxs_bias
-        biasparam_dict = biasparams_dict_fixed.copy()
-        if biasparams_df is not None:
-            biasparam_dict.update(biasparams_df.loc[idx_mock].to_dict())
-        bias_vector = [biasparam_dict[name] for name in biasparam_names_ordered]
+        # figure out which bias indices to use
+        if 'fisher' in tag_biasparams:
+            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='fisher', 
+                                                params_df=params_df, biasparams_df=biasparams_df)
+        else:
+            assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
+            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=factor)
 
-        _, pk_gg, _ = emu.get_galaxy_real_pk(bias=bias_vector, k=k, 
-                                                    **param_dict)
-        Pk.append(pk_gg)
+        # loop over bias params, get pk
+        for i, idx_bias in enumerate(idxs_bias):
+            
+            # TODO need to update saving still
+            # if 'p0' in tag_biasparams:
+            #     fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
+            # else:
+            #     fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
+            
+            biasparam_dict = biasparams_dict_fixed.copy()
+            if biasparams_df is not None:
+                biasparam_dict.update(biasparams_df.loc[idx_bias].to_dict())
+            bias_vector = [biasparam_dict[name] for name in utils.biasparam_names_ordered]
+
+            _, pk_gg, _ = emu.get_galaxy_real_pk(bias=bias_vector, k=k, 
+                                                        **param_dict)
+            Pk.append(pk_gg)
 
     np.save(fn_emuPk, Pk)
     np.savetxt(fn_emuk, k)

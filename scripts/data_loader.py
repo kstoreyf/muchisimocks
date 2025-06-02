@@ -142,7 +142,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
     idxs_LH = np.sort(np.array(list(set(idxs_LH)))) # now doing regexp, need to sort
     #idxs_LH = np.array([idx_LH for idx_LH in params_df.index.values
     #                    if os.path.exists(f"{dir_statistics}/pk_{idx_LH}.npy")])
-    print(f"Found {len(idxs_LH)} {stat_name}s in {dir_statistics}")
+    print(f"Found {len(idxs_LH)} diff cosmo {stat_name}s in {dir_statistics}")
     assert len(idxs_LH) > 0, f"No pks found in {dir_statistics}!"
     
     # Check the relationship between biasparams_df and idxs_LH
