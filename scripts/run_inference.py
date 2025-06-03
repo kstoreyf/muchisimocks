@@ -103,7 +103,7 @@ def train_likefree_inference(config):
     idxs_train = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_train)]
     idxs_val = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_val)]
 
-    theta, param_names = data_loader.param_dfs_to_theta(params_df, biasparams_df, 
+    theta, param_names = data_loader.param_dfs_to_theta(idxs_params, params_df, biasparams_df, 
                                                         n_rlzs_per_cosmo=config["n_rlzs_per_cosmo"])
     print('theta shape:', theta.shape)
     print(param_names)

@@ -18,7 +18,7 @@
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_b1000_p0_n1_test_p5_n1000_b1000_p0_n1
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n100000_ntrain100000_test_p5_n1000_biaszen_p4_n1000
 ##SBATCH --job-name=run_inf_TRAIN_muchisimocks_pk_bispec_p5_n10000_biaszen_p4_n10000_ntrain10000_TEST_muchisimocks_pk_bispec_test_p5_n1000_biaszen_p4_n1000.yaml
-#SBATCH --job-name=run_inf_TRAIN_muchisimocks_pk_bispec_p5_n10000_biaszen_p4_n100000_ntrain1000_TEST_muchisimocks_pk_bispec_test_p5_n1000_biaszen_p4_n1000
+#SBATCH --job-name=run_inf_train_muchisimocks_bispec_p5_n10000_biaszen_p4_n100000_ntrain10000
 ##SBATCH --job-name=run_inf_train_muchisimocks_pk_bispec_p5_n10000_biaszen_p4_n100000_ntrain10000_sweep-rand10
 #SBATCH --time=16:00:00 # max 24h
 #SBATCH --nodes=1              # nodes per instance
@@ -44,8 +44,9 @@ conda activate benv
 
 # old way was extremely picky with the backslashes so doing this! claude's idea
 args=(
-	--config-train=../configs/configs_train/config_muchisimocks_pk_bispec_p5_n10000_biaszen_p4_n100000_ntrain1000_best-rand10.yaml
-	--config-test=../configs/configs_test/config_TRAIN_muchisimocks_pk_bispec_p5_n10000_biaszen_p4_n100000_ntrain1000_TEST_muchisimocks_pk_bispec_test_p5_n1000_biaszen_p4_n1000.yaml
+	--config-train=../configs/configs_train/config_muchisimocks_bispec_p5_n10000_biaszen_p4_n100000_ntrain10000.yaml
+	#--config-train=../configs/configs_train/config_muchisimocks_pk_bispec_p5_n10000_biaszen_p4_n100000_ntrain1000_best-rand10.yaml
+	#--config-test=../configs/configs_test/config_TRAIN_muchisimocks_pk_bispec_p5_n10000_biaszen_p4_n100000_ntrain1000_TEST_muchisimocks_pk_bispec_test_p5_n1000_biaszen_p4_n1000.yaml
 	#--config-train=../configs/configs_train/config_muchisimocks_pk_p5_n10000_biaszen_p4_n100000_ntrain10000_best-rand10.yaml
 	#--config-test=../configs/configs_test/config_TRAIN_muchisimocks_pk_p5_n10000_biaszen_p4_n100000_ntrain10000_best-rand10_TEST_muchisimocks_pk_test_p5_n1000_biaszen_p4_n1000.yaml
     #--config-train=../configs/configs_train/config_muchisimocks_bispec_p5_n10000_biaszen_p4_n100000_ntrain10000.yaml
