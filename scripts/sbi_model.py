@@ -216,6 +216,9 @@ class SBIModel():
                 
         #callbacks = [WandbLoggingCallback()]
         
+        # defaults: 
+        # stop_after_epochs=20
+        # num_atoms = 10
         density_estimator = inference.train(
             max_num_epochs=max_epochs,
             training_batch_size=training_batch_size,

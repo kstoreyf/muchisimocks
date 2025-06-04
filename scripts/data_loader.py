@@ -37,6 +37,40 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
     return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
 
 
+def get_idxs_params(tag_params, tag_biasparams, n_bias_per_cosmo=1, 
+                    modecosmo='lh'):
+    """
+    For each cosmological parameter index, get the corresponding bias parameter indices.
+    Returns a list of (idx_mock, idx_bias) tuples.
+    """
+    params_df, param_dict_fixed = load_cosmo_params(tag_params)
+    biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
+    n_cosmo_params = len(params_df)
+    n_biasparams = len(biasparams_df)
+    factor = n_biasparams // n_cosmo_params
+    if n_biasparams % n_cosmo_params != 0:
+        raise ValueError(f"biasparams_df length ({n_biasparams}) is not an integer multiple of params_df length ({n_cosmo_params})")
+
+    idxs_params = []
+    for idx_mock in params_df.index:
+        if modecosmo == 'lh':
+            start_idx = idx_mock * factor
+            end_idx = (idx_mock + 1) * factor
+            for idx_bias in range(start_idx, end_idx):
+                idxs_params.append((idx_mock, idx_bias))
+        elif modecosmo == 'fisher':
+            if params_df.iloc[idx_mock]['param_shifted'] == 'fiducial':
+                for idx_bias in biasparams_df.index:
+                    idxs_params.append((idx_mock, idx_bias))
+            else:
+                fiducial_bias_idxs = np.where(biasparams_df['param_shifted'] == 'fiducial')[0]
+                for idx_bias in fiducial_bias_idxs:
+                    idxs_params.append((idx_mock, idx_bias))
+        else:
+            raise ValueError(f"Unknown modecosmo: {modecosmo}")
+    return idxs_params
+
+
 def get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=None,
                              params_df=None, biasparams_df=None):
     """
@@ -377,7 +411,7 @@ def load_theta_test(tag_params_test, tag_biasparams_test,
     
     # get parameter files
     params_df_test, param_dict_fixed_test, biasparams_df_test, biasparams_dict_fixed_test, _, _ = load_params(tag_params_test, tag_biasparams_test)
-
+    
     # load test data
     if 'p0' in tag_params_test and 'p0' in tag_biasparams_test:
         msg = "If all fixed parameters in test set, need to specify which parameters to provide"
@@ -388,9 +422,12 @@ def load_theta_test(tag_params_test, tag_biasparams_test,
     else:
         # for when have a LH of varied bias parameters
         # TODO update to handle idxs_params!
-        theta_test, param_names = param_dfs_to_theta(params_df_test, biasparams_df_test, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
+        idxs_params = get_idxs_params(tag_params_test, tag_biasparams_test)
+        theta_test, param_names = param_dfs_to_theta(idxs_params, params_df_test, biasparams_df_test, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
         
     return np.array(theta_test)
+    
+    
     
 
 def get_param_names(tag_params=None, tag_biasparams=None, dir_params='../data/params'):

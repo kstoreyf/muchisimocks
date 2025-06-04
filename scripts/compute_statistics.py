@@ -143,7 +143,7 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
         tag_mocks = tag_params
     # actual mock data dir is just cosmology-dependent
     dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_params}'
-    dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_mocks}'
+    dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_mocks}_rerunjobarr'
     Path.mkdir(Path(dir_statistics), parents=True, exist_ok=True)
 
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, _, _ = \
@@ -180,7 +180,7 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
                 fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
             if not os.path.exists(fn_statistic) or overwrite:
                 exist_all = False
-                print(f"At least one statistic for '{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias} does not exist and overwrite={overwrite}, so continuing the computation")
+                print(f"At least one statistic for '{dir_statistics}/{statistic}_{idx_mock} (idx_bias={idx_bias}) does not exist and overwrite={overwrite}, so continuing the computation")
                 break
         if exist_all:
             print(f"All statistics for '{dir_statistics}/{statistic}_{idx_mock} exists and overwrite={overwrite}, exiting")
@@ -230,6 +230,7 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
         assert tag_biasparams is not None, "tag_biasparams must be provided for bispectrum computation"
         
         # idxs_bias is gotten above, bc used it to check if files exist already
+        print(idxs_bias)
         for idx_bias in idxs_bias:
             start = time.time()
             # check if this particular stat already computed
@@ -245,6 +246,8 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
             if biasparams_df is not None:
                 biasparam_dict.update(biasparams_df.loc[idx_bias].to_dict())
             bias_vector = [biasparam_dict[name] for name in utils.biasparam_names_ordered]
+            print(idx_bias)
+            print(bias_vector)
             tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
             
             bspec, bk_corr = compute_bispectrum(base_bispec, tracer_field)
@@ -255,11 +258,17 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
                 'bispectrum': bk_corr,
                 'weight': weight,
             }
+            print('k123', k123)
+            print('weight', weight)
+            print('bk_corr', bk_corr['b0'])
 
             np.save(fn_statistic, bispec_results_dict)
         
             end = time.time()
-            print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+            print(f"Computed {statistic} for idx_mock={idx_mock}, idx_bias={idx_bias} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+            if idxs_bias==1:
+                print("HIT IDX BIAS=1, BREAKING FOR TESTING")
+                break
             
     end_tot = time.time()
     print(f"Total time to compute {statistic}(s) for idx_mock={idx_mock} in time {end_tot-start_tot:.2f} s", flush=True)
