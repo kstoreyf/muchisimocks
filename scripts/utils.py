@@ -416,7 +416,7 @@ def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=None):
 #given a set of bias parameters; combines the pnns
 
 # copied from https://bitbucket.org/rangulo/baccoemu/src/master/baccoemu/lbias_expansion.py
-def pnn_to_pk(pnn, bias_params, return_cross=False):
+def pnn_to_pk(pnn, bias_params, return_cross=False, pk_type='pk'):
     
     message = 'Please, pass a valid bias array, with' \
             + 'b1, b2, bs2, blaplacian'
@@ -432,7 +432,7 @@ def pnn_to_pk(pnn, bias_params, return_cross=False):
     pgal_auto = 0
     for i in range(len(pnn)):
         fac = 2 if prod[i, 0] != prod[i, 1] else 1
-        pgal_auto += bias_params_extended[prod[i, 0]] * bias_params_extended[prod[i, 1]] * fac * pnn[i]['pk']
+        pgal_auto += bias_params_extended[prod[i, 0]] * bias_params_extended[prod[i, 1]] * fac * pnn[i][pk_type]
         
     if return_cross:
         # TODO check this

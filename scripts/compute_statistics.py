@@ -49,7 +49,7 @@ def parse_args():
     overwrite = args.overwrite
     n_threads = args.n_threads
     
-    assert statistic in ['pnn', 'bispec'], "statistic must be 'pnn' or 'bispec'"
+    assert statistic in ['pnn', 'pklin', 'bispec'], "statistic must be 'pnn' or 'bispec'"
     
     if statistic == 'bispec':
         #magic
@@ -75,17 +75,18 @@ def run_loop():
     #tag_biasparams = '_biaszen_p4_n10000'
 
     ## fixed cosmo test set
-    #n_mocks = 1000
-    #tag_params = f'_quijote_p0_n{n_mocks}'
+    n_mocks = 1000
+    tag_params = f'_quijote_p0_n{n_mocks}'
+    tag_biasparams = None # for pnn, don't need biasparams
     ## variable cosmo test set
     #n_mocks = 1000
     #tag_params = f'_test_p5_n{n_mocks}'
 
     ## fisher
-    tag_params = '_fisher_quijote'
+    #tag_params = '_fisher_quijote'
     #tag_biasparams = None # for pnn, don't need biasparams
-    tag_biasparams = '_fisher_biaszen'
-    n_mocks = 21 #magic, i just know this number for fisher; TODO read it in
+    #tag_biasparams = '_fisher_biaszen'
+    #n_mocks = 21 #magic, i just know this number for fisher; TODO read it in
     
     overwrite = False
     n_threads = 1
@@ -93,15 +94,16 @@ def run_loop():
     box_size = 1000.0
     n_grid = 128
     
-    statistic = 'pnn'
+    #statistic = 'pnn'
+    statistic = 'pklin'
     #statistic = 'bispec'
     if statistic == 'bispec':
         base = setup_bispsec(box_size, n_grid, n_threads)
     else:
         base = None
 
-    #idxs_LH = [0]
-    idxs_LH = np.arange(n_mocks) 
+    idxs_LH = [1]
+    #idxs_LH = np.arange(n_mocks) 
     for idx_mock in idxs_LH:
         run(statistic, tag_params, idx_mock, 
             overwrite=overwrite, n_threads=n_threads, 
@@ -129,7 +131,7 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
         tag_biasparams=None,
         base_bispec=None):
 
-    if statistic == 'pnn':
+    if statistic == 'pnn' or statistic == 'pklin':
         precompute = False
     if statistic == 'bispec':
         precompute = True
@@ -143,7 +145,7 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
         tag_mocks = tag_params
     # actual mock data dir is just cosmology-dependent
     dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_params}'
-    dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_mocks}_rerunjobarr'
+    dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_mocks}'
     Path.mkdir(Path(dir_statistics), parents=True, exist_ok=True)
 
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, _, _ = \
@@ -224,13 +226,20 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
         np.save(fn_statistic, power_all_terms)
         end = time.time()
         print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+        
+    elif statistic == 'pklin':
+        start = time.time()
+        pk_obj = compute_pk_linear(idx_mock, cosmo, box_size, n_grid_orig,
+                                   n_threads=n_threads)
+        np.save(fn_statistic, pk_obj)
+        end = time.time()
+        print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
 
     if statistic == 'bispec':
         
         assert tag_biasparams is not None, "tag_biasparams must be provided for bispectrum computation"
         
         # idxs_bias is gotten above, bc used it to check if files exist already
-        print(idxs_bias)
         for idx_bias in idxs_bias:
             start = time.time()
             # check if this particular stat already computed
@@ -246,8 +255,6 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
             if biasparams_df is not None:
                 biasparam_dict.update(biasparams_df.loc[idx_bias].to_dict())
             bias_vector = [biasparam_dict[name] for name in utils.biasparam_names_ordered]
-            print(idx_bias)
-            print(bias_vector)
             tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
             
             bspec, bk_corr = compute_bispectrum(base_bispec, tracer_field)
@@ -258,9 +265,6 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
                 'bispectrum': bk_corr,
                 'weight': weight,
             }
-            print('k123', k123)
-            print('weight', weight)
-            print('bk_corr', bk_corr['b0'])
 
             np.save(fn_statistic, bispec_results_dict)
         
@@ -371,6 +375,97 @@ def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
     return power_all_terms
 
 
+def compute_pk(tracer_field, cosmo, box_size,
+               log_binning=True,
+               normalise_grid=False, deconvolve_grid=False,
+               interlacing=False, deposit_method='cic',
+               correct_grid=False,
+               n_threads=8, fn_pk=None):
+
+
+    k_min = 0.01
+    k_max = 0.4
+    n_bins = 30
+    
+    # NOTE by default assumes tracer field is already normalized!
+
+    # n_grid has to match the tracer field size for this compuation!
+    n_grid = tracer_field.shape[-1]
+    print("Computing pk, using n_grid = ", n_grid, flush=True)
+
+    # defaults from bacco.statistics.compute_crossspectrum_twogrids
+    # unless passed or otherwise denoted
+    args_power_grid = {
+        # "grid1": None,
+        # "grid2": None,
+        "normalise_grid1": normalise_grid, #default: False
+        "normalise_grid2": normalise_grid, #default: False
+        "deconvolve_grid1": deconvolve_grid, #default: False
+        "deconvolve_grid2": deconvolve_grid, #default: False
+        "ngrid": n_grid,
+        "box": box_size,
+        "mass1": None,
+        "mass2": None,
+        "interlacing": interlacing, #default: True
+        "deposit_method": deposit_method, #default: "tsc",
+        "log_binning": log_binning,
+        "pk_lt": None,
+        "kmin": k_min,
+        "kmax": k_max,
+        "nbins": n_bins,
+        "correct_grid": correct_grid,
+        "zspace": False,
+        "cosmology": cosmo,
+        "pmulti_interp": "polyfit",
+        "nthreads": n_threads,
+        "compute_correlation": False, #default: True
+        "compute_power2d": False, #default: True
+        "folds": 1,
+        "totalmass1": None,
+        "totalmass2": None,
+        "jack_error": False,
+        "n_jack": None
+    }
+
+    pknbody_dict = {
+        'ngrid': n_grid,
+        'min_k': k_min,
+        'log_binning': log_binning,
+        'log_binning_kmax': k_max,
+        'log_binning_nbins': n_bins,
+        'interlacing': interlacing,
+        'depmethod': deposit_method,
+        'correct_grid': correct_grid,
+        'folds': 1 #default
+    }
+    bacco.configuration.update({'number_of_threads': n_threads})
+    bacco.configuration.update({'pknbody': pknbody_dict})
+    bacco.configuration.update({'pk' : {'maxk' : k_max}})
+    bacco.configuration.update({'scaling' : {'disp_ngrid' : n_grid}})
+
+    pk_obj = bacco.statistics.compute_crossspectrum_twogrids(
+                        grid1=tracer_field,
+                        grid2=tracer_field,
+                        **args_power_grid)
+    if fn_pk is not None:
+        np.save(fn_pk, pk_obj)
+    return pk_obj
+
+
+def compute_pk_linear(seed, cosmo, box_size, n_grid_orig,
+                        n_threads=1):
+    
+    expfactor = 1.0
+    print("Generating ZA sim", flush=True)
+    sim, disp_field = bacco.utils.create_lpt_simulation(cosmo, box_size, Nmesh=n_grid_orig, Seed=seed,
+                                                        FixedInitialAmplitude=False, InitialPhase=0, 
+                                                        expfactor=expfactor, LPT_order=1, order_by_order=None,
+                                                        phase_type=1, ngenic_phases=True, return_disp=True, 
+                                                        sphere_mode=0)
+    field_lin = sim.linear_field[0]
+    pk_obj = compute_pk(field_lin, cosmo, box_size, n_threads=n_threads)
+
+    return pk_obj
 
 
 def compute_bispectrum(base, tracer_field):

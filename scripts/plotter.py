@@ -128,6 +128,7 @@ def plot_hists_mean_subplots(theta_pred_arr, theta_true_arr, param_names, param_
 
     for ax_idx, pp in enumerate(idxs_plot):
         ax = axes[ax_idx]
+        ax.set_title(rf'{param_labels[ax_idx]}', fontsize=22)
         for i, fracdiffs in enumerate(fracdiffs_arr):
             label = None
             if label_arr is not None:
@@ -204,6 +205,7 @@ def plot_dists_mean_subplots(
 
     for ax_idx, pp in enumerate(idxs_plot):
         ax = axes[ax_idx]
+        ax.set_title(rf'{param_labels[ax_idx]}', fontsize=22)
         for i, fracdiffs in enumerate(fracdiffs_arr):
             label = None
             if label_arr is not None:
@@ -293,7 +295,7 @@ def plot_hists_var(theta_true_arr, theta_pred_arr, var_pred_arr, param_labels,
             plt.hist(sigmas_from_truth_arr[i][:,pp], bins=np.linspace(xmin, xmax, n_bins),
                     color=color_arr[i], label=label_arr[i], alpha=alpha, density=True,
                     histtype=histtype, lw=lw)
-        plt.xlabel(r'$\sigma_\text{MN}$')
+        plt.xlabel(r'$\sigma$')
         plt.ylabel(r'normalized density', fontsize=12)
 
         plt.axvline(0, color='grey')
@@ -361,7 +363,7 @@ def plot_dists_cov_subplots(
 
     for ax_idx, pp in enumerate(idxs_plot):
         ax = axes[ax_idx]
-        ax.set_title(rf'{param_labels[ax_idx]}', fontsize=20)
+        ax.set_title(rf'{param_labels[ax_idx]}', fontsize=22)
         handles = []
         labels = []
         for i in range(sigmas_from_truth_arr.shape[0]):
@@ -388,7 +390,7 @@ def plot_dists_cov_subplots(
             ax.set_ylabel('CDF', fontsize=12)
         else:
             ax.set_ylabel(r'normalized density', fontsize=12)
-        ax.set_xlabel(r'$\sigma_\text{MN}$', fontsize=16)
+        ax.set_xlabel(rf'$\Delta${param_labels[ax_idx]}/$\sigma$({param_labels[ax_idx]})', fontsize=14)
         ax.axvline(0, color='grey')
         ax.set_xlim(xmin, xmax)
         if ax_idx == 0:

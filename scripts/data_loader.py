@@ -156,7 +156,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
         # If the precomputed directory exists, use it
         mode_precomputed = True
     else:
-        if statistic == 'pk':
+        if statistic == 'pk' or statistic == 'pklin':
             stat_name = 'pnn'
         dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{stat_name}s_mlib/{stat_name}s{tag_params}{tag_datagen}'
         mode_precomputed = False
@@ -237,7 +237,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
                         pk_obj_arr.append(bispec_obj)
         else:
             
-            if statistic == 'pk':
+            if statistic == 'pk' or statistic == 'pklin':
                 # here we havent selected bias params yet
                 fn_stat = f'{dir_statistics}/{stat_name}_{idx_LH}.npy'
                 pnn_obj = np.load(fn_stat, allow_pickle=True)
@@ -257,7 +257,9 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen=''
                 bias_params = [bias_params_dict[bpn] for bpn in utils.biasparam_names_ordered]
                 
                 if statistic == 'pk':
-                    stat = utils.pnn_to_pk(pnn_obj, bias_params)
+                    stat = utils.pnn_to_pk(pnn_obj, bias_params, pk_type='pk')
+                elif statistic == 'pklin':
+                    stat = utils.pnn_to_pk(pnn_obj, bias_params, pk_type='pk_theory_lin')
                 stat_arr.append(stat)
                 idxs_params.append((idx_LH, idx_bias))
 
