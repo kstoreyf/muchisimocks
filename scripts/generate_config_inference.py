@@ -12,12 +12,19 @@ def main():
     overwrite = False
     #overwrite = True
     #generate_train_config(overwrite=overwrite)
-    generate_test_config(overwrite=overwrite)
+    #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
+    n_train_arr = [10000, 8000, 6000, 4000, 2000, 1000, 500]
+    for n_train in n_train_arr:
+        generate_train_config(overwrite=overwrite,
+                             n_train=n_train)
+        
+    #generate_test_config(overwrite=overwrite)
     #generate_runlike_config(overwrite=overwrite)
     
     
 def generate_train_config(dir_config='../configs/configs_train',
-                          overwrite=False):
+                          overwrite=False,
+                          n_train=None):
     """
     Generates a YAML configuration file for training.
     """
@@ -26,7 +33,7 @@ def generate_train_config(dir_config='../configs/configs_train',
     statistics = ['pk', 'bispec']
     #statistics = ['pk']
     #statistics = ['bispec']
-    n_train = 1000
+    #n_train = 1000
     n_train_sweep = 10000 # grab the hyperparams from the sweep trained on this many
     #n_train = 10
     #n_train = None #if None, uses all (and no ntrain tag in tag_inf)
