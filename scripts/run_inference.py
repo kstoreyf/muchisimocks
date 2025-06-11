@@ -17,7 +17,6 @@ import moment_network_dataloader as mndl
 import sbi_model
 import scaler_custom as scl
 import data_loader
-
 import generate_params as genp
 
 
@@ -54,7 +53,7 @@ def main():
     
 
 
-def train_likefree_inference(config):
+def train_likefree_inference(config, overwrite=False):
     """
     Train function using parameters from the config file.
     """
@@ -72,6 +71,13 @@ def train_likefree_inference(config):
     sweep_name = config["sweep_name"]
     tag_data = config["tag_data"]
     tag_inf = config["tag_inf"]
+
+    dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
+    fn_posterior = f"{dir_sbi}/posterior.p"
+    if not overwrite and os.path.exists(fn_posterior):
+        print(f"Oh look, posterior.p already exists in {dir_sbi}, and overwrite={overwrite}! Skipping training.")
+        return
+    
 
     ### Load data and parameters
     # don't need the fixed params for training!
@@ -143,9 +149,7 @@ def train_likefree_inference(config):
     #sbi_network.run(max_epochs=10)
 
 
-        
-        
-def test_likefree_inference(config):
+def test_likefree_inference(config, overwrite=False):
     """
     Test function using parameters from the config file."""
 
@@ -158,6 +162,7 @@ def test_likefree_inference(config):
     tag_biasparams = config["tag_biasparams"]
     evaluate_mean = config["evaluate_mean"]
     idxs_obs = config["idxs_obs"]
+    #idxs_obs = np.arange(10)
     #idxs_obs = [0,1,2]
     kwargs_data_test = config["kwargs_data_test"]
     tag_params_test = config["tag_params_test"]
@@ -166,6 +171,16 @@ def test_likefree_inference(config):
     tag_data_test = config["tag_data_test"]
     tag_inf_train = config["tag_inf_train"]
     sweep_name = config["sweep_name"]
+    
+    if evaluate_mean:
+        tag_test = f'{tag_data_test}_mean'
+    else:
+        tag_test = tag_data_test
+    dir_sbi = f'../results/results_sbi/sbi{tag_inf_train}'
+    fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
+    if not overwrite and os.path.exists(fn_samples_test_pred):
+        print(f"Oh look, samples {fn_samples_test_pred} already exists, and overwrite={overwrite}! Skipping training.")
+        return
     
     print(statistics, tag_params, tag_biasparams)
     print(tag_params_test, tag_biasparams_test)
@@ -204,10 +219,10 @@ def test_likefree_inference(config):
         for i_stat in range(len(statistics)):
             y_mean_i = np.mean(y[i_stat], axis=0)
             y_mean.append(y_mean_i)
-        sbi_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test=f'{tag_data_test}_mean')
+        sbi_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test=tag_test)
     else:
         # run on full test set
-        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_data_test)
+        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_test)
 
 
 def run_likelihood_inference(config):

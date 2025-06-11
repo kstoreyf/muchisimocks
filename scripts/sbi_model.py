@@ -1,7 +1,14 @@
-import numpy as np
 import os
+
+# # Set environment variables before importing torch
+# os.environ['OMP_NUM_THREADS'] = '24'
+# os.environ['MKL_NUM_THREADS'] = '24'
+# os.environ['NUMEXPR_NUM_THREADS'] = '24'
+
+import numpy as np
 import pathlib
 import pickle
+import time
 import wandb
 
 import sbi
@@ -21,16 +28,15 @@ class SBIModel():
                      theta_val=None, y_val_unscaled=None, y_err_val_unscaled=None,
                      theta_test=None, y_test_unscaled=None, y_err_test_unscaled=None,
                      statistics=None, param_names=None, dict_bounds=None, 
-                     run_mode='single', tag_sbi='', n_threads=8, 
+                     run_mode='single', tag_sbi='', n_threads=1, 
                      sweep_name=None,
                      ):
         
+        # training does not seem to be parallelizeable! getting no speedup
         # if n_threads is not None:
         #     tf.config.threading.set_inter_op_parallelism_threads(n_threads)
         #     tf.config.threading.set_intra_op_parallelism_threads(n_threads)
-        
-        # TODO the error is not being used!!! ack! write custom loss func?
-        # actually unclear how the error should be taken into account... 
+        # NOTE the error is not used in SBI
 
         self.dir_sbi = f'../results/results_sbi/sbi{tag_sbi}'
         p = pathlib.Path(self.dir_sbi)
@@ -83,6 +89,8 @@ class SBIModel():
             assert dict_bounds is not None, 'need dict_bounds if training model'
         self.dict_bounds = dict_bounds
         self.sweep_name = sweep_name
+        
+        self.n_threads = n_threads
 
         
     def run(self, max_epochs=1000):
@@ -165,6 +173,15 @@ class SBIModel():
         print(f"Fitting model for dir_sbi={self.dir_sbi}, run_mode={self.run_mode}, sweep_name={self.sweep_name}")
         print("wandb.config:", config)
         
+         # Setup device
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Optimize PyTorch settings
+        if device == "cpu":
+            print(f"Using CPU with {self.n_threads} threads")
+            torch.set_num_threads(self.n_threads)  # Use multiple CPU threads
+        elif device == "cuda":
+            print(f"Using GPU with {torch.cuda.device_count()} devices")
+        
         # get prior
         l_bounds = np.array([self.dict_bounds[pn][0] for pn in self.param_names])
         u_bounds = np.array([self.dict_bounds[pn][1] for pn in self.param_names])
@@ -202,19 +219,8 @@ class SBIModel():
             torch.tensor(y_train_and_val, dtype=torch.float32),
             )
         
-        print("Training")
-        # Define a custom callback for wandb logging
-        # class WandbLoggingCallback(sbi.inference.callbacks.IterationCallback):
-        #     def __call__(self, epoch, train_log_prob, validation_log_prob):
-        #         # Log to wandb
-        #         wandb.log({
-        #             "epoch": epoch,
-        #             "training_loss": -train_log_prob,  # negative log likelihood
-        #             "validation_loss": -validation_log_prob  # negative log likelihood
-        #         })
-        #         return True  # Continue training
-                
-        #callbacks = [WandbLoggingCallback()]
+        print(f"Training with {self.n_threads} threads")
+        start = time.time()
         
         # defaults: 
         # stop_after_epochs=20
@@ -228,6 +234,8 @@ class SBIModel():
             #callbacks=callbacks
             )
         print("Trained!")
+        end = time.time()
+        print(f"Training time: {end - start:.2f}s = {(end - start) / 60:.2f} min (max_epochs={max_epochs}, n_threads={self.n_threads})")
 
         # Get the final training and validation losses
         train_log = inference._summary
@@ -327,7 +335,7 @@ class SBIModel():
         print(f"Loaded scalers from {self.dir_sbi}")
         
     
-    def evaluate(self, y_obs_unscaled, n_samples=10000):
+    def evaluate(self, y_obs_unscaled, n_samples=100):
         # convergence tests show 10,000 is probably good enough, tho for some
         # parameters there is fluctuation bw 10k, 30k, 100k
         # (see notebooks/2025-01-24_inference_muchisimocksPk.ipynb)
@@ -343,10 +351,13 @@ class SBIModel():
             y_obs = np.concatenate((y_obs, y_test_i), axis=1
                                    )
         print(f"Testing on y_obs with shape: {y_obs.shape}")
+        end = time.time()
         # model is built with float32 so need the data to be here too
         y_obs = np.float32(np.array(y_obs))
         # using samples_batched bc always putting into 2d first (if were 2d, "samples")
-        samples = self.posterior.sample_batched((n_samples,), x=y_obs)
+        samples = self.posterior.sample_batched((n_samples,), x=y_obs, 
+                                                )
+        print(f"Time to sample (y_obs.shape={y_obs.shape}, n_samples={n_samples}): {time.time() - end}")
         return samples
     
     

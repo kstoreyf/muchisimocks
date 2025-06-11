@@ -46,6 +46,11 @@ labels_pnn = ['$1 1$',
             '$\\nabla^2\\delta \\nabla^2\\delta$'
             ]
 
+labels_statistics = {
+    'pk': '$P(k)$',
+    'bispec': '$B(k_1,k_2,k_3)$',
+}
+
 # Quijote: https://arxiv.org/pdf/1909.05273, Table 1, top row
 # for tau, via raul: "0.0952 is the value we have in the Planck13 cosmo dictionary (in cosmo_parameters.py). It comes from the best fit of Planck+WP+highL+BAO"
 cosmo_dict_quijote = {
@@ -68,6 +73,13 @@ statistics_scaler_funcs = {'pk': 'log_minmax',
                            'bispec': 'minmax',
                           }
 
+
+def get_stat_label(statistics):
+    labels = []
+    for stat in statistics:
+        labels.append(labels_statistics[stat])
+    label = ', '.join(labels)
+    return label
 
 def idxs_train_val_test(random_ints, frac_train=0.8, frac_val=0.1, frac_test=0.1,
                         N_tot=None):
@@ -171,7 +183,6 @@ def get_moments_test_sbi(tag_inf, tag_test='', param_names=None):
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
     samples_arr = np.load(fn_samples_test_pred)
-    print(samples_arr.shape)
 
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     param_names_all = np.loadtxt(f'{dir_sbi}/param_names.txt', dtype=str)
@@ -224,7 +235,6 @@ def get_samples_sbi(idx_obs, tag_inf, tag_test=''):
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
     print(f"fn_samples = {fn_samples_test_pred}")
     samples_arr = np.load(fn_samples_test_pred)
-    print(samples_arr.shape)
     param_names = np.loadtxt(f'{dir_sbi}/param_names.txt', dtype=str)
     if samples_arr.ndim == 2:
         return samples_arr, param_names
@@ -475,3 +485,58 @@ def compute_fisher_matrix(derivatives, covariance_matrix, param_names):
                                        np.dot(cov_inv, derivatives[param_j]))
     
     return fisher_matrix
+
+
+def chi2_old(theta_true, theta_pred, covs_pred):
+    chi2s = []
+    print(theta_true.shape, theta_pred.shape, covs_pred.shape)
+    if covs_pred.ndim == 3:
+        for t_true, t_pred, cov_pred in zip(theta_true, theta_pred, covs_pred):
+            diff = t_true - t_pred
+            cov_pred_inv = np.linalg.inv(cov_pred)
+            #print(diff.shape, cov_pred_inv.shape)
+            chi2 = diff.T @ cov_pred_inv @ diff
+            chi2s.append(chi2)
+    elif covs_pred.ndim == 2:
+        diff = (theta_true - theta_pred).T
+        print(diff.shape, covs_pred.shape)
+        cov_pred_inv = np.linalg.inv(covs_pred)
+        chi2 = diff.T @ cov_pred_inv @ diff
+        #chi2 = (theta_true - theta_pred)/np.sqrt(covs_pred)
+        chi2s.append(chi2)
+    else:
+        raise ValueError(f"covs_pred shape {covs_pred.shape} is weird!")
+    return chi2s
+
+
+def chi2(theta_true, theta_pred, covs_pred):
+    chi2s = []
+    # Remove or comment out print statements for production use
+    #print(theta_true.shape, theta_pred.shape, covs_pred.shape)
+    if covs_pred.ndim == 3:
+        for t_true, t_pred, cov_pred in zip(theta_true, theta_pred, covs_pred):
+            diff = t_true - t_pred
+            cov_pred_inv = np.linalg.inv(cov_pred)
+            chi2 = diff.T @ cov_pred_inv @ diff
+            chi2s.append(chi2.item())
+    elif covs_pred.ndim == 2:
+        diff = theta_true - theta_pred
+        cov_pred_inv = np.linalg.inv(covs_pred)
+        chi2 = diff.T @ cov_pred_inv @ diff
+        chi2s.append(chi2.item())
+    else:
+        raise ValueError(f"covs_pred shape {covs_pred.shape} is weird!")
+    return chi2s if len(chi2s) > 1 else chi2s[0]
+
+
+def figure_of_merit(covs_pred):
+    foms = []
+    if covs_pred.ndim == 3:
+        for cov_pred in covs_pred:
+            fom = 1/np.sqrt(np.linalg.det(cov_pred))
+            foms.append(fom)
+    elif covs_pred.ndim == 2:
+        foms = 1/np.sqrt(np.linalg.det(covs_pred))
+    else:
+        raise ValueError(f"covs_pred shape {covs_pred.shape} is weird!")
+    return foms

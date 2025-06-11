@@ -12,45 +12,48 @@ def main():
     overwrite = False
     #overwrite = True
     #generate_train_config(overwrite=overwrite)
-    #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
-    n_train_arr = [10000, 8000, 6000, 4000, 2000, 1000, 500]
-    for n_train in n_train_arr:
-        generate_train_config(overwrite=overwrite,
-                             n_train=n_train)
-        
-    #generate_test_config(overwrite=overwrite)
+    #stat_arr = [['pk']]
+    #n_train_arr = [500]
+    stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
+    n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
+    for statistics in stat_arr:
+        for n_train in n_train_arr:
+            # generate_train_config(overwrite=overwrite,
+            #                      statistics=statistics,
+            #                      n_train=n_train)
+            generate_test_config(overwrite=overwrite,
+                                statistics=statistics,
+                                n_train=n_train)
     #generate_runlike_config(overwrite=overwrite)
     
     
 def generate_train_config(dir_config='../configs/configs_train',
                           overwrite=False,
-                          n_train=None):
+                          statistics=['pk'], n_train=10000):
     """
     Generates a YAML configuration file for training.
     """
     data_mode = 'muchisimocks'
     #data_mode = 'emu'
-    statistics = ['pk', 'bispec']
-    #statistics = ['pk']
-    #statistics = ['bispec']
     #n_train = 1000
-    n_train_sweep = 10000 # grab the hyperparams from the sweep trained on this many
     #n_train = 10
     #n_train = None #if None, uses all (and no ntrain tag in tag_inf)
     tag_params = '_p5_n10000'
     #tag_biasparams = '_b1000_p0_n1'
     #tag_biasparams = '_b1zen_p1_n10000'
-    #tag_biasparams = '_biaszen_p4_n10000' #1-1 cosmo-bias params
-    tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
+    tag_biasparams = '_biaszen_p4_n10000' #1-1 cosmo-bias params
+    #tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
     # emu-specific
     n_rlzs_per_cosmo = 1
     
     # running inferece params
-    # run_mode = 'single'
-    # tag_sweep = None
-    run_mode = 'best'
+    run_mode = 'single'
+    tag_sweep = None
+    n_train_sweep = None
+    #run_mode = 'best'
     #run_mode = 'sweep'
-    tag_sweep = '-rand10'
+    #tag_sweep = '-rand10'
+    #n_train_sweep = 10000 # grab the hyperparams from the sweep trained on this many
         
     if data_mode == 'emu':
         tag_errG = '_boxsize1000'
@@ -111,7 +114,8 @@ def generate_train_config(dir_config='../configs/configs_train',
 
 
 def generate_test_config(dir_config='../configs/configs_test',
-                         overwrite=False):
+                         overwrite=False, 
+                         statistics=['pk'], n_train=10000):
     """
     Generates a YAML configuration file for testing.
     """
@@ -119,9 +123,6 @@ def generate_test_config(dir_config='../configs/configs_test',
     ### Select trained model
     #data_mode = 'emu'
     data_mode = 'muchisimocks'
-    #statistics = ['pk', 'bispec']
-    #statistics = ['pk']
-    statistics = ['bispec']
     
     ### train params
     tag_params = '_p5_n10000'
@@ -130,24 +131,24 @@ def generate_test_config(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n10000' #1x
     tag_biasparams = '_biaszen_p4_n100000' #10x
     n_rlzs_per_cosmo = 1
-    n_train = 10000
-    n_train_sweep = 10000
     # For loading a model trained with wandb sweep; best of that sweep will be used
     #tag_sweep = '-rand10'
+    #n_train_sweep = 10000
     tag_sweep = None
+    n_train_sweep = None
     
     ### test params
     idxs_obs = None # if none, all (unless evaluate mean)
     # ## settings for fixed cosmo
-    evaluate_mean = True 
-    tag_params_test = '_quijote_p0_n1000'
-    tag_biasparams_test = '_b1000_p0_n1'
+    # evaluate_mean = True 
+    # tag_params_test = '_quijote_p0_n1000'
+    # tag_biasparams_test = '_b1000_p0_n1'
     ## settings for coverage test
-    # evaluate_mean = False
-    # tag_params_test = '_test_p5_n1000'
-    # #tag_biasparams_test = '_b1000_p0_n1'
-    # #tag_biasparams_test = '_b1zen_p1_n1000'
-    # tag_biasparams_test = '_biaszen_p4_n1000'
+    evaluate_mean = False
+    tag_params_test = '_test_p5_n1000'
+    #tag_biasparams_test = '_b1000_p0_n1'
+    #tag_biasparams_test = '_b1zen_p1_n1000'
+    tag_biasparams_test = '_biaszen_p4_n1000'
 
     # this if-else is just so it's easier for me to switch between the two; may not need
     if data_mode == 'emu':

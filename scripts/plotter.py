@@ -572,7 +572,7 @@ bins_dict = {'mn': None, 'sbi': 4, 'emcee': 10, 'dynesty': 7, 'fisher': 4}
 
 def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       inf_methods, tags_inf, tags_test=None,
-                      colors=None, labels=None, labels_extra=None,
+                      colors=None, labels=None,
                       figsize=(7,7),
                       extents={}, title=None):
     if title is None:
@@ -593,10 +593,6 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     bins_arr = [bins_dict[method] for method in inf_methods]
     if colors is None:
         colors = [utils.color_dict_methods[meth] for meth in inf_methods]
-    if labels is None:
-        labels = [utils.label_dict_methods[meth] for meth in inf_methods]
-    if labels_extra is not None:
-        labels = [labels[i] + ' ' + labels_extra[i] for i in range(len(labels))]
 
     plot_contours(samples_arr, labels, colors, param_names, utils.param_label_dict, 
                         smooth_arr=smooth_arr, bins_arr=bins_arr,
