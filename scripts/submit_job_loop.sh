@@ -1,17 +1,20 @@
 #!/bin/bash
 
-#n_train_arr=(500 1000 2000)
-#n_train_arr=(500 1000 2000 4000 6000 8000 10000)
+#n_train_arr=(500)
+n_train_arr=(500 1000 2000 4000 6000 8000 10000)
+#n_train_arr=(500 1000 2000 4000 6000 8000)
 #tag_stats_arr=("_pk" "_bispec" "_pk_bispec") 
+#tag_stats_arr=("_pk" "_bispec") 
+tag_stats_arr=("_pk")
 
-n_train_arr=(10000)
-tag_stats_arr=("_pk_bispec")
+#n_train_arr=(10000)
+#tag_stats_arr=("_pk_bispec")
 
 for n_train in "${n_train_arr[@]}"; do
     for tag_stats in "${tag_stats_arr[@]}"; do
         #config_train_file="../configs/configs_train/config_muchisimocks${tag_stats}_p5_n10000_biaszen_p4_n10000_ntrain${n_train}.yaml"
         config_train_file="none"
-        config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}_p5_n10000_biaszen_p4_n100000_ntrain${n_train}_TEST_muchisimocks${tag_stats}_test_p5_n1000_biaszen_p4_n1000.yaml"
+        config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}_p5_n10000_biaszen_p4_n10000_ntrain${n_train}_TEST_muchisimocks${tag_stats}_test_p5_n1000_biaszen_p4_n1000.yaml"
         # config_test_file="none"
 
         # Determine job name logic
@@ -36,7 +39,7 @@ for n_train in "${n_train_arr[@]}"; do
 #SBATCH --time=16:00:00 #2h for training, more for testing
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=30G #30gb for training
+#SBATCH --mem=30G #30gb for training, and testing
 
 echo "Current date and time: \$(date)"
 echo "Slurm job id is \${SLURM_JOB_ID}"

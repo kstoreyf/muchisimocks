@@ -128,8 +128,8 @@ def generate_test_config(dir_config='../configs/configs_test',
     tag_params = '_p5_n10000'
     #tag_biasparams = '_b1000_p0_n1'
     #tag_biasparams = '_b1zen_p1_n10000'
-    #tag_biasparams = '_biaszen_p4_n10000' #1x
-    tag_biasparams = '_biaszen_p4_n100000' #10x
+    tag_biasparams = '_biaszen_p4_n10000' #1x
+    #tag_biasparams = '_biaszen_p4_n100000' #10x
     n_rlzs_per_cosmo = 1
     # For loading a model trained with wandb sweep; best of that sweep will be used
     #tag_sweep = '-rand10'

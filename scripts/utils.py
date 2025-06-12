@@ -51,6 +51,11 @@ labels_statistics = {
     'bispec': '$B(k_1,k_2,k_3)$',
 }
 
+labels_biasparams = {
+    '_biaszen_p4_n10000': r'1x $\{b\}$ per cosmo',
+    '_biaszen_p4_n100000': r'10x $\{b\}$ per cosmo',
+}
+
 # Quijote: https://arxiv.org/pdf/1909.05273, Table 1, top row
 # for tau, via raul: "0.0952 is the value we have in the Planck13 cosmo dictionary (in cosmo_parameters.py). It comes from the best fit of Planck+WP+highL+BAO"
 cosmo_dict_quijote = {

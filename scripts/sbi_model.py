@@ -335,7 +335,7 @@ class SBIModel():
         print(f"Loaded scalers from {self.dir_sbi}")
         
     
-    def evaluate(self, y_obs_unscaled, n_samples=100):
+    def evaluate(self, y_obs_unscaled, n_samples=10000):
         # convergence tests show 10,000 is probably good enough, tho for some
         # parameters there is fluctuation bw 10k, 30k, 100k
         # (see notebooks/2025-01-24_inference_muchisimocksPk.ipynb)
@@ -355,6 +355,7 @@ class SBIModel():
         # model is built with float32 so need the data to be here too
         y_obs = np.float32(np.array(y_obs))
         # using samples_batched bc always putting into 2d first (if were 2d, "samples")
+        
         samples = self.posterior.sample_batched((n_samples,), x=y_obs, 
                                                 )
         print(f"Time to sample (y_obs.shape={y_obs.shape}, n_samples={n_samples}): {time.time() - end}")
