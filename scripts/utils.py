@@ -53,6 +53,7 @@ labels_statistics = {
 
 labels_biasparams = {
     '_biaszen_p4_n10000': r'1x $\{b\}$ per cosmo',
+    '_biaszen_p4_n50000': r'5x $\{b\}$ per cosmo',
     '_biaszen_p4_n100000': r'10x $\{b\}$ per cosmo',
 }
 

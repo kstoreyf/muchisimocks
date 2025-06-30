@@ -1,0 +1,18 @@
+data_mode: muchisimocks
+evaluate_mean: true
+idxs_obs: null
+kwargs_data_test:
+  tag_datagen: ''
+n_rlzs_per_cosmo: 1
+n_train: 1000
+statistics:
+- pk
+sweep_name: null
+tag_biasparams: _biaszen_p4_n50000
+tag_biasparams_test: _b1000_p0_n1
+tag_data_test: _muchisimocks_pk_quijote_p0_n1000_b1000_p0_n1
+tag_data_train: _muchisimocks_pk_p5_n10000_biaszen_p4_n50000
+tag_inf_train: _muchisimocks_pk_p5_n10000_biaszen_p4_n50000_ntrain1000
+tag_params: _p5_n10000
+tag_params_test: _quijote_p0_n1000
+tag_test: _TRAIN_muchisimocks_pk_p5_n10000_biaszen_p4_n50000_ntrain1000_TEST_muchisimocks_pk_quijote_p0_n1000_b1000_p0_n1_mean

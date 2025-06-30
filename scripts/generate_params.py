@@ -21,7 +21,7 @@ def generate_params_LH():
     overwrite = False # probs keep false!!! don't want to overwrite param files
 
     #n_samples = 1000000
-    n_samples = 1
+    n_samples = 50000
     
     #bounds_type = 'cosmo' #cosmo or bias
     #n_params_vary = 0
@@ -32,12 +32,12 @@ def generate_params_LH():
     # havent yet used 'test' to restrict bounds for bias params, only cosmo
     # TODO should i be?
     bounds_type = 'bias'
-    # n_params_vary = 4
-    # tag_bounds = '_biaszen'
+    n_params_vary = 4
+    tag_bounds = '_biaszen'
     #n_params_vary = 1
     #tag_bounds = '_b1zen'
-    n_params_vary = 0
-    tag_bounds = '_b0000'
+    #n_params_vary = 0
+    #tag_bounds = '_b0000'
     
     if bounds_type == 'cosmo':
         param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']

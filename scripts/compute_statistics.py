@@ -50,6 +50,8 @@ def parse_args():
     n_threads = args.n_threads
     
     assert statistic in ['pnn', 'pklin', 'bispec'], "statistic must be 'pnn' or 'bispec'"
+    if statistic == 'pnn':
+        assert tag_biasparams is None, "you shouldn't be providing tag_biasparams for pnn, it's only computed for the cosmologies! bias param computation is done at dataloading time"
     
     if statistic == 'bispec':
         #magic

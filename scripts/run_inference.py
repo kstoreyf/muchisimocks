@@ -58,6 +58,8 @@ def train_likefree_inference(config, overwrite=False):
     Train function using parameters from the config file.
     """
 
+    dir_results = '/scratch/kstoreyf/muchisimocks/results' # hyperion path
+
     # Read settings from config file
     data_mode = config["data_mode"]
     statistics = config["statistics"]
@@ -72,7 +74,7 @@ def train_likefree_inference(config, overwrite=False):
     tag_data = config["tag_data"]
     tag_inf = config["tag_inf"]
 
-    dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
+    dir_sbi = f'{dir_results}/results_sbi/sbi{tag_inf}'
     fn_posterior = f"{dir_sbi}/posterior.p"
     if not overwrite and os.path.exists(fn_posterior):
         print(f"Oh look, posterior.p already exists in {dir_sbi}, and overwrite={overwrite}! Skipping training.")
@@ -153,6 +155,8 @@ def test_likefree_inference(config, overwrite=False):
     """
     Test function using parameters from the config file."""
 
+    dir_results = '/scratch/kstoreyf/muchisimocks/results' # hyperion path
+
     # Read settings from config file
     data_mode = config["data_mode"]
     statistics = config["statistics"]
@@ -176,7 +180,7 @@ def test_likefree_inference(config, overwrite=False):
         tag_test = f'{tag_data_test}_mean'
     else:
         tag_test = tag_data_test
-    dir_sbi = f'../results/results_sbi/sbi{tag_inf_train}'
+    dir_sbi = f'{dir_results}/results_sbi/sbi{tag_inf_train}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
     if not overwrite and os.path.exists(fn_samples_test_pred):
         print(f"Oh look, samples {fn_samples_test_pred} already exists, and overwrite={overwrite}! Skipping training.")
