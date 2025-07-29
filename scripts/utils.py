@@ -55,6 +55,7 @@ labels_biasparams = {
     '_biaszen_p4_n10000': r'1x $\{b\}$ per cosmo',
     '_biaszen_p4_n50000': r'5x $\{b\}$ per cosmo',
     '_biaszen_p4_n100000': r'10x $\{b\}$ per cosmo',
+    '_biaszen_p4_n200000': r'20x $\{b\}$ per cosmo',
 }
 
 # Quijote: https://arxiv.org/pdf/1909.05273, Table 1, top row
@@ -412,7 +413,8 @@ def param_name_to_param_name_emu(param_name):
     return param_name_emu
 
 
-def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=None):
+def get_tracer_field(bias_fields_eul, bias_vector, 
+                     noise_field=None, A_noise=None, n_grid_norm=None):
     assert len(bias_vector)==bias_fields_eul.shape[0]-1, "bias_vector must have length one less than number of bias fields"
     if n_grid_norm is None:
         n_grid_norm = bias_fields_eul.shape[-1]
@@ -423,6 +425,13 @@ def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=None):
     
     tracer_field_eul = _sum_bias_fields(bias_fields_eul, bias_vector)
     tracer_field_eul_norm = tracer_field_eul/n_grid_norm**3
+    
+    if noise_field is not None:
+        assert A_noise is not None, "Must provide A_noise if noise_field is provided"
+        if noise_field.shape != tracer_field_eul.shape:
+            raise ValueError(f"Noise field shape {noise_field.shape} does not match tracer field shape {tracer_field_eul.shape}")
+        # noise field should already be normalized 
+        tracer_field_eul_norm += A_noise * noise_field
     
     return tracer_field_eul_norm
 
