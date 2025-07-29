@@ -293,6 +293,7 @@ def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
 
 
 def load_params(tag_params=None, tag_biasparams=None,
+                tag_Anoise=None,
                 dir_params='../data/params'):
     
     if tag_params is None:
@@ -313,7 +314,18 @@ def load_params(tag_params=None, tag_biasparams=None,
         fn_randints_bias = f'{dir_params}/randints{tag_biasparams}.npy'
         random_ints_bias = np.load(fn_randints_bias, allow_pickle=True) if os.path.exists(fn_randints_bias) else None
         
-    return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
+    if tag_Anoise is None:
+        Anoise_df = None
+        Anoise_dict_fixed = {}
+    else:
+        Anoise_df, Anoise_dict_fixed = load_Anoise_params(tag_Anoise, dir_params=dir_params)
+    
+    # NOTE this if/else is so current code doesn't break if don't give tag_Anoise, 
+    # but probs will want to update everywhere
+    if tag_Anoise is None:
+        return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
+    else:
+        return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias
     
     
 def load_cosmo_params(tag_params, dir_params='../data/params'):
@@ -336,6 +348,7 @@ def load_cosmo_params(tag_params, dir_params='../data/params'):
     )
     return params_df, param_dict_fixed
     
+    
 def load_bias_params(tag_biasparams, dir_params='../data/params'):
     if 'fisher' in tag_biasparams:
         fn_biasparams = f'{dir_params}/params{tag_biasparams}.txt'
@@ -353,6 +366,23 @@ def load_bias_params(tag_biasparams, dir_params='../data/params'):
         else {}
     )
     return biasparams_df, biasparams_dict_fixed
+
+
+def load_Anoise_params(tag_Anoise, dir_params='../data/params'):
+    # NOTE not handling fisher case rn, don't know if will need
+    fn_Anoise = f'{dir_params}/params_lh{tag_Anoise}.txt'
+    fn_Anoise_fixed = f'{dir_params}/params_fixed{tag_Anoise}.txt'
+    Anoise_df = (
+        pd.read_csv(fn_Anoise, index_col=0)
+        if os.path.exists(fn_Anoise)
+        else None
+    )
+    Anoise_dict_fixed = (
+        pd.read_csv(fn_Anoise_fixed).iloc[0].to_dict() 
+        if os.path.exists(fn_Anoise_fixed)
+        else {}
+    )
+    return Anoise_df, Anoise_dict_fixed
     
     
 def param_dfs_to_theta(idxs_params, params_df, biasparams_df, n_rlzs_per_cosmo=1):

@@ -21,8 +21,8 @@ python compute_statistics.py --statistic bispec --idx_mock_start 0 --idx_mock_en
 
 
 def main():
-    #run_loop()
-    parse_args()
+    run_loop()
+    #parse_args()
     
 
 def parse_args():
@@ -33,6 +33,8 @@ def parse_args():
                         help='Tag for parameter set')
     parser.add_argument('--tag_biasparams', type=str, default=None,
                         help='Tag for bias parameter set')
+    parser.add_argument('--tag_noise', type=str, default=None,
+                        help='Tag for noise fields')
     parser.add_argument('--idx_mock_start', type=int,
                         help='Index of the LH realization to start')
     parser.add_argument('--idx_mock_end', type=int,
@@ -46,10 +48,12 @@ def parse_args():
     statistic = args.statistic
     tag_params = args.tag_params
     tag_biasparams = args.tag_biasparams
+    tag_noise = args.tag_noise
     overwrite = args.overwrite
     n_threads = args.n_threads
     
-    assert statistic in ['pnn', 'pklin', 'bispec'], "statistic must be 'pnn' or 'bispec'"
+    stats_supported = ['pnn', 'pk', 'pklin', 'bispec']
+    assert statistic in stats_supported, f"statistic {statistic} not recognized, should be one of {stats_supported}"
     if statistic == 'pnn':
         assert tag_biasparams is None, "you shouldn't be providing tag_biasparams for pnn, it's only computed for the cosmologies! bias param computation is done at dataloading time"
     
@@ -67,6 +71,7 @@ def parse_args():
         run(statistic, tag_params, idx_mock,
             overwrite=overwrite, n_threads=n_threads, 
             tag_biasparams=tag_biasparams,
+            tag_noise=tag_noise,
             base_bispec=base)
         
 
@@ -79,7 +84,10 @@ def run_loop():
     ## fixed cosmo test set
     n_mocks = 1000
     tag_params = f'_quijote_p0_n{n_mocks}'
-    tag_biasparams = None # for pnn, don't need biasparams
+    tag_biasparams = '_b1000_p0_n1' # for pnn, don't need biasparams
+    #tag_biasparams = None # for pnn, don't need biasparams
+    tag_noise = '_noise_quijote_p0_n1000'
+    tag_Anoise = '_An1_p0_n1'
     ## variable cosmo test set
     #n_mocks = 1000
     #tag_params = f'_test_p5_n{n_mocks}'
@@ -97,19 +105,21 @@ def run_loop():
     n_grid = 128
     
     #statistic = 'pnn'
-    statistic = 'pklin'
+    #statistic = 'pklin'
     #statistic = 'bispec'
+    statistic = 'pk'
     if statistic == 'bispec':
         base = setup_bispsec(box_size, n_grid, n_threads)
     else:
         base = None
 
-    idxs_LH = [1]
+    idxs_LH = [0]
     #idxs_LH = np.arange(n_mocks) 
     for idx_mock in idxs_LH:
         run(statistic, tag_params, idx_mock, 
             overwrite=overwrite, n_threads=n_threads, 
             tag_biasparams=tag_biasparams,
+            tag_noise=tag_noise, tag_Anoise=tag_Anoise,
             base_bispec=base,
             )    
     
@@ -130,84 +140,51 @@ def setup_bispsec(box_size, n_grid, n_threads):
     
     
 def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1, 
-        tag_biasparams=None,
+        tag_biasparams=None, tag_noise=None, tag_Anoise=None, 
         base_bispec=None):
-
-    if statistic == 'pnn' or statistic == 'pklin':
-        precompute = False
-    if statistic == 'bispec':
-        precompute = True
-        assert base_bispec is not None, "base_bispec must be provided for bispectrum computation"
 
     print(f"Starting muchisimocks {statistic} computation for idx_mock={idx_mock}", flush=True)
 
-    if tag_biasparams is not None:
+    if tag_biasparams is not None and tag_noise is not None and tag_Anoise is not None:
+        # will tag_noise and tag_Anoise always go together??
+        tag_mocks = tag_params + tag_biasparams + tag_noise + tag_Anoise
+    elif tag_biasparams is not None:
         tag_mocks = tag_params + tag_biasparams
     else:
         tag_mocks = tag_params
-    # actual mock data dir is just cosmology-dependent
-    dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_params}'
-    dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_mocks}'
-    Path.mkdir(Path(dir_statistics), parents=True, exist_ok=True)
 
-    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, _, _ = \
-        data_loader.load_params(tag_params, tag_biasparams)
+    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, _, _ = \
+        data_loader.load_params(tag_params, tag_biasparams, tag_Anoise)
 
     if 'p0' in tag_params or 'fisher' in tag_params:
         subdir_prefix = 'mock'
     else:
         subdir_prefix = 'LH'
-
-    # We only compute for the specified idx_mock
+    dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_params}'
     fn_fields = f'{dir_mocks}/{subdir_prefix}{idx_mock}/bias_fields_eul_deconvolved_{idx_mock}.npy'
     
-    # Checking here if we have remaining statistics to compute and if we need to load the fields at all
-    # (because loading fields takes some time, so want to check first if we'll need them;
-    # we'll also check later for the bispec case if we need to compute that particular one)
-    if precompute:                
-        # figure out which bias indices to use
-        if 'fisher' in tag_biasparams:
-            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='fisher',
-                                                params_df=params_df, biasparams_df=biasparams_df)
-        elif 'p0' in tag_biasparams:
-            idxs_bias = np.array([0]) #not really, but so loops don't break; dont use besides for looping
-        else:
-            factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
-            assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
-            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=factor)
-        
-        exist_all = True
-        for idx_bias in idxs_bias:
-            if 'p0' in tag_biasparams:
-                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
-            else:
-                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
-            if not os.path.exists(fn_statistic) or overwrite:
-                exist_all = False
-                print(f"At least one statistic for '{dir_statistics}/{statistic}_{idx_mock} (idx_bias={idx_bias}) does not exist and overwrite={overwrite}, so continuing the computation")
-                break
-        if exist_all:
-            print(f"All statistics for '{dir_statistics}/{statistic}_{idx_mock} exists and overwrite={overwrite}, exiting")
-            return
-    else:
-        fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
+    # these are the filenames we'll produce; for each cosmo, might be multiple bias params
+    # (if just one, will be an array of length 1)
+    fns_statistics, idxs_bias = get_fns_to_compute(statistic, idx_mock, tag_mocks, tag_biasparams, tag_Anoise,
+                                                   params_df, biasparams_df)
+    
+    # check which statistics we need to compute
+    for fn_statistic in fns_statistics:
         if os.path.exists(fn_statistic) and not overwrite:
             print(f"Statistic {fn_statistic} exists and overwrite={overwrite}, exiting")
             return
         else:
             print(f"Computing statistic {fn_statistic} (overwrite={overwrite})")
+    if len(fns_statistics) == 0:
+        print(f"No statistics to compute for idx_mock={idx_mock}, exiting")
+        return
 
     start_tot = time.time()
     
-    try:
-        bias_terms_eul = np.load(fn_fields)
-    except FileNotFoundError:
-        print(f"File {fn_fields} not found, exiting")
-        return
-
     n_grid_orig = 512 # we just know this from how we created the fields
     print(f"n_grid_orig = {n_grid_orig}", flush=True)
 
+    # get cosmology (need for all but bispec, just get here)
     param_dict = param_dict_fixed.copy()
     if params_df is not None:
         param_dict.update(params_df.loc[idx_mock].to_dict())
@@ -219,46 +196,48 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
     else:
         box_size = 1000.0
 
-    # TODO  check normalizaiton; n_grid_orig used for normalizing tracer
-    # field once computed given bias coeffs; so maybe don't need here?
-    if statistic == 'pnn':
-        start = time.time()
-        power_all_terms = compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
-                                                n_threads=n_threads)
-        np.save(fn_statistic, power_all_terms)
-        end = time.time()
-        print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
-        
-    elif statistic == 'pklin':
-        start = time.time()
-        pk_obj = compute_pk_linear(idx_mock, cosmo, box_size, n_grid_orig,
-                                   n_threads=n_threads)
-        np.save(fn_statistic, pk_obj)
-        end = time.time()
-        print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+    for i, fn_statistic in enumerate(fns_statistics):
+        if idxs_bias is not None:
+            idx_bias = idxs_bias[i]
 
-    if statistic == 'bispec':
-        
-        assert tag_biasparams is not None, "tag_biasparams must be provided for bispectrum computation"
-        
-        # idxs_bias is gotten above, bc used it to check if files exist already
-        for idx_bias in idxs_bias:
+        if statistic == 'pnn':
             start = time.time()
-            # check if this particular stat already computed
-            if 'p0' in tag_biasparams:
-                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
-            else:
-                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
-            if os.path.exists(fn_statistic) and not overwrite:
-                print(f"Statistic {fn_statistic} exists and overwrite={overwrite}, continuing")
-                continue
             
-            biasparam_dict = biasparams_dict_fixed.copy()
-            if biasparams_df is not None:
-                biasparam_dict.update(biasparams_df.loc[idx_bias].to_dict())
-            bias_vector = [biasparam_dict[name] for name in utils.biasparam_names_ordered]
-            tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
+            bias_terms_eul = get_bias_fields(fn_fields)
+            power_all_terms = compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
+                                                    n_threads=n_threads)
+            np.save(fn_statistic, power_all_terms)
+            end = time.time()
+            print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
             
+        elif statistic == 'pk':
+            start = time.time()
+
+            tracer_field = make_tracer_field(fn_fields, idx_bias, biasparams_df,
+                                    biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, tag_noise)
+            pk_obj = compute_pk(tracer_field, cosmo, box_size,
+                                    n_threads=n_threads)
+            np.save(fn_statistic, pk_obj)
+            end = time.time()
+            print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+
+        elif statistic == 'pklin':
+            # note: doesn't use the muchisimocks data! just takes the seed and 
+            # makes a linear sim w bacco, then computes its pk
+            start = time.time()
+            pk_obj = compute_pk_linear(idx_mock, cosmo, box_size, n_grid_orig,
+                                    n_threads=n_threads)
+            np.save(fn_statistic, pk_obj)
+            end = time.time()
+            print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+
+        elif statistic == 'bispec':
+                            
+            start = time.time()
+
+            assert base_bispec is not None, "base_bispec must be provided for bispectrum computation"
+            tracer_field = make_tracer_field(fn_fields, idx_bias, biasparams_df,
+                                    biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, tag_noise)
             bspec, bk_corr = compute_bispectrum(base_bispec, tracer_field)
             k123 = bspec.get_ks()
             weight = k123.prod(axis=0)
@@ -272,12 +251,104 @@ def run(statistic, tag_params, idx_mock, overwrite=False, n_threads=1,
         
             end = time.time()
             print(f"Computed {statistic} for idx_mock={idx_mock}, idx_bias={idx_bias} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
-            if idxs_bias==1:
-                print("HIT IDX BIAS=1, BREAKING FOR TESTING")
-                break
             
     end_tot = time.time()
     print(f"Total time to compute {statistic}(s) for idx_mock={idx_mock} in time {end_tot-start_tot:.2f} s", flush=True)
+
+
+def get_fns_to_compute(statistic, idx_mock, tag_mocks, tag_biasparams, tag_Anoise,
+                       params_df, biasparams_df):
+    # Checking here if we have remaining statistics to compute and if we need to load the fields at all
+    # (because loading fields takes some time, so want to check first if we'll need them;
+    # we'll also check later for the bispec case if we need to compute that particular one)
+    # "precompute" means we'll add up all the fields first and compute stat on final field;
+    # alternative is e.g. computing the pnn so we just need the individual fields
+    
+    # tag_noise is within tag_mocks
+    
+    # actual mock data dir is just cosmology-dependent
+    dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_mocks}'
+    Path.mkdir(Path(dir_statistics), parents=True, exist_ok=True)
+    
+    fns_statistics = []
+    # check whether will need precompute later, or can just define in this func
+    if tag_biasparams is not None and 'p0' not in tag_biasparams:                
+        #if tag_Anoise is not None and tag_params is None:
+            # compute the statistic of only the noise field!
+            
+        # figure out which bias indices to use
+        if 'fisher' in tag_biasparams:
+            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='fisher',
+                                                params_df=params_df, biasparams_df=biasparams_df)
+        else:
+            factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
+            assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
+            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=factor)
+        
+        #exist_all = True
+        for idx_bias in idxs_bias:
+            if tag_Anoise is not None and 'p0' not in tag_Anoise:
+                # noise field associated w the bias params
+                # in the case where 1 bias param per cosmo, idx_mock==idx_bias==idx_noise
+                idx_noise = idx_bias
+                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}_n{idx_noise}.npy' 
+            else:
+                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
+            fns_statistics.append(fn_statistic)
+    else:
+        #idxs_bias = None # bias not needed, either bc pnn, or noise-only
+        idxs_bias = [0] # because still may need for noise
+        # TODO deal with noise-only case
+        fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
+        fns_statistics.append(fn_statistic)
+    return fns_statistics, idxs_bias
+
+
+def get_bias_fields(fn_fields):
+    # Load the bias fields from the file
+    try:
+        bias_terms_eul = np.load(fn_fields)
+    except FileNotFoundError:
+        print(f"File {fn_fields} not found, exiting")
+        return None
+
+    return bias_terms_eul
+
+
+def make_tracer_field(fn_fields, idx_bias, biasparams_df, biasparams_dict_fixed, 
+                      Anoise_df, Anoise_dict_fixed, tag_noise):
+    
+    # load eulerian bias fields
+    bias_terms_eul = get_bias_fields(fn_fields)
+    
+    # get bias vector
+    biasparam_dict = biasparams_dict_fixed.copy()
+    if biasparams_df is not None:
+        biasparam_dict.update(biasparams_df.loc[idx_bias].to_dict())
+    bias_vector = [biasparam_dict[name] for name in utils.biasparam_names_ordered]
+    
+    # TODO figure out if should be indexing bias, or cosmo, or indep...
+    if tag_noise is not None:
+        # get noise field
+        fn_noise = f'/scratch/kstoreyf/muchisimocks/data/noise_fields/fields{tag_noise}/noise_field_n{idx_bias}.npy'
+        if not os.path.exists(fn_noise):
+            raise ValueError(f"Noise field {fn_noise} does not exist!")
+        noise_field = np.load(fn_noise)
+        
+        # get A_noise
+        A_noise_dict = Anoise_dict_fixed.copy()
+        if Anoise_df is not None:
+            assert len(Anoise_df)==len(biasparams_df), "Anoise_df should have same length as biasparams_df"
+            A_noise_dict.update(Anoise_df.loc[idx_bias].to_dict())
+        A_noise = A_noise_dict['A_noise']      
+    else:
+        noise_field = None
+        A_noise = None
+
+    n_grid_orig = 512  # we just know this from how we created the fields
+    tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector,
+                                            noise_field=noise_field, A_noise=A_noise, n_grid_norm=n_grid_orig)
+    return tracer_field
 
 
 def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,

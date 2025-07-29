@@ -6,6 +6,7 @@ logs/
 *nohup*
 
 plots/
+configs/
 
 data/
 data/emuPks/

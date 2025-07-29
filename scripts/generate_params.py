@@ -2,6 +2,7 @@ import numpy as np
 import os
 import pandas as pd
 from pathlib import Path
+import re
 
 from scipy.stats import qmc
 
@@ -20,24 +21,34 @@ def generate_params_LH():
     seed = 42
     overwrite = False # probs keep false!!! don't want to overwrite param files
 
-    #n_samples = 1000000
-    n_samples = 50000
+    # Run this by uncommenting the part you want; not pretty, I know
+
+    n_samples = 1
+    #n_samples = 1000000 #100x
+    #n_samples = 50000 #5x
+    #n_samples = 200000 #20x
     
-    #bounds_type = 'cosmo' #cosmo or bias
+    ### cosmo
+    #bounds_type = 'cosmo' 
     #n_params_vary = 0
     #tag_bounds = '' #NOTE params are automatically tagged below; this is for '_test' or '_quijote' so far
     #tag_bounds = '_test'
     #tag_bounds = '_quijote'
     
-    # havent yet used 'test' to restrict bounds for bias params, only cosmo
-    # TODO should i be?
-    bounds_type = 'bias'
-    n_params_vary = 4
-    tag_bounds = '_biaszen'
+    ### bias
+    # NOTE havent yet used 'test' to restrict bounds for bias params, only cosmo; TODO should i be?
+    # bounds_type = 'bias'
+    # n_params_vary = 4
+    # tag_bounds = '_biaszen'
     #n_params_vary = 1
     #tag_bounds = '_b1zen'
     #n_params_vary = 0
     #tag_bounds = '_b0000'
+    
+    ### noise
+    bounds_type = 'Anoise'
+    n_params_vary = 0
+    tag_bounds = '_An1'
     
     if bounds_type == 'cosmo':
         param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
@@ -48,8 +59,12 @@ def generate_params_LH():
         param_names_vary = ['b1', 'b2', 'bs2', 'bl']
         param_names_vary = param_names_vary[:n_params_vary]
         param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(tag_bounds=tag_bounds)
+    elif bounds_type == 'Anoise':
+        param_names_vary = ['A_noise']
+        param_names_vary = param_names_vary[:n_params_vary]
+        param_names_ordered, bounds_dict, fiducial_dict = define_LH_Anoise(tag_bounds=tag_bounds)
     else:
-        raise ValueError("pset must be 'cosmo' or 'bias'")
+        raise ValueError("bounds_type must be 'cosmo' or 'bias' or 'Anoise'")
     
     tag_params = f'{tag_bounds}_p{len(param_names_vary)}_n{n_samples}'
     dir_params = '../data/params'
@@ -76,6 +91,8 @@ def generate_params_LH():
         save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
     
 
+
+# TODO update with Anoise?? not sure if want to
 def generate_params_fisher():
     
     overwrite = False # probs keep false!!! don't want to overwrite param files
@@ -244,6 +261,21 @@ def define_LH_cosmo(tag_bounds=''):
     #     raise ValueError(f'Unknown tag_bounds {tag_bounds}')
 
     return param_names_ordered, bounds_dict, fiducial_dict
+
+
+def define_LH_Anoise(tag_bounds=''):
+    """
+    Define the parameter space for the noise field amplitude.
+    """
+    
+    bounds_dict = {'A_noise': [0.0, 2.0]}
+    
+    fiducial_dict = {'A_noise': 1.0}
+    
+    if 'test' in tag_bounds:
+        bounds_dict = restrict_bounds(bounds_dict, factor=0.05)
+    
+    return ['A_noise'], bounds_dict, fiducial_dict
 
 
 def restrict_bounds(bounds_dict, factor=0.05):
