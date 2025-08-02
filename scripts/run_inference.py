@@ -204,6 +204,7 @@ def test_likefree_inference(config, overwrite=False):
     ### Load data and parameters
     # our setup is such that that the test set is a separate dataset, so no need to split
     # don't need theta either - just predicting, not comparing
+    print(tag_noise_test, tag_Anoise_test)
     k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = \
                 data_loader.load_data(data_mode, statistics,
                                       tag_params_test, tag_biasparams_test,

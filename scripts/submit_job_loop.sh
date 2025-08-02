@@ -19,10 +19,10 @@ for n_train in "${n_train_arr[@]}"; do
         #config_train_file="../configs/configs_train/config_muchisimocks${tag_stats}${tag_params}${tag_biasparams}_ntrain${n_train}.yaml"
         config_train_file="none"
 
-        tag_noise="_noise_quijote_p0_n1000"
-        tag_Anoise="_An1_p0_n1"
+        tag_noise_test="_noise_quijote_p0_n1000"
+        tag_Anoise_test="_An1_p0_n1"
         #config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}_ntrain${n_train}_TEST_muchisimocks${tag_stats}_test_p5_n1000_biaszen_p4_n1000.yaml"
-        config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}_ntrain${n_train}_TEST_muchisimocks${tag_stats}_quijote_p0_n1000_b1000_p0_n1${tag_noise}${tag_Anoise}_mean.yaml"
+        config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}_ntrain${n_train}_TEST_muchisimocks${tag_stats}_quijote_p0_n1000_b1000_p0_n1${tag_noise_test}${tag_Anoise_test}_mean.yaml"
         #config_test_file="none"
 
         # Determine job name logic

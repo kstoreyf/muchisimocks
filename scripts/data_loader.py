@@ -209,8 +209,12 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
         #if idx_LH%100 == 0:
             #print(f"Loading Pk {idx_LH}", flush=True)
         
-        fns_statistics, idxs_bias, idxs_noise = get_fns_statistic(statistic, idx_LH, tag_params, tag_biasparams, tag_noise, tag_Anoise,
-                       params_df, biasparams_df)
+        if stat_name == 'pnn':
+            # special case
+            fns_statistics, idxs_bias, idxs_noise = get_fns_statistic(stat_name, idx_LH, tag_params, None, None, None, None, None)
+        else:
+            fns_statistics, idxs_bias, idxs_noise = get_fns_statistic(statistic, idx_LH, tag_params, tag_biasparams, tag_noise, tag_Anoise,
+                        params_df, biasparams_df)
         for i, fn_stat in enumerate(fns_statistics):
             if not os.path.exists(fn_stat):
                 print(f"WARNING: Missing {fn_stat}, skipping")
@@ -220,7 +224,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
                 idx_bias = idxs_bias[i]
             if idxs_noise is not None:
                 idx_noise = idxs_noise[i]         
-            error = 0 # default, can get overwritten in if blocks
+            error = None # default, can get overwritten in if blocks
             if mode_precomputed:
                 if statistic == 'pk':
                     # TODO pk is old style where only 1-1 cosmo-bias, so this name format
@@ -266,13 +270,17 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
                     # noise-only pk
                     dir_statistics_noise = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_noise}'
                     fn_stat_noise = f'{dir_statistics_noise}/{statistic}_n{idx_LH}.npy'
+                    print(f"Loading noise pk from {fn_stat_noise} and adding to pnn")
                     if os.path.exists(fn_stat_noise):
-                        stat_noise = np.load(fn_stat_noise)
+                        pk_obj_noise = np.load(fn_stat_noise, allow_pickle=True).item()
+                        stat_noise = pk_obj_noise['pk']
                     else:
                         raise FileNotFoundError(f"Noise file {fn_stat_noise} not found!")
                     # for pk, we can just add the summed pnn to the noise-pk!
                     stat += stat_noise
 
+            if error is None:
+                error = np.zeros_like(stat)
             stat_arr.append(stat)
             error_arr.append(error)
             idxs_params.append((idx_LH, idx_bias, idx_noise))
@@ -826,12 +834,13 @@ def get_fns_statistic(statistic, idx_mock, tag_params, tag_biasparams, tag_noise
         #idxs_bias = None # bias not needed, either bc pnn, or noise-only
         idxs_bias = [0] # because for noise we may also need (?)
         
-        # only one set of bias params, but adding noise so aligning noise with each cosmo/mock idx
-        if 'p0' in tag_biasparams and tag_noise is not None:
+        if tag_biasparams is not None and 'p0' in tag_biasparams and tag_noise is not None:
+            # dep on cosmo and noise, e.g. fixed bias params but with noise
             idx_noise = idx_mock
             idxs_noise = [idx_noise]
             fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_n{idx_noise}.npy'
         else:    
+            # only dep on cosmo, e.g. pnn
             idxs_noise = None
             fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
         fns_statistics.append(fn_statistic)
