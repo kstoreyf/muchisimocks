@@ -83,7 +83,7 @@ def train_likefree_inference(config, overwrite=False):
 
     ### Load data and parameters
     # don't need the fixed params for training!
-    k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints_cosmo, random_ints_bias = \
+    k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints_cosmo, random_ints_bias = \
                 data_loader.load_data(data_mode, statistics, 
                                       tag_params, tag_biasparams,
                                       tag_data=tag_data,
@@ -111,7 +111,7 @@ def train_likefree_inference(config, overwrite=False):
     idxs_train = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_train)]
     idxs_val = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_val)]
 
-    theta, param_names = data_loader.param_dfs_to_theta(idxs_params, params_df, biasparams_df, 
+    theta, param_names = data_loader.param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df,
                                                         n_rlzs_per_cosmo=config["n_rlzs_per_cosmo"])
     print('theta shape:', theta.shape)
     print(param_names)
@@ -192,7 +192,7 @@ def test_likefree_inference(config, overwrite=False):
     ### Load data and parameters
     # our setup is such that that the test set is a separate dataset, so no need to split
     # don't need theta either - just predicting, not comparing
-    k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
+    k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = \
                 data_loader.load_data(data_mode, statistics,
                                       tag_params_test, tag_biasparams_test,
                                       tag_data=tag_data_train, #this goes to mask
@@ -251,7 +251,7 @@ def run_likelihood_inference(config):
         assert 'p0' in tag_params, "If you're evaluating the mean, don't you want fixed cosmo?"
     
     # Load data and parameters
-    k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
+    k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = \
         data_loader.load_data(data_mode, statistics,
                               tag_params, tag_biasparams, 
                               tag_data=tag_data, 

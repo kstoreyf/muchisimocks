@@ -33,18 +33,25 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
         y.append(y_i)
         y_err.append(y_err_i)    
 
-    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams)
-    return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
+    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams)
+    return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias
 
 
-def get_idxs_params(tag_params, tag_biasparams, n_bias_per_cosmo=1, 
+def get_idxs_params(tag_params, tag_biasparams, tag_Anoise=None, n_bias_per_cosmo=1, 
                     modecosmo='lh'):
     """
-    For each cosmological parameter index, get the corresponding bias parameter indices.
-    Returns a list of (idx_mock, idx_bias) tuples.
+    For each cosmological parameter index, get the corresponding bias and noise parameter indices.
+    Returns a list of (idx_mock, idx_bias, idx_noise) tuples.
     """
     params_df, param_dict_fixed = load_cosmo_params(tag_params)
     biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
+    
+    # Load noise parameters if provided
+    if tag_Anoise is not None:
+        Anoise_df, Anoise_dict_fixed = load_Anoise_params(tag_Anoise)
+    else:
+        Anoise_df = None
+    
     n_cosmo_params = len(params_df)
     n_biasparams = len(biasparams_df)
     factor = n_biasparams // n_cosmo_params
@@ -57,15 +64,29 @@ def get_idxs_params(tag_params, tag_biasparams, n_bias_per_cosmo=1,
             start_idx = idx_mock * factor
             end_idx = (idx_mock + 1) * factor
             for idx_bias in range(start_idx, end_idx):
-                idxs_params.append((idx_mock, idx_bias))
+                # In most cases, noise index follows bias index pattern
+                if tag_Anoise is not None and 'p0' not in tag_Anoise:
+                    idx_noise = idx_bias
+                else:
+                    # For fixed noise or no noise, use mock index
+                    idx_noise = idx_mock
+                idxs_params.append((idx_mock, idx_bias, idx_noise))
         elif modecosmo == 'fisher':
             if params_df.iloc[idx_mock]['param_shifted'] == 'fiducial':
                 for idx_bias in biasparams_df.index:
-                    idxs_params.append((idx_mock, idx_bias))
+                    if tag_Anoise is not None and 'p0' not in tag_Anoise:
+                        idx_noise = idx_bias
+                    else:
+                        idx_noise = idx_mock
+                    idxs_params.append((idx_mock, idx_bias, idx_noise))
             else:
                 fiducial_bias_idxs = np.where(biasparams_df['param_shifted'] == 'fiducial')[0]
                 for idx_bias in fiducial_bias_idxs:
-                    idxs_params.append((idx_mock, idx_bias))
+                    if tag_Anoise is not None and 'p0' not in tag_Anoise:
+                        idx_noise = idx_bias
+                    else:
+                        idx_noise = idx_mock
+                    idxs_params.append((idx_mock, idx_bias, idx_noise))
         else:
             raise ValueError(f"Unknown modecosmo: {modecosmo}")
     return idxs_params
@@ -142,6 +163,7 @@ def check_df_lengths(params_df, biasparams_df):
         return int(factor), 'bias'
 
 
+# TODO update for noise
 def load_data_muchisimocks(statistic, tag_params, tag_biasparams, tag_datagen='',
                            mode_precomputed=None, return_pk_objs=False):
     
@@ -299,7 +321,7 @@ def load_params(tag_params=None, tag_biasparams=None,
     if tag_params is None:
         params_df = None
         param_dict_fixed = {}
-        random_ints_bias = None
+        random_ints = None
     else:        
         params_df, param_dict_fixed = load_cosmo_params(tag_params, dir_params=dir_params)
         fn_randints = f'{dir_params}/randints{tag_params}.npy'
@@ -319,13 +341,11 @@ def load_params(tag_params=None, tag_biasparams=None,
         Anoise_dict_fixed = {}
     else:
         Anoise_df, Anoise_dict_fixed = load_Anoise_params(tag_Anoise, dir_params=dir_params)
-    
+            
+    # TODO figure out what to do about randoms in Anoise case
     # NOTE this if/else is so current code doesn't break if don't give tag_Anoise, 
     # but probs will want to update everywhere
-    if tag_Anoise is None:
-        return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
-    else:
-        return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias
+    return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias
     
     
 def load_cosmo_params(tag_params, dir_params='../data/params'):
@@ -385,14 +405,16 @@ def load_Anoise_params(tag_Anoise, dir_params='../data/params'):
     return Anoise_df, Anoise_dict_fixed
     
     
-def param_dfs_to_theta(idxs_params, params_df, biasparams_df, n_rlzs_per_cosmo=1):
+def param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df=None, n_rlzs_per_cosmo=1):
     """
     Convert parameter DataFrames to a theta array that can be used for inference.
-    Handles cases where params_df and biasparams_df have different lengths.
+    Handles cases where params_df, biasparams_df, and Anoise_df have different lengths.
     
     Args:
+        idxs_params: List of tuples containing parameter indices
         params_df (pd.DataFrame): DataFrame containing cosmological parameters
         biasparams_df (pd.DataFrame): DataFrame containing bias parameters
+        Anoise_df (pd.DataFrame): DataFrame containing noise parameters
         n_rlzs_per_cosmo (int): Number of realizations per cosmology
         
     Returns:
@@ -400,31 +422,51 @@ def param_dfs_to_theta(idxs_params, params_df, biasparams_df, n_rlzs_per_cosmo=1
             - theta: 2D numpy array of parameter values
             - param_names: List of parameter names corresponding to columns in theta
     """
-    assert params_df is not None or biasparams_df is not None, "params_df or biasparams_df (or both) must be specified"
+    assert params_df is not None or biasparams_df is not None or Anoise_df is not None, "At least one of params_df, biasparams_df, or Anoise_df must be specified"
     param_names = []
 
-    # Base case: only one DataFrame provided
-    if params_df is None:
+    # Base cases: only one DataFrame provided
+    if params_df is None and biasparams_df is None:
+        param_names.extend(Anoise_df.columns.tolist())
+        theta_noise_orig = np.array([Anoise_df.loc[idx_bias].values for _, idx_bias in idxs_params])
+        theta_noise = utils.repeat_arr_rlzs(theta_noise_orig, n_rlzs=n_rlzs_per_cosmo)
+        return theta_noise, param_names
+    elif params_df is None and Anoise_df is None:
         param_names.extend(biasparams_df.columns.tolist())
         theta_bias_orig = np.array([biasparams_df.loc[idx_bias].values for _, idx_bias in idxs_params])
         theta_bias = utils.repeat_arr_rlzs(theta_bias_orig, n_rlzs=n_rlzs_per_cosmo)
         return theta_bias, param_names
-    elif biasparams_df is None:
+    elif biasparams_df is None and Anoise_df is None:
         param_names.extend(params_df.columns.tolist())
         theta_cosmo_orig = np.array([params_df.loc[idx_mock].values for idx_mock, _ in idxs_params])
         theta_cosmo = utils.repeat_arr_rlzs(theta_cosmo_orig, n_rlzs=n_rlzs_per_cosmo)
         return theta_cosmo, param_names
     
-    # Add parameter names from both DataFrames
-    param_names.extend(params_df.columns.tolist())
-    param_names.extend(biasparams_df.columns.tolist())
+    # Add parameter names from all DataFrames
+    if params_df is not None:
+        param_names.extend(params_df.columns.tolist())
+    if biasparams_df is not None:
+        param_names.extend(biasparams_df.columns.tolist())
+    if Anoise_df is not None:
+        param_names.extend(Anoise_df.columns.tolist())
 
     theta = []
     for idx_mock, idx_bias in idxs_params:
-        cosmo_params = params_df.loc[idx_mock].values
-        bias_params = biasparams_df.loc[idx_bias].values
-        params_combined = np.concatenate([cosmo_params, bias_params])
-        theta.append(params_combined)        
+        params_combined = []
+        
+        if params_df is not None:
+            cosmo_params = params_df.loc[idx_mock].values
+            params_combined.append(cosmo_params)
+        
+        if biasparams_df is not None:
+            bias_params = biasparams_df.loc[idx_bias].values
+            params_combined.append(bias_params)
+            
+        if Anoise_df is not None:
+            noise_params = Anoise_df.loc[idx_bias].values
+            params_combined.append(noise_params)
+        
+        theta.append(np.concatenate(params_combined))        
     theta = np.array(theta)
     
     # TODO test/check this part! not using bc haven't been using emulated set
@@ -436,14 +478,16 @@ def param_dfs_to_theta(idxs_params, params_df, biasparams_df, n_rlzs_per_cosmo=1
     
     
     
-def load_theta_test(tag_params_test, tag_biasparams_test,
-                    cosmo_param_names_vary=None, bias_param_names_vary=None, n_rlzs_per_cosmo=1):
+def load_theta_test(tag_params_test, tag_biasparams_test, tag_Anoise_test=None,
+                    cosmo_param_names_vary=None, bias_param_names_vary=None, noise_param_names_vary=None,
+                    n_rlzs_per_cosmo=1):
     # in theory could make this load whichever of the params want, variable or fixed,
     # but for now we want either completely fixed or completely varied, so this is fine
     
+    # TODO update for Anoise!
     # get parameter files
-    params_df_test, param_dict_fixed_test, biasparams_df_test, biasparams_dict_fixed_test, _, _ = load_params(tag_params_test, tag_biasparams_test)
-    
+    params_df_test, param_dict_fixed_test, biasparams_df_test, biasparams_dict_fixed_test, Anoise_df_test, Anoise_dict_fixed_test, _, _ = load_params(tag_params_test, tag_biasparams_test, tag_Anoise=tag_Anoise_test)
+
     # load test data
     if 'p0' in tag_params_test and 'p0' in tag_biasparams_test:
         msg = "If all fixed parameters in test set, need to specify which parameters to provide"
@@ -455,7 +499,7 @@ def load_theta_test(tag_params_test, tag_biasparams_test,
         # for when have a LH of varied bias parameters
         # TODO update to handle idxs_params!
         idxs_params = get_idxs_params(tag_params_test, tag_biasparams_test)
-        theta_test, param_names = param_dfs_to_theta(idxs_params, params_df_test, biasparams_df_test, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
+        theta_test, param_names = param_dfs_to_theta(idxs_params, params_df_test, biasparams_df_test, Anoise_df_test, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
         
     return np.array(theta_test)
     

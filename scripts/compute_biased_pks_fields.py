@@ -34,7 +34,7 @@ def compute_pks_muchisimocks():
 
     dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_params}'
     
-    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = \
+    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = \
         data_loader.load_params(tag_params, tag_biasparams)
     
     biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl']

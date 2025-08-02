@@ -6,7 +6,7 @@ n_train_arr=(10000)
 #n_train_arr=(500 1000 2000 4000 6000 8000)
 #tag_stats_arr=("_pk" "_bispec" "_pk_bispec") 
 #tag_stats_arr=("_pk" "_bispec") 
-tag_stats_arr=("_pk_bispec")
+tag_stats_arr=("_pk")
 
 #n_train_arr=(10000)
 #tag_stats_arr=("_pk_bispec")
@@ -18,8 +18,11 @@ for n_train in "${n_train_arr[@]}"; do
         tag_biasparams="_biaszen_p4_n200000"  
         #config_train_file="../configs/configs_train/config_muchisimocks${tag_stats}${tag_params}${tag_biasparams}_ntrain${n_train}.yaml"
         config_train_file="none"
-        config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}_ntrain${n_train}_TEST_muchisimocks${tag_stats}_test_p5_n1000_biaszen_p4_n1000.yaml"
-        #config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}_ntrain${n_train}_TEST_muchisimocks${tag_stats}_quijote_p0_n1000_b1000_p0_n1_mean.yaml"
+
+        tag_noise="_noise_quijote_p0_n1000"
+        tag_Anoise="_An1_p0_n1"
+        #config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}_ntrain${n_train}_TEST_muchisimocks${tag_stats}_test_p5_n1000_biaszen_p4_n1000.yaml"
+        config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}_ntrain${n_train}_TEST_muchisimocks${tag_stats}_quijote_p0_n1000_b1000_p0_n1${tag_noise}${tag_Anoise}_mean.yaml"
         #config_test_file="none"
 
         # Determine job name logic
@@ -46,7 +49,7 @@ for n_train in "${n_train_arr[@]}"; do
 ##SBATCH --time=2:00:00 #2h for training
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=40G #30gb for both training and testing
+#SBATCH --mem=40G #30gb for both training and testing (actually failed once, now doing 40)
 
 echo "Current date and time: \$(date)"
 echo "Slurm job id is \${SLURM_JOB_ID}"

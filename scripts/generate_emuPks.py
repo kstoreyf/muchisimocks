@@ -51,7 +51,7 @@ def main():
     fn_biasparams = f'{dir_params}/params_lh{tag_biasparams}.txt'
     fn_biasparams_fixed = f'{dir_params}/params_fixed{tag_biasparams}.txt'
     
-    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, _, _ = data_loader.load_params(tag_params, tag_biasparams)
+    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, _, _ = data_loader.load_params(tag_params, tag_biasparams)
     # TODO could do multiple biases per cosmo, but for now 1:1
     assert params_df is None or len(params_df) == n_data, f"Expected {n_data} rows in {fn_params}"
     assert biasparams_df is None or len(biasparams_df) == n_data, f"Expected {n_data} rows in {fn_biasparams}"

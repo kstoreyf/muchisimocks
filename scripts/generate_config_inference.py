@@ -12,10 +12,10 @@ def main():
     overwrite = False
     #overwrite = True
     #generate_train_config(overwrite=overwrite)
-    #stat_arr = [['pk']]
-    #n_train_arr = [500]
-    stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
-    n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
+    stat_arr = [['pk']]
+    n_train_arr = [10000]
+    #stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
+    #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
     for statistics in stat_arr:
         for n_train in n_train_arr:
             #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
@@ -131,6 +131,8 @@ def generate_test_config(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n50000' #5x
     #tag_biasparams = '_biaszen_p4_n100000' #10x
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
+    tag_noise = None
+    tag_Anoise = None
 
     n_rlzs_per_cosmo = 1
     # For loading a model trained with wandb sweep; best of that sweep will be used
@@ -145,7 +147,8 @@ def generate_test_config(dir_config='../configs/configs_test',
     evaluate_mean = True 
     tag_params_test = '_quijote_p0_n1000'
     tag_biasparams_test = '_b1000_p0_n1'
-    tag_noise_test = tag_params_test
+    tag_noise_test = '_noise_quijote_p0_n1000'
+    tag_Anoise_test = '_An1_p0_n1'
     ## settings for coverage test
     # evaluate_mean = False
     # tag_params_test = '_test_p5_n1000'
@@ -179,9 +182,17 @@ def generate_test_config(dir_config='../configs/configs_test',
     
     # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
     tag_stats = f'_{"_".join(statistics)}'    
-    tag_data_train = '_'+data_mode + tag_stats + tag_params + tag_biasparams + tag_datagen
-    tag_data_test = '_'+data_mode + tag_stats + tag_params_test + tag_biasparams_test + tag_datagen_test + tag_noiseless
     
+    tag_paramsall = tag_params + tag_biasparams
+    if tag_noise is not None:
+        tag_paramsall += tag_noise + tag_Anoise
+    tag_data_train = '_'+data_mode + tag_stats + tag_paramsall + tag_datagen
+    
+    tag_paramsall_test = tag_params_test + tag_biasparams_test
+    if tag_noise_test is not None:
+        tag_paramsall_test += tag_noise_test + tag_Anoise_test
+    tag_data_test = '_'+data_mode + tag_stats + tag_paramsall_test + tag_datagen_test + tag_noiseless
+
     # build tag
     tag_inf_train = tag_data_train
     if n_train is not None:
