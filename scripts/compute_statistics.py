@@ -3,7 +3,6 @@ import numpy as np
 import itertools
 import time
 import argparse
-from pathlib import Path
 
 import bacco
 import PolyBin3D as pb
@@ -185,7 +184,7 @@ def run(statistic, idx_mock,
     
     # these are the filenames we'll produce; for each cosmo, might be multiple bias params
     # (if just one, will be an array of length 1)
-    fns_statistics_all, idxs_bias, idxs_noise = get_fns_to_compute(statistic, idx_mock, tag_params, tag_biasparams, tag_noise, tag_Anoise,
+    fns_statistics_all, idxs_bias, idxs_noise = get_fns_statistic(statistic, idx_mock, tag_params, tag_biasparams, tag_noise, tag_Anoise,
                                                    params_df, biasparams_df)
     
     # check which statistics we need to compute
@@ -270,78 +269,6 @@ def run(statistic, idx_mock,
             
     end_tot = time.time()
     print(f"Total time to compute {statistic}(s) for idx_mock={idx_mock} in time {end_tot-start_tot:.2f} s", flush=True)
-
-
-def get_fns_to_compute(statistic, idx_mock, tag_params, tag_biasparams, tag_noise, tag_Anoise,
-                       params_df, biasparams_df):
-    
-    # Checking here if we have remaining statistics to compute and if we need to load the fields at all
-    # (because loading fields takes some time, so want to check first if we'll need them;
-    # we'll also check later for the bispec case if we need to compute that particular one)
-    # "precompute" means we'll add up all the fields first and compute stat on final field;
-    # alternative is e.g. computing the pnn so we just need the individual fields
-    if tag_biasparams is not None and tag_noise is not None and tag_Anoise is not None:
-        # think tag_noise and tag_Anoise will always go together bc you need to know how to modify noise field
-        # (tho the combos can vary, that's why they're different)
-        tag_mocks = tag_params + tag_biasparams + tag_noise + tag_Anoise
-    elif tag_biasparams is not None:
-        tag_mocks = tag_params + tag_biasparams
-    elif tag_noise is not None and tag_params is None:
-        tag_mocks = tag_noise
-    else:
-        tag_mocks = tag_params    
-
-    # actual mock data dir is just cosmology-dependent
-    dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_mocks}'
-    Path.mkdir(Path(dir_statistics), parents=True, exist_ok=True)
-    
-    fns_statistics = []
-    # check whether will need precompute later, or can just define in this func
-    
-    # deal with noise-only case
-    # compute the statistic of only the noise field!
-    if tag_params is None:
-        assert tag_noise is not None, "If tag_params is None, tag_noise must be provided for noise-only computation"
-        fn_statistic = f'{dir_statistics}/{statistic}_n{idx_mock}.npy'
-        fns_statistics.append(fn_statistic)
-        idxs_bias = None #?
-        idxs_noise = [idx_mock] # use the mock index as the noise field index
-            
-    elif tag_biasparams is not None and 'p0' not in tag_biasparams:                
-            
-        # figure out which bias indices to use
-        if 'fisher' in tag_biasparams:
-            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='fisher',
-                                                params_df=params_df, biasparams_df=biasparams_df)
-        else:
-            factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
-            assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
-            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=factor)
-        
-        #exist_all = True
-        idxs_noise = idxs_bias
-        for idx_bias, idx_noise in zip(idxs_bias, idxs_noise):
-            if tag_Anoise is not None and 'p0' not in tag_Anoise:
-                # noise field associated w the bias params
-                # in the case where 1 bias param per cosmo, idx_mock==idx_bias==idx_noise
-                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}_n{idx_noise}.npy' 
-            else:
-                fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
-            fns_statistics.append(fn_statistic)
-    else:
-        #idxs_bias = None # bias not needed, either bc pnn, or noise-only
-        idxs_bias = [0] # because for noise we may also need (?)
-        
-        # only one set of bias params, but adding noise so aligning noise with each cosmo/mock idx
-        if 'p0' in tag_biasparams and tag_noise is not None:
-            idx_noise = idx_mock
-            idxs_noise = [idx_noise]
-            fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_n{idx_noise}.npy'
-        else:    
-            idxs_noise = None
-            fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
-        fns_statistics.append(fn_statistic)
-    return fns_statistics, idxs_bias, idxs_noise
 
 
 def get_bias_fields(fn_fields):

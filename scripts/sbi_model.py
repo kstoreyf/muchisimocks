@@ -358,7 +358,7 @@ class SBIModel():
         
         samples = self.posterior.sample_batched((n_samples,), x=y_obs, 
                                                 )
-        print(f"Time to sample (y_obs.shape={y_obs.shape}, n_samples={n_samples}): {time.time() - end}")
+        print(f"Time to sample (y_obs.shape={y_obs.shape}, n_samples={n_samples}): {time.time() - end:.2f}s = {(time.time() - end) / 60:.2f} min")
         return samples
     
     

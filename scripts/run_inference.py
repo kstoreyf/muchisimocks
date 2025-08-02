@@ -68,6 +68,8 @@ def train_likefree_inference(config, overwrite=False):
     n_train = config["n_train"]
     tag_params = config["tag_params"]
     tag_biasparams = config["tag_biasparams"]
+    tag_noise = config.get("tag_noise", None)  # noise parameters
+    tag_Anoise = config.get("tag_Anoise", None)  # noise parameters
     kwargs_data = config["kwargs_data"]
     run_mode = config["run_mode"]
     sweep_name = config["sweep_name"]
@@ -86,6 +88,8 @@ def train_likefree_inference(config, overwrite=False):
     k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints_cosmo, random_ints_bias = \
                 data_loader.load_data(data_mode, statistics, 
                                       tag_params, tag_biasparams,
+                                      tag_noise=tag_noise,
+                                      tag_Anoise=tag_Anoise,
                                       tag_data=tag_data,
                                       kwargs=kwargs_data)
 
@@ -93,6 +97,10 @@ def train_likefree_inference(config, overwrite=False):
     _, dict_bounds_cosmo, _ = genp.define_LH_cosmo(tag_params)
     _, dict_bounds_bias, _ = genp.define_LH_bias(tag_biasparams)
     dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
+    # add noise parameter bounds if they exist
+    if tag_Anoise is not None:
+        _, dict_bounds_noise, _ = genp.define_LH_Anoise(tag_Anoise)
+        dict_bounds.update(dict_bounds_noise)
     
     ### Subsampling (ntrain and train/val)
     # downsample based on n_train    
@@ -164,6 +172,8 @@ def test_likefree_inference(config, overwrite=False):
     #statistic = statistics[0]
     tag_params = config["tag_params"]
     tag_biasparams = config["tag_biasparams"]
+    tag_noise = config.get("tag_noise", None)  
+    tag_Anoise = config.get("tag_Anoise", None) 
     evaluate_mean = config["evaluate_mean"]
     idxs_obs = config["idxs_obs"]
     #idxs_obs = np.arange(10)
@@ -171,6 +181,8 @@ def test_likefree_inference(config, overwrite=False):
     kwargs_data_test = config["kwargs_data_test"]
     tag_params_test = config["tag_params_test"]
     tag_biasparams_test = config["tag_biasparams_test"]
+    tag_noise_test = config.get("tag_noise_test", None) 
+    tag_Anoise_test = config.get("tag_Anoise_test", None) 
     tag_data_train = config["tag_data_train"]
     tag_data_test = config["tag_data_test"]
     tag_inf_train = config["tag_inf_train"]
@@ -195,10 +207,12 @@ def test_likefree_inference(config, overwrite=False):
     k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = \
                 data_loader.load_data(data_mode, statistics,
                                       tag_params_test, tag_biasparams_test,
+                                      tag_noise=tag_noise_test,
+                                      tag_Anoise=tag_Anoise_test,
                                       tag_data=tag_data_train, #this goes to mask
                                       kwargs=kwargs_data_test)
 
-    param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams)
+    param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams, tag_Anoise=tag_Anoise)
 
     sbi_network = sbi_model.SBIModel(
                 tag_sbi=tag_inf_train,
@@ -240,6 +254,7 @@ def run_likelihood_inference(config):
     statistics = config['statistics']
     tag_params = config['tag_params']
     tag_biasparams = config['tag_biasparams']
+    tag_Anoise = config.get('tag_Anoise', None)  # noise parameters
     tag_data = config.get('tag_data', None)
     tag_inf = config['tag_inf']
     cosmo_param_names_vary = config.get('cosmo_param_names_vary', [])
@@ -254,6 +269,7 @@ def run_likelihood_inference(config):
     k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = \
         data_loader.load_data(data_mode, statistics,
                               tag_params, tag_biasparams, 
+                              tag_Anoise=tag_Anoise,
                               tag_data=tag_data, 
                               kwargs=kwargs_data)
 
@@ -275,9 +291,18 @@ def run_likelihood_inference(config):
     # get bounds
     _, dict_bounds_cosmo, _ = genp.define_LH_cosmo(tag_params)
     _, dict_bounds_bias, _ = genp.define_LH_bias(tag_biasparams)
+    dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
+    
+    # add noise parameter bounds if they exist
+    if tag_Anoise is not None:
+        _, dict_bounds_noise, _ = genp.define_LH_Anoise(tag_Anoise)
+        dict_bounds.update(dict_bounds_noise)
+        
     print("bounds")
     print(dict_bounds_cosmo)
     print(dict_bounds_bias)
+    if tag_Anoise is not None:
+        print(dict_bounds_noise)
 
     # not using training data for likelihood methods, so unclear how to scale; 
     # let's just do log for now
