@@ -9,7 +9,8 @@ import utils
 
 def main():
     
-    tag_noise = '_noise_quijote_p0_n1000'
+    #tag_noise = '_noise_quijote_p0_n1000'
+    tag_noise = '_noise_p5_n10000'
     overwrite = False
 
     pattern = r'n(\d+)'
@@ -42,17 +43,20 @@ def make_noise_fields(n_fields, dir_noise, overwrite=False):
     
     rng = np.random.default_rng(seed=42)
     for i in range(n_fields):
+        
+        if i % 100 == 0:
+            print(f"Generating noise field {i}/{n_fields}")
         noise_field = rms_cell * rng.standard_normal((n_grid, n_grid, n_grid))
         noise_field /= n_grid**3
         
         # Save the noise field to a file
         fn_noise = f"{dir_noise}/noise_field_n{i}.npy"
         if Path(fn_noise).exists() and not overwrite:
-            print(f"File {fn_noise} already exists. Skipping...")
+            #print(f"File {fn_noise} already exists. Skipping...")
             continue
         else:
             np.save(fn_noise, noise_field)
-            print(f"Saved noise field {i}/{n_fields} to {fn_noise}")
+            #print(f"Saved noise field {i}/{n_fields} to {fn_noise}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --qos=regular
 ##SBATCH --job-name=datagen_p5_n10000_idx1004
+#SBATCH --job-name=gen_noise_fields
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_b1000_p0_n1_quijote_p0_n1000_b1000_p0_n1_samp10000
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n10000_quijote_p0_n1000_biaszen_p4_n1000_nsf_samp10000
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n10000_quijote_p0_n1000_b1000_p0_n1_nsf
@@ -15,15 +16,15 @@
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_b1zen_p1_n10000_best-sbi-rand10
 ##SBATCH --job-name=run_inf_TRAIN_muchisimocksPk_p5_n10000_biaszen_p4_n100000_ntrain1000_best-sbi-rand10_TEST_muchisimocksPk_test_p5_n1000_biaszen_p4_n1000
 ##SBATCH --job-name=run_inf_TRAIN_muchisimocks_bispec_p5_n10000_biaszen_p4_n100000_ntrain10000_TEST_muchisimocks_bispec_test_p5_n1000_biaszen_p4_n1000
-#SBATCH --job-name=run_inf_train_muchisimocks_pk_p5_n10000_biaszen_p4_n100000_ntrain10000_best-sbi-rand10
+##SBATCH --job-name=run_inf_train_muchisimocks_pk_p5_n10000_biaszen_p4_n100000_ntrain10000_best-sbi-rand10
 ##SBATCH --job-name=run_inf_train_muchisimocks_bispec_p5_n10000_biaszen_p4_n10000_ntrain10000
 ##SBATCH --job-name=run_inf_emu_pk_p5_n10000_biaszen_p4_n10000_boxsize1000_nrlzs1_ntrain10000
-#SBATCH --time=24:00:00
+#SBATCH --time=4:00:00
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=24             # tasks per instance
-#SBATCH --mem=30G 	       # 35 for datagen (30 hit oom)
+#SBATCH --mem=3G 	       # 35 for datagen (30 hit oom)
 #SBATCH --output=logs/%x.out
 
 
@@ -43,8 +44,8 @@ conda activate benv
 
 #python run_inference.py
 
-python run_inference.py \
-	--tr=../configs/configs_train/config_muchisimocks_pk_p5_n10000_biaszen_p4_n100000_ntrain10000_best-sbi-rand10.yaml
+#python run_inference.py \
+#	--tr=../configs/configs_train/config_muchisimocks_pk_p5_n10000_biaszen_p4_n100000_ntrain10000_best-sbi-rand10.yaml
 	#--tr=../configs/configs_train/config_muchisimocks_bispec_p5_n10000_biaszen_p4_n100000_ntrain10000.yaml \
 	#--t=../configs/configs_test/config_TRAIN_muchisimocks_bispec_p5_n10000_biaszen_p4_n100000_ntrain10000_TEST_muchisimocks_bispec_test_p5_n1000_biaszen_p4_n1000.yaml \
 	#--tr=../configs/configs_train/config_emu_pk_p5_n10000_biaszen_p4_n10000_boxsize1000_nrlzs1_ntrain10000.yaml
@@ -61,3 +62,4 @@ python run_inference.py \
 
 #python cuda_minimal.py
 #python compute_biased_pks_fields.py
+python generate_noise_fields.py

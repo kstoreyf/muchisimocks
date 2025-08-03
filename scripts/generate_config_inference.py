@@ -18,8 +18,8 @@ def main():
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
     for statistics in stat_arr:
         for n_train in n_train_arr:
-            #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
     #generate_runlike_config(overwrite=overwrite)
     
     
@@ -41,6 +41,8 @@ def generate_train_config(dir_config='../configs/configs_train',
     #tag_biasparams = '_biaszen_p4_n50000' #5 bias params per cosmo
     #tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
+    tag_noise = '_noise_p5_n10000'
+    tag_Anoise = '_An_p1_n10000'
 
     # emu-specific
     n_rlzs_per_cosmo = 1
@@ -66,7 +68,8 @@ def generate_train_config(dir_config='../configs/configs_train',
         kwargs_data = {'tag_datagen': tag_datagen}
 
     tag_stats = f'_{"_".join(statistics)}'    
-    tag_data = '_'+data_mode + tag_stats + tag_params + tag_biasparams + tag_datagen
+    tag_paramsall = tag_params + tag_biasparams + tag_noise + tag_Anoise
+    tag_data = '_'+data_mode + tag_stats + tag_paramsall + tag_datagen
     
     # build tag
     tag_inf = tag_data
@@ -89,6 +92,8 @@ def generate_train_config(dir_config='../configs/configs_train',
         "statistics": statistics,
         "tag_params": tag_params,
         "tag_biasparams": tag_biasparams,
+        "tag_noise": tag_noise,
+        "tag_Anoise": tag_Anoise,
         "n_train": n_train,
         "kwargs_data": kwargs_data,
         "run_mode": run_mode,
