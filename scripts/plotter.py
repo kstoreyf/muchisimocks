@@ -594,6 +594,17 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     if colors is None:
         colors = [utils.color_dict_methods[meth] for meth in inf_methods]
 
+    print(samples_arr)
+    # Check the distribution of each parameter
+    for j, param_name in enumerate(param_names):
+        param_samples = samples_arr[0][:, j]
+        print(f"{param_name}:")
+        print(f"  Min: {param_samples.min():.6f}")
+        print(f"  Max: {param_samples.max():.6f}")
+        print(f"  Mean: {param_samples.mean():.6f}")
+        print(f"  Std: {param_samples.std():.6f}")
+        print(f"  Unique values: {len(np.unique(param_samples))}")
+        
     plot_contours(samples_arr, labels, colors, param_names, utils.param_label_dict, 
                         smooth_arr=smooth_arr, bins_arr=bins_arr,
                         truth_loc=truth_loc, title=title, figsize=figsize,

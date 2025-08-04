@@ -178,6 +178,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
     else:
         if statistic == 'pk' or statistic == 'pklin':
             stat_name = 'pnn'
+        # dir_statistics in pnn case, when it only depends on cosmo
         dir_statistics = get_dir_statistics(stat_name, tag_params, None)
         #dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{stat_name}s_mlib/{stat_name}s{tag_params}{tag_datagen}'
         mode_precomputed = False
@@ -186,6 +187,9 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
     # Load bias parameters regardless of mode
     params_df, param_dict_fixed = load_cosmo_params(tag_params)
     biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
+    Anoise_df, Anoise_dict_fixed = load_Anoise_params(tag_Anoise)
+    print(f"Anoise_df: {Anoise_df}")
+    print(f"Anoise_dict_fixed: {Anoise_dict_fixed}")
     
     #n_cosmos = int(re.search(r'n(\d+)', tag_params).group(1))
     #idxs_LH = np.arange(n_cosmos)
@@ -267,17 +271,31 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
                     stat = utils.pnn_to_pk(pnn_obj, bias_params, pk_type='pk_theory_lin')
                     
                 if tag_noise is not None:
+                    assert Anoise_df is not None or Anoise_dict_fixed is not None, "Anoise_df or Anoise_dict_fixed must be provided if tag_noise is set"
                     # noise-only pk
-                    dir_statistics_noise = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_noise}'
-                    fn_stat_noise = f'{dir_statistics_noise}/{statistic}_n{idx_LH}.npy'
-                    print(f"Loading noise pk from {fn_stat_noise} and adding to pnn")
+                    # let's use get_fns_statistic to get the noise pk because it'll get the 
+                    # proper idxs_noise (for pnn it's none). we'll overwrite the idxs_noise from above (bc we'll also want to keep track of this in idxs_params)
+                    fns_statistics_noise, _, idxs_noise = get_fns_statistic(statistic, idx_LH, None, None, tag_noise, None, None, None)
+                    assert len(fns_statistics_noise) == 1 and len(idxs_noise)==1, "Expected only one noise pk file for each statistic, and one idx_noise"
+                    fn_stat_noise = fns_statistics_noise[0]
+                    idx_noise = idxs_noise[0]
+                    #dir_statistics_noise = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_noise}'
+                    #fn_stat_noise = f'{dir_statistics_noise}/{statistic}_n{idx_LH}.npy'
+                    #print(f"Loading noise pk from {fn_stat_noise} and adding to pnn")
                     if os.path.exists(fn_stat_noise):
                         pk_obj_noise = np.load(fn_stat_noise, allow_pickle=True).item()
                         stat_noise = pk_obj_noise['pk']
                     else:
                         raise FileNotFoundError(f"Noise file {fn_stat_noise} not found!")
-                    # for pk, we can just add the summed pnn to the noise-pk!
-                    stat += stat_noise
+                    # doing this like biasparams even tho only 1 Anoise param, in case we want to extend later
+                    if Anoise_df is not None:
+                        A_noise_dict = Anoise_df.loc[idx_noise].to_dict()
+                    else:
+                        A_noise_dict = {}
+                    A_noise_dict.update(Anoise_dict_fixed)
+                    A_noise = A_noise_dict['A_noise']
+                    # for pk, we can just add the summed pnn to the noise-pk, multiplied by Anoise!
+                    stat += A_noise * stat_noise
 
             if error is None:
                 error = np.zeros_like(stat)
@@ -399,6 +417,9 @@ def load_Anoise_params(tag_Anoise, dir_params='../data/params'):
         if os.path.exists(fn_Anoise_fixed)
         else {}
     )
+    if tag_Anoise is not None:
+        # "Anoise_dict_fixed" is the pythonic way to check for a non-empty dict
+        assert Anoise_df is not None or Anoise_dict_fixed, f"tag_Anoise {tag_Anoise} should have a corresponding Anoise_df or Anoise_dict_fixed!"
     return Anoise_df, Anoise_dict_fixed
     
     
@@ -483,6 +504,7 @@ def load_theta_test(tag_params_test, tag_biasparams_test, tag_Anoise_test=None,
                     n_rlzs_per_cosmo=1):
     # in theory could make this load whichever of the params want, variable or fixed,
     # but for now we want either completely fixed or completely varied, so this is fine
+    # TODO NOW i think we might need to handle this case
     
     # get parameter files
     params_df_test, param_dict_fixed_test, biasparams_df_test, biasparams_dict_fixed_test, Anoise_df_test, Anoise_dict_fixed_test, _, _ = load_params(tag_params_test, tag_biasparams_test, tag_Anoise=tag_Anoise_test)
@@ -820,8 +842,9 @@ def get_fns_statistic(statistic, idx_mock, tag_params, tag_biasparams, tag_noise
             assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
             idxs_bias = get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=factor)
         
-        #exist_all = True
-        idxs_noise = idxs_bias
+        #actually for now we are aligning with cosmo! TODO confirm
+        idxs_noise = [idx_mock]*len(idxs_bias) 
+        #idxs_noise = idxs_bias
         for idx_bias, idx_noise in zip(idxs_bias, idxs_noise):
             if tag_Anoise is not None and 'p0' not in tag_Anoise:
                 # noise field associated w the bias params
@@ -832,6 +855,8 @@ def get_fns_statistic(statistic, idx_mock, tag_params, tag_biasparams, tag_noise
             fns_statistics.append(fn_statistic)
     else:
         #idxs_bias = None # bias not needed, either bc pnn, or noise-only
+        # i believe this is just to run the loop, it will only be cases for fixed biasparams,
+        # or none at all (e.g. pnn)
         idxs_bias = [0] # because for noise we may also need (?)
         
         if tag_biasparams is not None and 'p0' in tag_biasparams and tag_noise is not None:

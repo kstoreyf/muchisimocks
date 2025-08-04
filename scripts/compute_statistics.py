@@ -184,7 +184,7 @@ def run(statistic, idx_mock,
     
     # these are the filenames we'll produce; for each cosmo, might be multiple bias params
     # (if just one, will be an array of length 1)
-    fns_statistics_all, idxs_bias, idxs_noise = get_fns_statistic(statistic, idx_mock, tag_params, tag_biasparams, tag_noise, tag_Anoise,
+    fns_statistics_all, idxs_bias, idxs_noise = data_loader.get_fns_statistic(statistic, idx_mock, tag_params, tag_biasparams, tag_noise, tag_Anoise,
                                                    params_df, biasparams_df)
     
     # check which statistics we need to compute

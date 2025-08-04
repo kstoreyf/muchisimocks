@@ -47,8 +47,10 @@ def generate_params_LH():
     
     ### noise
     bounds_type = 'Anoise'
-    n_params_vary = 1
-    tag_bounds = '_An1'
+    #n_params_vary = 1
+    #tag_bounds = '_An'
+    n_params_vary = 0
+    tag_bounds = '_An1'    
     
     if bounds_type == 'cosmo':
         param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']

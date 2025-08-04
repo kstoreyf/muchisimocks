@@ -82,6 +82,7 @@ def train_likefree_inference(config, overwrite=False):
         print(f"Oh look, posterior.p already exists in {dir_sbi}, and overwrite={overwrite}! Skipping training.")
         return
     
+    print(f"Training with tag_params={tag_params}, tag_biasparams={tag_biasparams}, tag_noise={tag_noise}, tag_Anoise={tag_Anoise}")
 
     ### Load data and parameters
     # don't need the fixed params for training!
@@ -102,6 +103,12 @@ def train_likefree_inference(config, overwrite=False):
         _, dict_bounds_noise, _ = genp.define_LH_Anoise(tag_Anoise)
         dict_bounds.update(dict_bounds_noise)
     
+    # turn parameters into nice theta for training
+    theta, param_names = data_loader.param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df=Anoise_df,
+                                                        n_rlzs_per_cosmo=config["n_rlzs_per_cosmo"])
+    print('theta shape:', theta.shape)
+    print(param_names)
+    
     ### Subsampling (ntrain and train/val)
     # downsample based on n_train    
     if n_train is None:
@@ -119,10 +126,7 @@ def train_likefree_inference(config, overwrite=False):
     idxs_train = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_train)]
     idxs_val = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_val)]
 
-    theta, param_names = data_loader.param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df,
-                                                        n_rlzs_per_cosmo=config["n_rlzs_per_cosmo"])
-    print('theta shape:', theta.shape)
-    print(param_names)
+
 
     theta_train, theta_val = theta[idxs_train], theta[idxs_val]
     y_train, y_val, y_err_train, y_err_val = [], [], [], []
@@ -195,7 +199,7 @@ def test_likefree_inference(config, overwrite=False):
     dir_sbi = f'{dir_results}/results_sbi/sbi{tag_inf_train}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
     if not overwrite and os.path.exists(fn_samples_test_pred):
-        print(f"Oh look, samples {fn_samples_test_pred} already exists, and overwrite={overwrite}! Skipping training.")
+        print(f"Oh look, samples {fn_samples_test_pred} already exists, and overwrite={overwrite}! Skipping testing.")
         return
     
     print(statistics, tag_params, tag_biasparams)
