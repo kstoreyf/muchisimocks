@@ -23,7 +23,7 @@ def generate_params_LH():
 
     # Run this by uncommenting the part you want; not pretty, I know
 
-    n_samples = 10000
+    n_samples = 1000
     #n_samples = 1000000 #100x
     #n_samples = 50000 #5x
     #n_samples = 200000 #20x
@@ -47,10 +47,10 @@ def generate_params_LH():
     
     ### noise
     bounds_type = 'Anoise'
-    #n_params_vary = 1
-    #tag_bounds = '_An'
-    n_params_vary = 0
-    tag_bounds = '_An1'    
+    n_params_vary = 1
+    tag_bounds = '_An'
+    # n_params_vary = 0
+    # tag_bounds = '_An1'    
     
     if bounds_type == 'cosmo':
         param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']

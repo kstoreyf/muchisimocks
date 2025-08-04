@@ -16,6 +16,7 @@ param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
                 'b2': r'$b_2$',
                 'bs2': r'$b_{s^2}$',
                 'bl': r'$b_{\Delta}$',
+                'A_noise': r'$A_\mathrm{noise}$',
                 }
 
 color_dict_methods = {'mn': 'blue',

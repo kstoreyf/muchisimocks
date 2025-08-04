@@ -18,8 +18,8 @@ for n_train in "${n_train_arr[@]}"; do
         tag_biasparams="_biaszen_p4_n200000"  
         tag_noise="_noise_p5_n10000"
         tag_Anoise="_An_p1_n10000"        
-        #config_train_file="../configs/configs_train/config_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}.yaml"
-        config_train_file="none"
+        config_train_file="../configs/configs_train/config_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}.yaml"
+        #config_train_file="none"
 
         tag_noise_test="_noise_quijote_p0_n1000"
         tag_Anoise_test="_An1_p0_n1"

@@ -10,7 +10,8 @@ import utils
 def main():
     
     #tag_noise = '_noise_quijote_p0_n1000'
-    tag_noise = '_noise_p5_n10000'
+    #tag_noise = '_noise_p5_n10000'
+    tag_noise = '_noise_test_p5_n1000'
     overwrite = False
 
     pattern = r'n(\d+)'

@@ -577,35 +577,78 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       extents={}, title=None):
     if title is None:
         title = f'test model {idx_obs}'
-    truth_loc = dict(zip(param_names, theta_obs_true))
-
+    
+    # Get samples for each method and determine which parameters are available
     samples_arr = []
+    param_names_available = []
+    valid_methods = []
+    valid_labels = []
+    valid_colors = []
+    
     for i, inf_method in enumerate(inf_methods):
         if tags_test is None:
             tag_test = ''
         else:
             tag_test = tags_test[i]
         samples, param_names_samples = utils.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
-        i_pn = [list(param_names_samples).index(pn) for pn in param_names]
+        
+        # Check which requested parameters are available in this chain
+        available_params = [pn for pn in param_names if pn in param_names_samples]
+        
+        if len(available_params) == 0:
+            print(f"Warning: No requested parameters found in chain for method {inf_method}, tag {tags_inf[i]}. Skipping.")
+            continue
+            
+        # Store the intersection of available parameters
+        if i == 0:
+            param_names_available = available_params
+        else:
+            param_names_available = [pn for pn in param_names_available if pn in available_params]
+            
+        valid_methods.append(inf_method)
+        valid_labels.append(labels[i] if labels is not None else None)
+        valid_colors.append(colors[i] if colors is not None else None)
+    
+    # Check if we have any common parameters
+    if len(param_names_available) == 0:
+        print("Error: No common parameters found across all chains.")
+        return
+        
+    if len(param_names_available) < len(param_names):
+        missing_params = [pn for pn in param_names if pn not in param_names_available]
+        print(f"Warning: Parameters {missing_params} not available in all chains. Plotting only: {param_names_available}")
+    
+    # Now collect samples for the available parameters
+    samples_arr = []
+    for i, inf_method in enumerate(valid_methods):
+        if tags_test is None:
+            tag_test = ''
+        else:
+            tag_test = tags_test[i]
+        samples, param_names_samples = utils.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
+        i_pn = [list(param_names_samples).index(pn) for pn in param_names_available]
         samples_arr.append(samples[:,i_pn])
 
-    smooth_arr = [smooth_dict[method] for method in inf_methods]
-    bins_arr = [bins_dict[method] for method in inf_methods]
-    if colors is None:
-        colors = [utils.color_dict_methods[meth] for meth in inf_methods]
+    smooth_arr = [smooth_dict[method] for method in valid_methods]
+    bins_arr = [bins_dict[method] for method in valid_methods]
+    if valid_colors[0] is None:
+        valid_colors = [utils.color_dict_methods[meth] for meth in valid_methods]
 
-    print(samples_arr)
-    # Check the distribution of each parameter
-    for j, param_name in enumerate(param_names):
-        param_samples = samples_arr[0][:, j]
-        print(f"{param_name}:")
-        print(f"  Min: {param_samples.min():.6f}")
-        print(f"  Max: {param_samples.max():.6f}")
-        print(f"  Mean: {param_samples.mean():.6f}")
-        print(f"  Std: {param_samples.std():.6f}")
-        print(f"  Unique values: {len(np.unique(param_samples))}")
+    # Create truth location for available parameters only
+    theta_obs_true_available = [theta_obs_true[param_names.index(pn)] for pn in param_names_available]
+    truth_loc = dict(zip(param_names_available, theta_obs_true_available))
+
+    # DEBUGGING: Check the distribution of each parameter
+    # for j, param_name in enumerate(param_names_available):
+    #     param_samples = samples_arr[0][:, j]
+    #     print(f"{param_name}:")
+    #     print(f"  Min: {param_samples.min():.6f}")
+    #     print(f"  Max: {param_samples.max():.6f}")
+    #     print(f"  Mean: {param_samples.mean():.6f}")
+    #     print(f"  Std: {param_samples.std():.6f}")
+    #     print(f"  Unique values: {len(np.unique(param_samples))}")
         
-    plot_contours(samples_arr, labels, colors, param_names, utils.param_label_dict, 
+    plot_contours(samples_arr, valid_labels, valid_colors, param_names_available, utils.param_label_dict, 
                         smooth_arr=smooth_arr, bins_arr=bins_arr,
                         truth_loc=truth_loc, title=title, figsize=figsize,
                         extents=extents, fn_save=None)
