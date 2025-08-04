@@ -160,7 +160,6 @@ def check_df_lengths(params_df, biasparams_df):
         return int(factor), 'bias'
 
 
-# TODO update for noise
 def load_data_muchisimocks(statistic, tag_params, tag_biasparams, 
                            tag_noise=None, tag_Anoise=None,
                            tag_datagen='',
@@ -188,9 +187,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
     params_df, param_dict_fixed = load_cosmo_params(tag_params)
     biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
     Anoise_df, Anoise_dict_fixed = load_Anoise_params(tag_Anoise)
-    print(f"Anoise_df: {Anoise_df}")
-    print(f"Anoise_dict_fixed: {Anoise_dict_fixed}")
-    
+
     #n_cosmos = int(re.search(r'n(\d+)', tag_params).group(1))
     #idxs_LH = np.arange(n_cosmos)
     # no ideal way to get this number...
@@ -215,10 +212,13 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
         
         if stat_name == 'pnn':
             # special case
-            fns_statistics, idxs_bias, idxs_noise = get_fns_statistic(stat_name, idx_LH, tag_params, None, None, None, None, None)
+            fns_statistics, idxs_bias, idxs_noise = get_fns_statistic(stat_name, idx_LH, tag_params, tag_biasparams, None, None, None, None)
         else:
             fns_statistics, idxs_bias, idxs_noise = get_fns_statistic(statistic, idx_LH, tag_params, tag_biasparams, tag_noise, tag_Anoise,
                         params_df, biasparams_df)
+        print(len(idxs_bias), len(fns_statistics))
+        if idxs_noise is not None:
+            print(len(idxs_noise))
         for i, fn_stat in enumerate(fns_statistics):
             if not os.path.exists(fn_stat):
                 print(f"WARNING: Missing {fn_stat}, skipping")
@@ -302,6 +302,9 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
             stat_arr.append(stat)
             error_arr.append(error)
             idxs_params.append((idx_LH, idx_bias, idx_noise))
+            
+        print("BREAKING AFTER IDXLH1 TO TEST")
+        break
 
     stat_arr = np.array(stat_arr)
     error_arr = np.array(error_arr)
@@ -831,6 +834,7 @@ def get_fns_statistic(statistic, idx_mock, tag_params, tag_biasparams, tag_noise
         idxs_bias = None #?
         idxs_noise = [idx_mock] # use the mock index as the noise field index
             
+    # varied bias param case
     elif tag_biasparams is not None and 'p0' not in tag_biasparams:                
             
         # figure out which bias indices to use
@@ -853,6 +857,8 @@ def get_fns_statistic(statistic, idx_mock, tag_params, tag_biasparams, tag_noise
             else:
                 fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
             fns_statistics.append(fn_statistic)
+    
+    # fixed bias param case, OR pnn (only dep on cosmo)
     else:
         #idxs_bias = None # bias not needed, either bc pnn, or noise-only
         # i believe this is just to run the loop, it will only be cases for fixed biasparams,
