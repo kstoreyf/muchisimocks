@@ -578,12 +578,9 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     if title is None:
         title = f'test model {idx_obs}'
     
-    # Get samples for each method and determine which parameters are available
-    samples_arr = []
-    param_names_available = []
-    valid_methods = []
-    valid_labels = []
-    valid_colors = []
+    # Get all chains and their available parameters
+    all_chains_data = []
+    all_param_names_per_chain = []
     
     for i, inf_method in enumerate(inf_methods):
         if tags_test is None:
@@ -599,59 +596,104 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             print(f"Warning: No requested parameters found in chain for method {inf_method}, tag {tags_inf[i]}. Skipping.")
             continue
             
-        # Store the intersection of available parameters
-        if i == 0:
-            param_names_available = available_params
-        else:
-            param_names_available = [pn for pn in param_names_available if pn in available_params]
-            
-        valid_methods.append(inf_method)
-        valid_labels.append(labels[i] if labels is not None else None)
-        valid_colors.append(colors[i] if colors is not None else None)
+        all_chains_data.append({
+            'samples': samples,
+            'param_names_samples': param_names_samples,
+            'available_params': available_params,
+            'inf_method': inf_method,
+            'label': labels[i] if labels is not None else None,
+            'color': colors[i] if colors is not None else None
+        })
+        all_param_names_per_chain.append(available_params)
     
-    # Check if we have any common parameters
-    if len(param_names_available) == 0:
-        print("Error: No common parameters found across all chains.")
+    if len(all_chains_data) == 0:
+        print("Error: No valid chains found.")
+        return
+    
+    # Find which parameters are available in at least one chain
+    param_names_any_available = []
+    for pn in param_names:
+        if any(pn in chain_params for chain_params in all_param_names_per_chain):
+            param_names_any_available.append(pn)
+    
+    if len(param_names_any_available) == 0:
+        print("Error: No requested parameters found in any chains.")
         return
         
-    if len(param_names_available) < len(param_names):
-        missing_params = [pn for pn in param_names if pn not in param_names_available]
-        print(f"Warning: Parameters {missing_params} not available in all chains. Plotting only: {param_names_available}")
+    if len(param_names_any_available) < len(param_names):
+        missing_params = [pn for pn in param_names if pn not in param_names_any_available]
+        print(f"Warning: Parameters {missing_params} not found in any chains. Plotting only: {param_names_any_available}")
     
-    # Now collect samples for the available parameters
-    samples_arr = []
-    for i, inf_method in enumerate(valid_methods):
-        if tags_test is None:
-            tag_test = ''
-        else:
-            tag_test = tags_test[i]
-        samples, param_names_samples = utils.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
-        i_pn = [list(param_names_samples).index(pn) for pn in param_names_available]
-        samples_arr.append(samples[:,i_pn])
+    # Create chains for chainconsumer - only include chains that have at least one parameter
+    import chainconsumer
+    c = chainconsumer.ChainConsumer()
+    
+    for chain_data in all_chains_data:
+        # Get samples for parameters that this chain has
+        available_in_this_chain = [pn for pn in param_names_any_available if pn in chain_data['available_params']]
+        
+        if len(available_in_this_chain) == 0:
+            continue
+            
+        # Extract samples for available parameters only (no NaN padding)
+        i_pn = [list(chain_data['param_names_samples']).index(pn) for pn in available_in_this_chain]
+        chain_samples = chain_data['samples'][:, i_pn]
+        
+        # Create DataFrame with only the available parameters for this chain
+        samples_dict = {}
+        for i, pn in enumerate(available_in_this_chain):
+            samples_dict[pn] = chain_samples[:, i]
+        
+        samples_df = pd.DataFrame(samples_dict)
+        
+        # Get color and smoothing settings
+        color = chain_data['color']
+        if color is None:
+            color = utils.color_dict_methods[chain_data['inf_method']]
+        
+        smooth = smooth_dict[chain_data['inf_method']]
+        bins = bins_dict[chain_data['inf_method']]
+        
+        c.add_chain(chainconsumer.Chain(
+            samples=samples_df,
+            name=chain_data['label'],
+            color=color,
+            smooth=smooth,
+            bins=bins
+        ))
 
-    smooth_arr = [smooth_dict[method] for method in valid_methods]
-    bins_arr = [bins_dict[method] for method in valid_methods]
-    if valid_colors[0] is None:
-        valid_colors = [utils.color_dict_methods[meth] for meth in valid_methods]
+    # Set up plot configuration
+    c.set_plot_config(
+        chainconsumer.PlotConfig(
+            flip=True,
+            labels=utils.param_label_dict,
+            contour_label_font_size=12,
+            extents=extents,
+            legend_kwargs={'bbox_to_anchor': (2.2, 1.6)}
+        )
+    )
 
     # Create truth location for available parameters only
-    theta_obs_true_available = [theta_obs_true[param_names.index(pn)] for pn in param_names_available]
-    truth_loc = dict(zip(param_names_available, theta_obs_true_available))
+    truth_loc = {}
+    for pn in param_names_any_available:
+        if pn in param_names:
+            param_idx = param_names.index(pn)
+            if param_idx < len(theta_obs_true):
+                truth_loc[pn] = theta_obs_true[param_idx]
+            else:
+                print(f"Warning: Parameter {pn} (index {param_idx}) not found in theta_obs_true (length {len(theta_obs_true)}). Skipping truth value.")
+    
+    c.add_truth(chainconsumer.Truth(location=truth_loc))
 
-    # DEBUGGING: Check the distribution of each parameter
-    # for j, param_name in enumerate(param_names_available):
-    #     param_samples = samples_arr[0][:, j]
-    #     print(f"{param_name}:")
-    #     print(f"  Min: {param_samples.min():.6f}")
-    #     print(f"  Max: {param_samples.max():.6f}")
-    #     print(f"  Mean: {param_samples.mean():.6f}")
-    #     print(f"  Std: {param_samples.std():.6f}")
-    #     print(f"  Unique values: {len(np.unique(param_samples))}")
-        
-    plot_contours(samples_arr, valid_labels, valid_colors, param_names_available, utils.param_label_dict, 
-                        smooth_arr=smooth_arr, bins_arr=bins_arr,
-                        truth_loc=truth_loc, title=title, figsize=figsize,
-                        extents=extents, fn_save=None)
+    # Plot - ChainConsumer will automatically show all parameters that appear in any chain
+    # and leave subplots blank for parameter combinations where data is missing
+    fig = c.plotter.plot(figsize=figsize)
+    if title is not None:
+        fig.suptitle(title)
+    
+    # Don't return the figure to avoid duplicate display in notebooks
+    plt.show()
+    return None
     
  # for backwards compatibility
 def plot_overdensity_field(tracer_field, normalize=False, vmax=None, 
