@@ -314,10 +314,13 @@ def run(statistic, idx_mock,
         idxs_noise = [None]
     else:
         # For other statistics, use the shared function
-        fns_statistics_all, idxs_bias, idxs_noise = data_loader.get_fns_statistic(
+        dir_statistics, fns_statistics_all, idxs_bias, idxs_noise = data_loader.get_fns_statistic(
             statistic, idx_mock, tag_params, tag_biasparams, tag_noise, tag_Anoise,
             params_df, biasparams_df
         )
+        
+    # Create directory if it doesn't exist
+    os.makedirs(dir_statistics, exist_ok=True)
     
     # Filter out files that already exist (unless overwriting)
     files_to_compute = []
@@ -425,8 +428,13 @@ def get_bias_fields(fn_fields):
 def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, biasparams_dict_fixed, 
                       Anoise_df, Anoise_dict_fixed, n_grid_orig):
     
-    # TODO figure out if should be indexing bias, or cosmo, or indep...
     if tag_noise is not None:
+        # Check if idx_noise is None when we need it
+        if idx_noise is None:
+            raise ValueError(f"idx_noise is None but tag_noise='{tag_noise}' was provided. "
+                           f"This suggests a mismatch in the logic for determining noise indices. "
+                           f"Check that tag_Anoise and other noise-related parameters are correctly set.")
+        
         # get noise field
         fn_noise = f'/scratch/kstoreyf/muchisimocks/data/noise_fields/fields{tag_noise}/noise_field_n{idx_noise}.npy'
         if not os.path.exists(fn_noise):
@@ -434,7 +442,11 @@ def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, 
         noise_field = np.load(fn_noise)
         
         # get A_noise; can have noise without Anoise, but if have Anoise will also need noise
-        if Anoise_df is not None:
+        # noise-field computation only
+        if Anoise_df is None and Anoise_dict_fixed is None:
+            A_noise = None
+        else:
+            # when one of these is not None, this should get us A_noise for fixed or varying
             A_noise_dict = Anoise_dict_fixed.copy()
             if Anoise_df is not None:
                 assert len(Anoise_df)==len(biasparams_df), "Anoise_df should have same length as biasparams_df"

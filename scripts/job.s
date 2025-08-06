@@ -21,7 +21,7 @@
 ##SBATCH --job-name=run_inf_emu_pk_p5_n10000_biaszen_p4_n10000_boxsize1000_nrlzs1_ntrain10000
 #SBATCH --time=4:00:00
 #SBATCH --nodes=1              # nodes per instance
-#SBATCH --gres=gpu:1
+##SBATCH --gres=gpu:1 		   #gpu only needed for... not even sure!
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=24             # tasks per instance
 #SBATCH --mem=3G 	       # 35 for datagen (30 hit oom)

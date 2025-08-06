@@ -160,162 +160,6 @@ def check_df_lengths(params_df, biasparams_df):
         return int(factor), 'bias'
 
 
-# def load_data_muchisimocks(statistic, tag_params, tag_biasparams, 
-#                            tag_noise=None, tag_Anoise=None,
-#                            tag_datagen='',
-#                            mode_precomputed=None, return_pk_objs=False):
-    
-#     # TODO do i need tag_datagen? haven't been using it seems
-#     #dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_mocks}{tag_datagen}'
-#     dir_statistics = get_dir_statistics(statistic, tag_params, tag_biasparams, 
-#                                         tag_noise=tag_noise, tag_Anoise=tag_Anoise)
-#     # this will differ if not precomputed
-#     stat_name = statistic
-#     if os.path.exists(dir_statistics):
-#         # If the precomputed directory exists, use it
-#         mode_precomputed = True
-#     else:
-#         if statistic == 'pk' or statistic == 'pklin':
-#             stat_name = 'pnn'
-#         # dir_statistics in pnn case, when it only depends on cosmo
-#         dir_statistics = get_dir_statistics(stat_name, tag_params, None)
-#         #dir_statistics = f'/scratch/kstoreyf/muchisimocks/data/{stat_name}s_mlib/{stat_name}s{tag_params}{tag_datagen}'
-#         mode_precomputed = False
-#     print(f"Loading muchisimocks data from {dir_statistics}")    
-    
-#     # Load bias parameters regardless of mode
-#     params_df, param_dict_fixed = load_cosmo_params(tag_params)
-#     biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
-#     Anoise_df, Anoise_dict_fixed = load_Anoise_params(tag_Anoise)
-
-#     #n_cosmos = int(re.search(r'n(\d+)', tag_params).group(1))
-#     #idxs_LH = np.arange(n_cosmos)
-#     # no ideal way to get this number...
-#     #idxs_LH = np.array(params_df.index)
-#     # using regexp bc not loading params_df here (tho could reorg if decide i need)
-#     idxs_LH = [int(re.search(fr'{stat_name}_(\d+)[^/]*\.npy', file_name).group(1))
-#                      for file_name in os.listdir(dir_statistics) if re.search(fr'{stat_name}_(\d+)[^/]*\.npy', file_name)]
-#     # need set bc for cases w multiple bias parameters per, want to only grab the cosmo
-#     idxs_LH = np.sort(np.array(list(set(idxs_LH)))) # now doing regexp, need to sort
-#     #idxs_LH = np.array([idx_LH for idx_LH in params_df.index.values
-#     #                    if os.path.exists(f"{dir_statistics}/pk_{idx_LH}.npy")])
-#     print(f"Found {len(idxs_LH)} diff cosmo {stat_name}s in {dir_statistics}")
-#     assert len(idxs_LH) > 0, f"No pks found in {dir_statistics}!"
-
-#     #theta, Pk, gaussian_error_pk = [], [], []
-#     stat_arr, error_arr, idxs_params = [], [], []
-#     if return_pk_objs:
-#         pk_obj_arr = []
-#     for i, idx_LH in enumerate(idxs_LH):
-#         #if idx_LH%100 == 0:
-#             #print(f"Loading Pk {idx_LH}", flush=True)
-        
-#         if stat_name == 'pnn':
-#             # special case
-#             fns_statistics, idxs_bias, idxs_noise = get_fns_statistic(stat_name, idx_LH, tag_params, tag_biasparams, None, None, None, None)
-#         else:
-#             fns_statistics, idxs_bias, idxs_noise = get_fns_statistic(statistic, idx_LH, tag_params, tag_biasparams, tag_noise, tag_Anoise,
-#                         params_df, biasparams_df)
-#         print(len(idxs_bias), len(fns_statistics))
-#         if idxs_noise is not None:
-#             print(len(idxs_noise))
-#         for i, fn_stat in enumerate(fns_statistics):
-#             if not os.path.exists(fn_stat):
-#                 print(f"WARNING: Missing {fn_stat}, skipping")
-#                 continue
-#             idx_bias, idx_noise = None, None
-#             if idxs_bias is not None:
-#                 idx_bias = idxs_bias[i]
-#             if idxs_noise is not None:
-#                 idx_noise = idxs_noise[i]         
-#             error = None # default, can get overwritten in if blocks
-#             if mode_precomputed:
-#                 if statistic == 'pk':
-#                     # TODO pk is old style where only 1-1 cosmo-bias, so this name format
-#                     pk_obj = np.load(fn_stat, allow_pickle=True).item()
-#                     k = pk_obj['k'] # all ks should be same so just grab one
-#                     stat, error = pk_obj['pk'], pk_obj['pk_gaussian_error']
-#                     if return_pk_objs:
-#                         pk_obj_arr.append(pk_obj)
-                        
-#                 elif statistic == 'bispec':
-#                     bispec_obj = np.load(fn_stat, allow_pickle=True).item()
-#                     # multiply by the weight and normalize to get a 
-#                     # better behaved stat
-#                     n_grid = 128
-#                     norm = n_grid**3
-#                     k = bispec_obj['k123']
-#                     stat = norm**3 * bispec_obj['weight']*bispec_obj['bispectrum']['b0']
-#                     if return_pk_objs:
-#                         pk_obj_arr.append(bispec_obj)            
-#             else:
-#                 if statistic == 'pk' or statistic == 'pklin':
-#                     pnn_obj = np.load(fn_stat, allow_pickle=True)
-#                     k = pnn_obj[0]['k']
-#                     if return_pk_objs:
-#                         pk_obj_arr.append(pnn_obj)
-#                 else:
-#                     raise ValueError(f"Statistic {statistic} not recognized for non-precomputed mode!")    
-                
-#                 if biasparams_df is not None:
-#                     bias_params_dict = biasparams_df.loc[idx_bias].to_dict()
-#                 else:
-#                     # case where only fixed bias params
-#                     bias_params_dict = {}
-#                 bias_params_dict.update(biasparams_dict_fixed)
-#                 bias_params = [bias_params_dict[bpn] for bpn in utils.biasparam_names_ordered]
-                
-#                 if statistic == 'pk':
-#                     stat = utils.pnn_to_pk(pnn_obj, bias_params, pk_type='pk')
-#                 elif statistic == 'pklin':
-#                     stat = utils.pnn_to_pk(pnn_obj, bias_params, pk_type='pk_theory_lin')
-                    
-#                 if tag_noise is not None:
-#                     assert Anoise_df is not None or Anoise_dict_fixed is not None, "Anoise_df or Anoise_dict_fixed must be provided if tag_noise is set"
-#                     # noise-only pk
-#                     # let's use get_fns_statistic to get the noise pk because it'll get the 
-#                     # proper idxs_noise (for pnn it's none). we'll overwrite the idxs_noise from above (bc we'll also want to keep track of this in idxs_params)
-#                     fns_statistics_noise, _, idxs_noise = get_fns_statistic(statistic, idx_LH, None, None, tag_noise, None, None, None)
-#                     assert len(fns_statistics_noise) == 1 and len(idxs_noise)==1, "Expected only one noise pk file for each statistic, and one idx_noise"
-#                     fn_stat_noise = fns_statistics_noise[0]
-#                     idx_noise = idxs_noise[0]
-#                     #dir_statistics_noise = f'/scratch/kstoreyf/muchisimocks/data/{statistic}s_mlib/{statistic}s{tag_noise}'
-#                     #fn_stat_noise = f'{dir_statistics_noise}/{statistic}_n{idx_LH}.npy'
-#                     #print(f"Loading noise pk from {fn_stat_noise} and adding to pnn")
-#                     if os.path.exists(fn_stat_noise):
-#                         pk_obj_noise = np.load(fn_stat_noise, allow_pickle=True).item()
-#                         stat_noise = pk_obj_noise['pk']
-#                     else:
-#                         raise FileNotFoundError(f"Noise file {fn_stat_noise} not found!")
-#                     # doing this like biasparams even tho only 1 Anoise param, in case we want to extend later
-#                     if Anoise_df is not None:
-#                         A_noise_dict = Anoise_df.loc[idx_noise].to_dict()
-#                     else:
-#                         A_noise_dict = {}
-#                     A_noise_dict.update(Anoise_dict_fixed)
-#                     A_noise = A_noise_dict['A_noise']
-#                     # for pk, we can just add the summed pnn to the noise-pk, multiplied by Anoise!
-#                     stat += A_noise * stat_noise
-
-#             if error is None:
-#                 error = np.zeros_like(stat)
-#             stat_arr.append(stat)
-#             error_arr.append(error)
-#             idxs_params.append((idx_LH, idx_bias, idx_noise))
-            
-#         print("BREAKING AFTER IDXLH1 TO TEST")
-#         break
-
-#     stat_arr = np.array(stat_arr)
-#     error_arr = np.array(error_arr)
-#     idxs_params= np.array(idxs_params)
-        
-#     if return_pk_objs:
-#         return k, stat_arr, error_arr, idxs_params, pk_obj_arr
-#     else:
-#         return k, stat_arr, error_arr, idxs_params
-
-
 def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
     if statistic == 'pk':
         mask = get_Pk_mask(tag_data, tag_mask=tag_mask, k=k, Pk=y)
@@ -926,7 +770,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
             idx_LH, statistic, stat_name, mode_precomputed, dir_statistics,
             params_df, biasparams_df, biasparams_dict_fixed,
             Anoise_df, Anoise_dict_fixed,
-            tag_noise, tag_Anoise, return_pk_objs
+            tag_biasparams, tag_noise, tag_Anoise, return_pk_objs
         )
         
         if cosmology_results is None:
@@ -969,13 +813,13 @@ def _get_available_cosmologies(dir_statistics, stat_name):
 def _process_single_cosmology(idx_LH, statistic, stat_name, mode_precomputed, dir_statistics,
                              params_df, biasparams_df, biasparams_dict_fixed,
                              Anoise_df, Anoise_dict_fixed,
-                             tag_noise, tag_Anoise, return_pk_objs):
+                             tag_biasparams, tag_noise, tag_Anoise, return_pk_objs):
     """Process data for a single cosmology, handling all bias parameter variations."""
     
     if mode_precomputed:
         return _process_precomputed_cosmology(
             idx_LH, statistic, dir_statistics, params_df, biasparams_df,
-            tag_Anoise, return_pk_objs
+            tag_biasparams, tag_Anoise, return_pk_objs
         )
     else:
         return _process_pnn_cosmology(
@@ -987,12 +831,12 @@ def _process_single_cosmology(idx_LH, statistic, stat_name, mode_precomputed, di
 
 
 def _process_precomputed_cosmology(idx_LH, statistic, dir_statistics, 
-                                  params_df, biasparams_df, tag_Anoise, return_pk_objs):
+                                  params_df, biasparams_df, tag_biasparams, tag_Anoise, return_pk_objs):
     """Handle precomputed pk/bispec files - original logic."""
     
     # Get filenames and indices using existing logic
-    fns_statistics, idxs_bias, idxs_noise = get_fns_statistic_precomputed(
-        statistic, idx_LH, dir_statistics, params_df, biasparams_df, tag_Anoise
+    _, fns_statistics, idxs_bias, idxs_noise = get_fns_statistic_precomputed(
+        statistic, idx_LH, dir_statistics, params_df, biasparams_df, tag_biasparams, tag_Anoise
     )
     
     stats, errors, indices, objs = [], [], [], []
@@ -1138,7 +982,7 @@ def _add_noise_to_statistic(stat, idx_LH, idx_bias, tag_noise, tag_Anoise,
 
 
 def get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics, 
-                                 params_df, biasparams_df, tag_Anoise):
+                                 params_df, biasparams_df, tag_biasparams, tag_Anoise):
     """
     Get filenames for precomputed statistics (pk, bispec).
     This is the cleaned-up version of the original get_fns_statistic logic.
@@ -1147,7 +991,7 @@ def get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics,
     fns_statistics = []
     
     # For precomputed data, files already exist with bias parameters applied
-    if biasparams_df is not None and 'p0' not in str(biasparams_df.index[0]):
+    if biasparams_df is not None and 'p0' not in tag_biasparams:
         # Varied bias parameters case
         if 'fisher' in str(biasparams_df.index[0]):  # Quick fisher check
             idxs_bias = get_bias_indices_for_idx(idx_mock, modecosmo='fisher',
@@ -1167,7 +1011,11 @@ def get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics,
     else:
         # Fixed bias parameters or no bias parameters
         idxs_bias = [0]  # Single bias parameter set
-        if tag_Anoise is not None and 'p0' not in tag_Anoise:
+        # if we're using noise at all, we'll want idx_noise set; 
+        # even if fixed A_noise, we'll be using the set of noise fields also indexed by idx_noise
+        # (if tag_Anoise is not None, tag_noise is also not None)
+        if tag_Anoise is not None:
+            # noisy & varying noise params
             idx_noise = idx_mock
             idxs_noise = [idx_noise]
             fn_stat = f'{dir_statistics}/{statistic}_{idx_mock}_n{idx_noise}.npy'
@@ -1176,7 +1024,7 @@ def get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics,
             fn_stat = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
         fns_statistics.append(fn_stat)
     
-    return fns_statistics, idxs_bias, idxs_noise
+    return dir_statistics, fns_statistics, idxs_bias, idxs_noise
 
 
 def get_fns_statistic_noise_only(statistic, idx_mock, tag_noise):
@@ -1186,7 +1034,7 @@ def get_fns_statistic_noise_only(statistic, idx_mock, tag_noise):
     """
     dir_statistics = get_dir_statistics(statistic, None, None, tag_noise, None)
     fn_statistic = f'{dir_statistics}/{statistic}_n{idx_mock}.npy'
-    return [fn_statistic], None, [idx_mock]
+    return dir_statistics, [fn_statistic], None, [idx_mock]
 
 
 # Optional: Clean wrapper that chooses the right approach
@@ -1204,5 +1052,6 @@ def get_fns_statistic(statistic, idx_mock, tag_params, tag_biasparams,
     # Precomputed case
     dir_statistics = get_dir_statistics(statistic, tag_params, tag_biasparams, 
                                        tag_noise, tag_Anoise)
-    return get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics,
-                                        params_df, biasparams_df, tag_Anoise)
+    dir_statistics, fns_statistics, idxs_bias, idxs_noise = get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics,
+                                        params_df, biasparams_df, tag_biasparams, tag_Anoise)
+    return dir_statistics, fns_statistics, idxs_bias, idxs_noise

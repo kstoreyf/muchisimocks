@@ -18,8 +18,8 @@ def main():
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
     for statistics in stat_arr:
         for n_train in n_train_arr:
-            generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
     #generate_runlike_config(overwrite=overwrite)
     
     
@@ -152,18 +152,18 @@ def generate_test_config(dir_config='../configs/configs_test',
     ### test params
     idxs_obs = None # if none, all (unless evaluate mean)
     # ## settings for fixed cosmo
-    evaluate_mean = True 
-    tag_params_test = '_quijote_p0_n1000'
-    tag_biasparams_test = '_b1000_p0_n1'
-    tag_noise_test = '_noise_quijote_p0_n1000'
-    tag_Anoise_test = '_An1_p0_n1'
+    # evaluate_mean = True 
+    # tag_params_test = '_quijote_p0_n1000'
+    # tag_biasparams_test = '_b1000_p0_n1'
+    # tag_noise_test = '_noise_quijote_p0_n1000'
+    # tag_Anoise_test = '_An1_p0_n1'
     ## settings for coverage test
-    # evaluate_mean = False
-    # tag_params_test = '_test_p5_n1000'
-    # #tag_biasparams_test = '_b1000_p0_n1'
-    # #tag_biasparams_test = '_b1zen_p1_n1000'
-    # tag_biasparams_test = '_biaszen_p4_n1000'
-
+    evaluate_mean = False
+    tag_params_test = '_test_p5_n1000'
+    tag_biasparams_test = '_biaszen_p4_n1000'
+    tag_noise_test = '_noise_test_p5_n1000'
+    tag_Anoise_test = '_An_p1_n1000'
+    
     # this if-else is just so it's easier for me to switch between the two; may not need
     if data_mode == 'emu':
         # train
