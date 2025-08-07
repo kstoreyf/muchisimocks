@@ -13,9 +13,9 @@
 ##SBATCH --job-name=bispec_quijote_p0_n1000_b1000_p0_n1_step100
 ##SBATCH --job-name=bispec_quijote_p0_n1000_b1000_p0_n1_noise_quijote_p0_n1000_An1_p0_n1_step100
 ##SBATCH --job-name=bispec_test_p5_n1000_biaszen_p4_n1000_noise_test_p5_n1000_An_p1_n1000_step100
-#SBATCH --job-name=bispec_p5_n10000_biaszen_p4_n200000_noise_p5_n10000_An_p1_n10000_step100
+#SBATCH --job-name=bispec_p5_n10000_biaszen_p4_n200000_noise_p5_n10000_An_p1_n10000_step100_round2
 ##SBATCH --time=0:10:00 # time per task, but doing Nsteps; ~10s for bispec 
-#SBATCH --time=1:00:00 # time per task, but doing Nsteps 
+#SBATCH --time=8:00:00 # time per task, but doing Nsteps; for 20000 (most), use 8h to be safe. lower, 1h fine
 #SBATCH --nodes=1              # nodes per instance
 ##SBATCH --gres=gpu:1  #gpu for datagen i suppose?? off for bispec
 #SBATCH --cpus-per-task=1
@@ -26,7 +26,7 @@
 ##x-y%z; start x, end y INCLUSIVE, z tasks at a time max
 ##(Y-X)*step_size = total you want to run
 ##SBATCH --array=0-99%20 # for 10000 training set
-#SBATCH --array=1-99%20
+#SBATCH --array=0-99%20
 ##SBATCH --array=0-0
 ##SBATCH --array=0-9 # for 1000 test sets
 ##SBATCH --array=2-2%1

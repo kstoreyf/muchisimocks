@@ -9,9 +9,10 @@ Generates a YAML configuration file for inference.
 
 
 def main():
-    overwrite = False
-    #overwrite = True
+    #overwrite = False
+    overwrite = True
     #generate_train_config(overwrite=overwrite)
+    #stat_arr = [['bispec'], ['pk', 'bispec']]
     stat_arr = [['pk']]
     n_train_arr = [10000]
     #stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
@@ -42,8 +43,8 @@ def generate_train_config(dir_config='../configs/configs_train',
     #tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
     tag_noise = '_noise_p5_n10000'
-    tag_Anoise = '_An1_p0_n1'
-    #tag_Anoise = '_An_p1_n10000'
+    #tag_Anoise = '_An1_p0_n1'
+    tag_Anoise = '_An_p1_n10000'
 
     # emu-specific
     n_rlzs_per_cosmo = 1
@@ -137,10 +138,10 @@ def generate_test_config(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n50000' #5x
     #tag_biasparams = '_biaszen_p4_n100000' #10x
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
-    tag_noise = '_noise_p5_n10000'
-    tag_Anoise = '_An_p1_n10000'
-    # tag_noise = None
-    # tag_Anoise = None
+    #tag_noise = '_noise_p5_n10000'
+    #tag_Anoise = '_An_p1_n10000'
+    tag_noise = None
+    tag_Anoise = None
 
     n_rlzs_per_cosmo = 1
     # For loading a model trained with wandb sweep; best of that sweep will be used
