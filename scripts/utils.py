@@ -86,7 +86,8 @@ def get_stat_label(statistics):
     labels = []
     for stat in statistics:
         labels.append(labels_statistics[stat])
-    label = ', '.join(labels)
+    #label = ', '.join(labels)
+    label = ' + '.join(labels)
     return label
 
 def idxs_train_val_test(random_ints, frac_train=0.8, frac_val=0.1, frac_test=0.1,

@@ -351,22 +351,148 @@ class SBIModel():
             y_obs = np.concatenate((y_obs, y_test_i), axis=1
                                    )
         print(f"Testing on y_obs with shape: {y_obs.shape}")
-        end = time.time()
+        start = time.time()
         # model is built with float32 so need the data to be here too
         y_obs = np.float32(np.array(y_obs))
         # using samples_batched bc always putting into 2d first (if were 2d, "samples")
         
-        samples = self.posterior.sample_batched((n_samples,), x=y_obs, 
-                                                )
-        print(f"Time to sample (y_obs.shape={y_obs.shape}, n_samples={n_samples}): {time.time() - end:.2f}s = {(time.time() - end) / 60:.2f} min")
+        samples = self.posterior.sample_batched((n_samples,), x=y_obs)
+        print(f"Time to sample (y_obs.shape={y_obs.shape}, n_samples={n_samples}): {time.time() - start:.2f}s = {(time.time() - start) / 60:.2f} min")
         return samples
     
     
-    def evaluate_test_set(self, y_test_unscaled=None, tag_test=''):
+    
+    def evaluate_test_set(self, y_test_unscaled=None, tag_test='', 
+                          n_samples=10000, checkpoint_every=100, 
+                          #n_samples=200, checkpoint_every=10, 
+                          resume=True):
+        
+        ### NOTE: this went orders of mag faster when i added checkpointing every 100 and doing 
+        # samples_batched of that size! before sometimes would only finish a 20-50% in a day;
+        # now finishing in 4-8 hours, for 1000 test set with 10000 samples
+        
+        # y_test_unscaled is an array of length n_statistics, each with shape (n_test, n_dim);
+        # concatenate inside evaluate bc we need to scale based on each stat
         print(f"Evaluating test set with tag {tag_test}")
         if y_test_unscaled is None:
             y_test_unscaled = self.y_test_unscaled
-        samples_test_pred = self.evaluate(y_test_unscaled)
+        
+        # Set up file paths
         fn_samples_test_pred = f'{self.dir_sbi}/samples_test{tag_test}_pred.npy'
-        np.save(fn_samples_test_pred, samples_test_pred)
-        print(f"Saved samples to {fn_samples_test_pred}")
+        fn_samples_test_pred_inprogress = f'{self.dir_sbi}/samples_test{tag_test}_pred_inprogress.npy'
+        checkpoint_file = f"{self.dir_sbi}/checkpoint_samples_test{tag_test}.txt"
+        
+        # Check for existing samples and checkpoint
+        samples_total = len(y_test_unscaled[0])
+        samples_completed = 0
+        existing_samples = None
+        
+        print(f"Checkpoint file: {checkpoint_file}")
+        
+        if resume:
+            # Check if final file already exists (complete run)
+            if os.path.exists(fn_samples_test_pred):
+                existing_samples = np.load(fn_samples_test_pred)
+                if existing_samples.shape[0] >= samples_total:
+                    print(f"Found complete samples file: {fn_samples_test_pred} with {existing_samples.shape[0]} samples")
+                    return
+            
+            # Check existing in-progress samples file
+            if os.path.exists(fn_samples_test_pred_inprogress):
+                existing_samples = np.load(fn_samples_test_pred_inprogress)
+                samples_completed = existing_samples.shape[0]
+                print(f"Found existing in-progress samples file with {samples_completed} samples")
+                
+            # Check checkpoint file for consistency
+            if os.path.exists(checkpoint_file):
+                with open(checkpoint_file, 'r') as f:
+                    checkpoint_count = int(f.read().strip())
+                print(f"Checkpoint file indicates {checkpoint_count} completed samples")
+                
+                # Use the checkpoint count if consistent, otherwise trust the samples file
+                if existing_samples is not None and checkpoint_count == existing_samples.shape[0]:
+                    samples_completed = checkpoint_count
+                elif existing_samples is not None:
+                    print(f"Checkpoint mismatch - using samples file count: {existing_samples.shape[0]}")
+                    samples_completed = existing_samples.shape[0]
+                else:
+                    samples_completed = checkpoint_count
+            
+            if samples_completed >= samples_total:
+                print(f"All {samples_total} samples already completed!")
+                return
+                
+            if samples_completed > 0:
+                print(f"Resuming from {samples_completed} completed samples")
+        
+        start_time = time.time()
+        
+        # Sample in batches
+        remaining_samples = samples_total - samples_completed
+        
+        try:
+            while remaining_samples > 0:
+                batch_size = min(checkpoint_every, remaining_samples)
+                print(f"Sampling batch of {batch_size} samples ({samples_completed}/{samples_total} completed)")
+                
+                # Extract the chunk of observations we need to process
+                start_idx = samples_completed
+                end_idx = samples_completed + batch_size
+                
+                # Get the batch of y_test_unscaled data for this chunk
+                if y_test_unscaled[0].ndim == 1:
+                    # Single observation case - just use the same observation for all samples
+                    y_test_unscaled_batch = y_test_unscaled
+                else:
+                    # Multiple observations case - extract the chunk from each statistic's array
+                    y_test_unscaled_batch = [y_stat[start_idx:end_idx] for y_stat in y_test_unscaled]
+                
+                batch_start = time.time()
+                # Use the existing evaluate method for this batch
+                print(f"Evaluating batch {start_idx} to {end_idx}")
+                batch_samples = self.evaluate(y_test_unscaled_batch, n_samples=n_samples)
+                batch_end = time.time()
+                
+                print(f"Batch samples shape: {batch_samples.shape}")
+                
+                # Combine with existing samples if any (concatenate along axis=1 for test observations)
+                if existing_samples is not None:
+                    current_samples = np.concatenate([existing_samples, batch_samples], axis=1)
+                else:
+                    current_samples = batch_samples
+                print(f"Current samples shape: {current_samples.shape}")
+                
+                # Save updated samples to in-progress file
+                np.save(fn_samples_test_pred_inprogress, current_samples)
+                
+                # Update counts
+                samples_completed += batch_size
+                remaining_samples -= batch_size
+                existing_samples = current_samples
+                
+                # Save simple text checkpoint
+                with open(checkpoint_file, 'w') as f:
+                    f.write(str(samples_completed))
+                
+                print(f"Batch completed in {batch_end - batch_start:.2f}s")
+                print(f"Saved {samples_completed}/{samples_total} samples")
+                
+        except Exception as e:
+            print(f"Error during sampling: {e}")
+            print(f"Partial results saved: {samples_completed}/{samples_total} samples")
+            print(f"Resume by running again - will continue from {samples_completed} samples")
+            print(f"In-progress file: {fn_samples_test_pred_inprogress}")
+            raise
+        
+        end_time = time.time()
+        print(f"Total sampling time (n_samples={n_samples} per obs): {end_time - start_time:.2f}s = {(end_time - start_time) / 60:.2f} min")
+        
+        # Move in-progress file to final file when complete
+        if os.path.exists(fn_samples_test_pred_inprogress):
+            os.rename(fn_samples_test_pred_inprogress, fn_samples_test_pred)
+            print(f"Sampling complete! Moved to final file: {fn_samples_test_pred}")
+        
+        # Clean up checkpoint file on successful completion
+        # if os.path.exists(checkpoint_file):
+        #     os.remove(checkpoint_file)
+        #     print("Checkpoint file removed after successful completion")

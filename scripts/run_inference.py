@@ -245,6 +245,7 @@ def test_likefree_inference(config, overwrite=False):
         sbi_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test=tag_test)
     else:
         # run on full test set
+        print(f"y_obs shape: {len(y_obs)}, {len(y_obs[0])}, {len(y_obs[0][0])}")
         sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_test)
 
 

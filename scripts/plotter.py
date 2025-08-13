@@ -85,88 +85,13 @@ def plot_hists_mean(theta_pred_arr, theta_true_arr, param_labels, label_arr=None
             fig.legend(fontsize=12, bbox_to_anchor=(1.7, 0.9))
             
 
-def plot_hists_mean_subplots(theta_pred_arr, theta_true_arr, param_names, param_names_plot=None, param_label_dict=None,
-                    n_rows=None, n_cols=None, label_arr=None,
-                    color_arr=['salmon'], n_bins=20, xlim_auto=True,
-                    alpha=0.5, histtype='bar'):
-    """
-    Plot histograms of fractional differences for selected parameters in subplots.
-
-    Args:
-        theta_pred_arr: Predicted parameter values (array).
-        theta_true_arr: True parameter values (array).
-        param_labels: List of parameter labels (for axis labeling).
-        param_names_show: List of parameter names to show (subset of param_labels).
-        n_rows: Number of subplot rows.
-        n_cols: Number of subplot columns.
-        label_arr: List of labels for each set of predictions.
-        color_arr: List of colors for each set of predictions.
-        n_bins: Number of bins for histograms.
-        xlim_auto: Whether to automatically set x-limits.
-        alpha: Alpha for histogram bars.
-        histtype: Histogram type.
-    """
-    fracdiffs_arr = theta_pred_arr / theta_true_arr - 1
-    if fracdiffs_arr.ndim == 2:
-        fracdiffs_arr = np.array([fracdiffs_arr])
-    n_params = fracdiffs_arr.shape[-1]
-
-    # If param_names_show is None, show all
-    if param_names_plot is None:
-        param_names_plot = param_names
-    # Map param_names_show to indices in param_labels
-    idxs_plot = [param_names.index(pn) for pn in param_names_plot]
-    param_labels = [param_label_dict[pn] for pn in param_names_plot]
-    print(idxs_plot)
-    print(param_labels)
-
-    if n_cols is None and n_rows is None:
-        n_cols = len(param_names_plot)
-        n_rows = 1
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows))
-    axes = np.array(axes).reshape(-1)  # Flatten in case axes is 2D
-
-    for ax_idx, pp in enumerate(idxs_plot):
-        ax = axes[ax_idx]
-        ax.set_title(rf'{param_labels[ax_idx]}', fontsize=22)
-        for i, fracdiffs in enumerate(fracdiffs_arr):
-            label = None
-            if label_arr is not None:
-                label = label_arr[i]
-            if np.all(np.isnan(fracdiffs[:, pp])):
-                continue
-            if not xlim_auto:
-                mean = 0
-                i_good = ~np.isnan(fracdiffs_arr[:, :, pp])
-                p16 = np.percentile(fracdiffs_arr[i_good, pp], 16)
-                p84 = np.percentile(fracdiffs_arr[i_good, pp], 84)
-                psym = 0.5 * (np.abs(p16) + np.abs(p84))
-                n_std = 3
-                xmin = mean - n_std * psym
-                xmax = mean + n_std * psym
-                bins = np.linspace(xmin, xmax, n_bins)
-            else:
-                bins = n_bins
-            ax.hist(fracdiffs[:, pp], bins=bins, alpha=alpha,
-                    color=color_arr[i], label=label, histtype=histtype, lw=2)
-        ax.set_xlabel(rf'$\Delta${param_labels[ax_idx]}/{param_labels[ax_idx]}', fontsize=14)
-        ax.set_ylabel(r'$N$ in bin', fontsize=14)
-        ax.axvline(0, color='grey')
-        if label_arr is not None and ax_idx == 0:
-            ax.legend(fontsize=10)
-
-    # Hide unused axes
-    for ax in axes[len(idxs_plot):]:
-        ax.axis('off')
-
-    plt.tight_layout()
-    plt.show()
 
 def plot_dists_mean_subplots(
     theta_pred_arr, theta_true_arr, param_names, param_names_plot=None, param_label_dict=None,
     n_rows=None, n_cols=None, label_arr=None,
     color_arr=['salmon'], n_bins=20, xlim_auto=True,
-    alpha=0.5, histtype='bar', plot_cdf=False
+    alpha=0.5, histtype='bar', plot_cdf=False,
+    title=None,
 ):
     """
     Plot histograms or CDFs of fractional differences for selected parameters in subplots.
@@ -200,8 +125,13 @@ def plot_dists_mean_subplots(
     if n_cols is None and n_rows is None:
         n_cols = len(param_names_plot)
         n_rows = 1
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows))
+    row_height = 3 if title is None else 3.5
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, row_height*n_rows))
     axes = np.array(axes).reshape(-1)  # Flatten in case axes is 2D
+
+    # Collect legend handles and labels from the first subplot
+    legend_handles = []
+    legend_labels = []
 
     for ax_idx, pp in enumerate(idxs_plot):
         ax = axes[ax_idx]
@@ -229,7 +159,10 @@ def plot_dists_mean_subplots(
                 # Plot CDF
                 sorted_data = np.sort(data)
                 yvals = np.arange(1, len(sorted_data)+1) / float(len(sorted_data))
-                ax.plot(sorted_data, yvals, color=color_arr[i], label=label, lw=2)
+                line, = ax.plot(sorted_data, yvals, color=color_arr[i], label=label, lw=2)
+                if ax_idx == 0:  # Only collect from first subplot to avoid duplicates
+                    legend_handles.append(line)
+                    legend_labels.append(label)
                 if not xlim_auto:
                     ax.set_xlim(xmin, xmax)
             else:
@@ -242,12 +175,19 @@ def plot_dists_mean_subplots(
         else:
             ax.set_ylabel(r'$N$ in bin', fontsize=14)
         ax.axvline(0, color='grey')
-        if label_arr is not None and ax_idx == 0:
-            ax.legend(fontsize=10)
 
     # Hide unused axes
     for ax in axes[len(idxs_plot):]:
         ax.axis('off')
+
+    # Place legend outside the plotting area on the right side
+    if legend_handles and legend_labels:
+        fig.legend(legend_handles, legend_labels, fontsize=10, 
+                  bbox_to_anchor=(1.02, 0.5), loc='center left')
+
+    # Set overall figure title if provided
+    if title is not None:
+        fig.suptitle(title, fontsize=16, y=0.9)
 
     plt.tight_layout()
     plt.show()
@@ -308,7 +248,8 @@ def plot_hists_var(theta_true_arr, theta_pred_arr, var_pred_arr, param_labels,
 def plot_dists_cov_subplots(
     theta_true_arr, theta_pred_arr, covs_pred_arr, param_names, param_names_plot=None, param_label_dict=None,
     label_arr=None, color_arr=None, nbins=20, xlim_auto=True,
-    alpha=0.5, histtype='bar', lw=2, n_rows=1, n_cols=None, plot_cdf=False
+    alpha=0.5, histtype='bar', lw=2, n_rows=1, n_cols=None, plot_cdf=False,
+    title=None,
 ):
     """
     Plot histograms or CDFs of sigmas-from-truth for selected parameters in subplots.
@@ -352,7 +293,8 @@ def plot_dists_cov_subplots(
     # Plot sigmas (1d) for selected parameters
     if n_cols is None:
         n_cols = len(param_names_plot)
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows))
+    row_height = 3 if title is None else 3.5
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, row_height*n_rows))
     axes = np.array(axes).reshape(-1)
 
     x_normal = np.linspace(-3, 3, 200)
@@ -361,45 +303,56 @@ def plot_dists_cov_subplots(
     cdf_normal = norm.cdf(x_normal, mean, np.sqrt(variance))
     xmin, xmax = -3, 3
 
+    # Collect legend handles and labels from the first subplot
+    legend_handles = []
+    legend_labels = []
+    
     for ax_idx, pp in enumerate(idxs_plot):
         ax = axes[ax_idx]
         ax.set_title(rf'{param_labels[ax_idx]}', fontsize=22)
-        handles = []
-        labels = []
         for i in range(sigmas_from_truth_arr.shape[0]):
             data = sigmas_from_truth_arr[i][:, pp]
             if plot_cdf:
                 sorted_data = np.sort(data)
                 yvals = np.arange(1, len(sorted_data)+1) / float(len(sorted_data))
                 line, = ax.plot(sorted_data, yvals, color=color_arr[i], label=label_arr[i], lw=2)
-                handles.append(line)
-                labels.append(label_arr[i])
+                if ax_idx == 0:  # Only collect from first subplot to avoid duplicates
+                    legend_handles.append(line)
+                    legend_labels.append(label_arr[i])
             else:
                 n, bins, patches = ax.hist(data, bins=np.linspace(xmin, xmax, nbins),
                                            color=color_arr[i], label=label_arr[i], alpha=alpha, density=True,
                                            histtype=histtype, lw=lw)
                 line, = ax.plot(x_normal, y_normal, color='black', lw=1, label=r'$\mathcal{N}(0,1)$' if i == 0 else None)
-                if i == 0:
-                    handles.append(line)
-                    labels.append(r'$\mathcal{N}(0,1)$')
+                if ax_idx == 0 and i == 0:  # Only collect from first subplot and first iteration
+                    legend_handles.append(line)
+                    legend_labels.append(r'$\mathcal{N}(0,1)$')
         if plot_cdf:
             # Add Gaussian CDF last in legend, only once
             line_cdf, = ax.plot(x_normal, cdf_normal, color='black', lw=1, label='Gaussian CDF', ls='--')
-            handles.append(line_cdf)
-            labels.append('Gaussian CDF')
+            if ax_idx == 0:  # Only collect from first subplot
+                legend_handles.append(line_cdf)
+                legend_labels.append('Gaussian CDF')
             ax.set_ylabel('CDF', fontsize=12)
         else:
             ax.set_ylabel(r'normalized density', fontsize=12)
         ax.set_xlabel(rf'$\Delta${param_labels[ax_idx]}/$\sigma$({param_labels[ax_idx]})', fontsize=14)
         ax.axvline(0, color='grey')
         ax.set_xlim(xmin, xmax)
-        if ax_idx == 0:
-            ax.legend(handles, labels, fontsize=10)
 
     # Hide unused axes
     for ax in axes[len(idxs_plot):]:
         ax.axis('off')
-
+    
+    # Place legend outside the plotting area on the right side
+    if legend_handles and legend_labels:
+        fig.legend(legend_handles, legend_labels, fontsize=10, 
+                  bbox_to_anchor=(1.02, 0.5), loc='center left')
+        
+    # Set overall figure title if provided
+    if title is not None:
+        fig.suptitle(title, fontsize=16, y=0.9)
+        
     plt.tight_layout()
     plt.show()
 
@@ -552,7 +505,7 @@ def plot_contours(samples_arr, labels, colors, param_names, param_label_dict,
             labels=param_label_dict,
             contour_label_font_size=12,
             extents=extents,
-            legend_kwargs={'bbox_to_anchor': (2.2, 1.6)}
+            legend_kwargs={'bbox_to_anchor': (1.05, 1.0)}
         )
     )
 
@@ -669,7 +622,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             labels=utils.param_label_dict,
             contour_label_font_size=12,
             extents=extents,
-            legend_kwargs={'bbox_to_anchor': (2.2, 1.6)}
+            legend_kwargs={'bbox_to_anchor': (1.05, 1.0)}
         )
     )
 

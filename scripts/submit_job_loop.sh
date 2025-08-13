@@ -4,23 +4,24 @@
 #n_train_arr=(500 1000 2000 4000 6000 8000 10000)
 n_train_arr=(10000)
 #n_train_arr=(500 1000 2000 4000 6000 8000)
-#tag_stats_arr=("_pk" "_bispec" "_pk_bispec") 
-tag_stats_arr=("_pk") 
+tag_stats_arr=("_pk" "_bispec" "_pk_bispec") 
+#tag_stats_arr=("_pk") 
+#tag_stats_arr=("_bispec") 
 #tag_stats_arr=("_pk" "_bispec") 
-#tag_stats_arr=("_pk")
+#tag_stats_arr=("_pk_bispec")
+#tag_stats_arr=("_bispec" "_pk_bispec") 
 
 #n_train_arr=(10000)
-#tag_stats_arr=("_pk_bispec")
+#tag_stats_arr=("_pk_bispec")#
 
 for n_train in "${n_train_arr[@]}"; do
     for tag_stats in "${tag_stats_arr[@]}"; do
         ### TRAINING ###
         tag_params="_p5_n10000"
-        #tag_biasparams="_biaszen_p4_n50000"  
         tag_biasparams="_biaszen_p4_n200000"  
         # tag_noise="_noise_p5_n10000"
         # tag_Anoise="_An_p1_n10000"    
-        ### no noise
+        ## no noise
         tag_noise=""
         tag_Anoise=""   
         #config_train_file="../configs/configs_train/config_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}.yaml"
@@ -69,7 +70,8 @@ for n_train in "${n_train_arr[@]}"; do
 #SBATCH --output=logs/${job_name}.out
 #SBATCH --time=24:00:00 #24h for testing on coverage test set (24h is max time limit; some dont converge)
 ##SBATCH --time=1:00:00 #1h for testing on cosmic var test set
-##SBATCH --time=2:00:00 #2h for training
+##SBATCH --time=4:00:00 #2h for training -> 4 in case
+##SBATCH --time=0:20:00
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=40G #30gb for both training and testing (actually 30 failed once, now doing 40)
