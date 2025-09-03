@@ -767,3 +767,57 @@ def plot_pnn(pnn, kk_emu=None, pnn_emu=None):
     ax[1].set_ylim(1e2)
     ax[2].set_ylim(1e-1)
 
+def plot_catalog_slice(cat, z_center, z_width, ax=None, s=0.1, alpha=0.7, color='blue'):
+    """
+    Plot a slice of the galaxy catalog as a scatter plot.
+    
+    Parameters:
+    -----------
+    cat : h5py.File
+        The catalog file
+    z_center : float
+        Center z-coordinate of the slice
+    z_width : float
+        Width of the slice in z-direction
+    ax : matplotlib.axes.Axes, optional
+        Axes to plot on. If None, creates new figure
+    s : float
+        Marker size for scatter plot
+    alpha : float
+        Transparency of markers
+    color : str
+        Color of markers
+    
+    Returns:
+    --------
+    fig, ax : matplotlib figure and axes objects
+    """
+    # Get galaxy positions
+    gal_pos = cat['gal_pos'][:]
+    
+    # Define slice boundaries
+    z_min = z_center - z_width/2
+    z_max = z_center + z_width/2
+    
+    # Select galaxies in the slice
+    mask = (gal_pos[:, 2] >= z_min) & (gal_pos[:, 2] <= z_max)
+    slice_pos = gal_pos[mask]
+    
+    # Create plot
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(6, 6))
+    else:
+        fig = ax.figure
+    
+    # Scatter plot of x,y positions
+    ax.scatter(slice_pos[:, 0], slice_pos[:, 1], s=s, alpha=alpha, c=color)
+    
+    # Labels and formatting
+    ax.set_xlabel('x [Mpc/h]')
+    ax.set_ylabel('y [Mpc/h]')
+    ax.set_title(f'Galaxy Catalog Slice: z = {z_center:.1f} ± {z_width/2:.1f} Mpc/h\n'
+                f'({len(slice_pos)} galaxies)', size=14)
+    ax.set_aspect('equal')
+    ax.grid(True, alpha=0.3)
+    
+    return fig, ax
