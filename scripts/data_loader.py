@@ -40,6 +40,48 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
     return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias
 
 
+def load_data_ood(data_mode, statistics, tag_mock,
+                  tag_data=None,
+              kwargs={}):
+    """
+    Load out-of-distribution (OOD) data for a specific mode and set of statistics.
+    """
+    k, y, y_err = [], [], []
+    for statistic in statistics:
+        # idxs_params should be the same for all so will just grab last one
+        if data_mode == 'shame':
+            k_i, y_i, y_err_i = load_data_shame(statistic, tag_mock, **kwargs)
+        else:
+            raise ValueError(f"Data mode {data_mode} not recognized!")
+        print(f"Loaded {statistic} data with shape {y_i.shape}")
+        if tag_mock is None:
+            print("No tag_mock provided, so not masking data")
+        else:
+            # tag_data is from training data!
+            k_i, y_i, y_err_i = mask_data(statistic, tag_data, k_i, y_i, y_err_i)
+
+        k.append(k_i)
+        y.append(y_i)
+        y_err.append(y_err_i)    
+
+    return k, y, y_err
+
+
+def load_data_shame(statistic, tag_mock):
+    dir_statistics = f'../data/data_shame/data{tag_mock}/{statistic}s'
+    fn_statistics = f'{dir_statistics}/{statistic}.npy'
+    if not os.path.exists(fn_statistics):
+        raise ValueError(f"File {fn_statistics} does not exist!")
+    if statistic == 'pk':
+        k, stat, error, pk_obj = load_pk(fn_statistics)
+    elif statistic == 'bispec':
+        k, stat, error, bispec_obj = load_bispec(fn_statistics)
+    else:
+        raise ValueError(f"Statistic {statistic} not recognized / computed for this dataset (shame, {tag_mock})!")
+    print(f"Loaded {statistic} with shape {stat.shape}")
+    return k, stat, error
+
+
 def get_idxs_params(tag_params, tag_biasparams, tag_Anoise=None, n_bias_per_cosmo=1, 
                     modecosmo='lh'):
     """
@@ -166,6 +208,7 @@ def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
     else:
         print("No mask for this statistic, using all data")
         mask = [True]*y.shape[-1]
+        mask = np.array(mask)
     print(f"Masked {np.sum(~np.array(mask))} out of {len(mask)} bins")
     if k.ndim == 1:
         k_masked = k[mask]
@@ -173,8 +216,14 @@ def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
         k_masked = k[:,mask]
     else:
         raise ValueError(f"Unexpected k shape: {k.shape}")
-    return k_masked, y[:,mask], y_err[:,mask]
-
+    
+    print(k_masked.shape, y.shape, y_err.shape, mask.shape)
+    if y.ndim == 1:
+        return k_masked, y[mask], y_err[mask]
+    elif y.ndim == 2:
+        return k_masked, y[:,mask], y_err[:,mask]
+    else:
+        raise ValueError(f"Unexpected y shape: {y.shape}")
 
 def load_params(tag_params=None, tag_biasparams=None,
                 tag_Anoise=None,
@@ -736,6 +785,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
     # Determine directories and file structure
     dir_statistics = get_dir_statistics(statistic, tag_params, tag_biasparams, 
                                         tag_noise=tag_noise, tag_Anoise=tag_Anoise)
+    print(f"dir_statistics: {dir_statistics}")
     stat_name = statistic
     
     if os.path.exists(dir_statistics):
@@ -743,7 +793,8 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
     else:
         if statistic == 'pk' or statistic == 'pklin':
             stat_name = 'pnn'
-        dir_statistics = get_dir_statistics(stat_name, tag_params, None)
+            # this was outside the if before, check nothing broke??
+            dir_statistics = get_dir_statistics(stat_name, tag_params, None)
         mode_precomputed = False
     
     print(f"Loading muchisimocks data from {dir_statistics}")    
@@ -852,20 +903,15 @@ def _process_precomputed_cosmology(idx_LH, statistic, dir_statistics,
         
         # Load precomputed data
         if statistic == 'pk':
-            pk_obj = np.load(fn_stat, allow_pickle=True).item()
+            k_loaded, stat, error, pk_obj = load_pk(fn_stat)
             if k is None:
-                k = pk_obj['k']
-            stat, error = pk_obj['pk'], pk_obj['pk_gaussian_error']
+                k = k_loaded
             if return_pk_objs:
                 objs.append(pk_obj)
         elif statistic == 'bispec':
-            bispec_obj = np.load(fn_stat, allow_pickle=True).item()
-            n_grid = 128
-            norm = n_grid**3
+            k_loaded, stat, error, bispec_obj = load_bispec(fn_stat, n_grid=128)
             if k is None:
-                k = bispec_obj['k123']
-            stat = norm**3 * bispec_obj['weight'] * bispec_obj['bispectrum']['b0']
-            error = np.zeros_like(stat)
+                k = k_loaded
             if return_pk_objs:
                 objs.append(bispec_obj)
         
@@ -874,6 +920,22 @@ def _process_precomputed_cosmology(idx_LH, statistic, dir_statistics,
         indices.append((idx_LH, idx_bias, idx_noise))
     
     return k, stats, errors, indices, objs
+
+
+def load_pk(fn_stat):
+    pk_obj = np.load(fn_stat, allow_pickle=True).item()
+    k, stat, error = pk_obj['k'], pk_obj['pk'], pk_obj['pk_gaussian_error']
+    return k, stat, error, pk_obj
+
+
+def load_bispec(fn_stat, n_grid):
+    # n_grid used for normalization
+    bispec_obj = np.load(fn_stat, allow_pickle=True).item()
+    norm = n_grid**3
+    k = bispec_obj['k123']
+    stat = norm**3 * bispec_obj['weight'] * bispec_obj['bispectrum']['b0']
+    error = np.zeros_like(stat)
+    return k, stat, error, bispec_obj
 
 
 def _process_pnn_cosmology(idx_LH, statistic, stat_name, dir_statistics,

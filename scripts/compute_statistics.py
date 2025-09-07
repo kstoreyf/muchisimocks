@@ -3,6 +3,7 @@ import numpy as np
 import itertools
 import time
 import argparse
+from pathlib import Path
 
 import bacco
 import PolyBin3D as pb
@@ -241,7 +242,6 @@ def run(statistic, idx_mock,
             bias_terms_eul = get_bias_fields(fn_fields)
             power_all_terms = compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
                                                     n_threads=n_threads)
-            np.save(fn_statistic, power_all_terms)
             end = time.time()
             print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
             
@@ -251,9 +251,8 @@ def run(statistic, idx_mock,
             tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
                                     biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed,
                                     n_grid_orig)
-            pk_obj = compute_pk(tracer_field, cosmo, box_size,
-                                    n_threads=n_threads)
-            np.save(fn_statistic, pk_obj)
+            compute_pk(tracer_field, cosmo, box_size,
+                                    n_threads=n_threads, fn_stat=fn_statistic)
             end = time.time()
             print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
 
@@ -261,9 +260,8 @@ def run(statistic, idx_mock,
             # note: doesn't use the muchisimocks data! just takes the seed and 
             # makes a linear sim w bacco, then computes its pk
             start = time.time()
-            pk_obj = compute_pk_linear(idx_mock, cosmo, box_size, n_grid_orig,
-                                    n_threads=n_threads)
-            np.save(fn_statistic, pk_obj)
+            compute_pk_linear(idx_mock, cosmo, box_size, n_grid_orig,
+                                    n_threads=n_threads, fn_stat=fn_statistic)
             end = time.time()
             print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
 
@@ -275,16 +273,7 @@ def run(statistic, idx_mock,
             tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
                                     biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed,
                                     n_grid_orig)
-            bspec, bk_corr = compute_bispectrum(base_bispec, tracer_field)
-            k123 = bspec.get_ks()
-            weight = k123.prod(axis=0)
-            bispec_results_dict = {
-                'k123': k123,
-                'bispectrum': bk_corr,
-                'weight': weight,
-            }
-
-            np.save(fn_statistic, bispec_results_dict)
+            compute_bispectrum(base_bispec, tracer_field, fn_stat=fn_statistic)
         
             end = time.time()
             print(f"Computed {statistic} for idx_mock={idx_mock}, idx_bias={idx_bias} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
@@ -353,7 +342,7 @@ def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, 
 
 
 def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
-                        n_threads=1):
+                        n_threads=1, fn_stat=None):
 
     print("Computing the 15 PNN cross power spectra")
 
@@ -446,6 +435,10 @@ def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
                                                         **args_power_grid_ii)
         power_all_terms.append(power_term)
 
+    if fn_stat is not None:
+        Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
+        np.save(fn_stat, power_all_terms)
+        
     return power_all_terms
 
 
@@ -454,9 +447,9 @@ def compute_pk(tracer_field, cosmo, box_size,
                normalise_grid=False, deconvolve_grid=False,
                interlacing=False, deposit_method='cic',
                correct_grid=False,
-               n_threads=8, fn_pk=None):
+               n_threads=8, fn_stat=None):
 
-
+    # fixing these here to ensure binning is same for all stats computed!
     k_min = 0.01
     k_max = 0.4
     n_bins = 30
@@ -521,13 +514,16 @@ def compute_pk(tracer_field, cosmo, box_size,
                         grid1=tracer_field,
                         grid2=tracer_field,
                         **args_power_grid)
-    if fn_pk is not None:
-        np.save(fn_pk, pk_obj)
+    
+    if fn_stat is not None:
+        Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
+        np.save(fn_stat, pk_obj)
+        
     return pk_obj
 
 
 def compute_pk_linear(seed, cosmo, box_size, n_grid_orig,
-                        n_threads=1):
+                        n_threads=1, fn_stat=None):
     
     expfactor = 1.0
     print("Generating ZA sim", flush=True)
@@ -537,13 +533,14 @@ def compute_pk_linear(seed, cosmo, box_size, n_grid_orig,
                                                         phase_type=1, ngenic_phases=True, return_disp=True, 
                                                         sphere_mode=0)
     field_lin = sim.linear_field[0]
-    pk_obj = compute_pk(field_lin, cosmo, box_size, n_threads=n_threads)
-
+    pk_obj = compute_pk(field_lin, cosmo, box_size, n_threads=n_threads, fn_stat=fn_stat)
+        
     return pk_obj
 
 
-def compute_bispectrum(base, tracer_field):
+def compute_bispectrum(base, tracer_field, fn_stat=None):
 
+    # fixing these here to ensure binning is same for all stats computed!
     k_min = 0.01
     k_max = 0.4
     n_bins = 7
@@ -564,6 +561,17 @@ def compute_bispectrum(base, tracer_field):
     
     bk_corr = bspec.Bk_ideal(tracer_field, discreteness_correction=True)
 
+    if fn_stat is not None:
+        k123 = bspec.get_ks()
+        weight = k123.prod(axis=0)
+        bispec_results_dict = {
+            'k123': k123,
+            'bispectrum': bk_corr,
+            'weight': weight,
+        }
+        Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
+        np.save(fn_stat, bispec_results_dict)
+            
     return bspec, bk_corr
 
 

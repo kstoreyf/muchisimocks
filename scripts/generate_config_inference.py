@@ -12,7 +12,7 @@ def main():
     overwrite = False
     #overwrite = True
     #generate_train_config(overwrite=overwrite)
-    stat_arr = [['bispec'], ['pk', 'bispec']]
+    stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
     #stat_arr = [['pk']]
     #stat_arr = [['bispec']]
     n_train_arr = [10000]
@@ -20,8 +20,9 @@ def main():
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
     for statistics in stat_arr:
         for n_train in n_train_arr:
-            generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
             #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
     #generate_runlike_config(overwrite=overwrite)
     
     
@@ -239,6 +240,107 @@ def generate_test_config(dir_config='../configs/configs_test',
         "sweep_name": sweep_name,
         "tag_data_test": tag_data_test,
         "tag_test": tag_test,
+        "n_rlzs_per_cosmo": n_rlzs_per_cosmo,
+    }
+    
+    os.makedirs(dir_config, exist_ok=True)
+    fn_config = f"{dir_config}/config{tag_test}.yaml"
+    if not overwrite and os.path.exists(fn_config):
+        print(f"Config file already exists: {fn_config}")
+        print("Set overwrite=True to overwrite the existing file.")
+        return
+    else:
+        if os.path.exists(fn_config):
+            print("Config file already exists but overwrite=True, overwriting. Hope you meant to do that!")
+        with open(fn_config, "w") as file:
+            yaml.dump(config, file, default_flow_style=False)
+        print(f"Testing config file written: {fn_config}")
+        
+        
+def generate_test_config_ood(dir_config='../configs/configs_test',
+                         overwrite=False, 
+                         statistics=['pk'], n_train=10000):
+    """
+    Generates a YAML configuration file for testing.
+    """
+
+    ### Select trained model
+    #data_mode = 'emu'
+    data_mode = 'muchisimocks'
+    
+    ### train params
+    tag_params = '_p5_n10000'
+    #tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_b1zen_p1_n10000'
+    #tag_biasparams = '_biaszen_p4_n10000' #1x
+    #tag_biasparams = '_biaszen_p4_n50000' #5x
+    #tag_biasparams = '_biaszen_p4_n100000' #10x
+    tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
+    tag_noise = '_noise_p5_n10000'
+    tag_Anoise = '_An_p1_n10000'
+    tag_datagen = ''
+    #tag_noise = None
+    #tag_Anoise = None
+
+    n_rlzs_per_cosmo = 1
+    # For loading a model trained with wandb sweep; best of that sweep will be used
+    #tag_sweep = '-rand10'
+    #n_train_sweep = 10000
+    tag_sweep = None
+    n_train_sweep = None
+    
+    ### test params
+    idxs_obs = None # if none, all (unless evaluate mean)
+    evaluate_mean = False
+    data_mode_test = 'shame'
+    tag_mock = '_An1'
+    
+    ### train tags
+    # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
+    tag_stats = f'_{"_".join(statistics)}'    
+    
+    tag_paramsall = tag_params + tag_biasparams
+    if tag_noise is not None:
+        tag_paramsall += tag_noise + tag_Anoise
+    tag_data_train = '_'+data_mode + tag_stats + tag_paramsall + tag_datagen
+
+    # build tag
+    tag_inf_train = tag_data_train
+    if n_train is not None:
+        tag_inf_train += f'_ntrain{n_train}'
+    # run_mode fixed to load for testing, bc always should be loading already trained model;
+    # (best is for training; will read the best hyperparameters from a sweep and retrain and save it)
+    if tag_sweep is not None:
+        sweep_name = tag_data_train + f'_ntrain{n_train_sweep}_best{tag_sweep}'
+    else:
+        sweep_name = None
+    
+    ### test tags
+    tag_data_test = '_'+data_mode_test + tag_stats + tag_mock
+    
+    if evaluate_mean:
+        tag_mean = '_mean'
+    else:
+        tag_mean = ''
+    tag_test = f"_TRAIN{tag_inf_train}_TEST{tag_data_test}{tag_mean}"
+    
+    config = {
+        "data_mode": data_mode,
+        "data_mode_test": data_mode_test,
+        "statistics": statistics,
+        "tag_params": tag_params,
+        "tag_biasparams": tag_biasparams,
+        "tag_noise": tag_noise,
+        "tag_Anoise": tag_Anoise,
+        "n_train": n_train,
+        "evaluate_mean": evaluate_mean,
+        "idxs_obs": idxs_obs,
+        "tag_data_train": tag_data_train,
+        "tag_inf_train": tag_inf_train,
+        "sweep_name": sweep_name,
+        "tag_data_test": tag_data_test,
+        "tag_test": tag_test,
+        "tag_mock": tag_mock,
         "n_rlzs_per_cosmo": n_rlzs_per_cosmo,
     }
     

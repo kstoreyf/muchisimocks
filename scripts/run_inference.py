@@ -38,7 +38,10 @@ def main():
     if args.config_test:
         with open(args.config_test, "r") as file:
             test_config = yaml.safe_load(file)
-        test_likefree_inference(test_config)
+        if test_config.get("data_mode_test", "") == "muchisimocks":
+            test_likefree_inference(test_config)
+        else:
+            test_likefree_inference_ood(test_config)
 
     # WARNING not implemented yet !
     if args.config_runlike:
@@ -246,6 +249,80 @@ def test_likefree_inference(config, overwrite=False):
     else:
         # run on full test set
         print(f"y_obs shape: {len(y_obs)}, {len(y_obs[0])}, {len(y_obs[0][0])}")
+        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_test)
+
+
+def test_likefree_inference_ood(config, overwrite=False):
+    """
+    Test function using parameters from the config file."""
+
+    dir_results = '/scratch/kstoreyf/muchisimocks/results' # hyperion path
+
+    # Read settings from config file
+    # data_mode is for TEST DATA; muchisimocks, emu, shame, etc
+
+    data_mode = config["data_mode"]
+    statistics = config["statistics"]
+    # for now before i extend to multiple!
+    #statistic = statistics[0]
+    ### training 
+    tag_params = config["tag_params"]
+    tag_biasparams = config["tag_biasparams"]
+    tag_noise = config.get("tag_noise", None)  
+    tag_Anoise = config.get("tag_Anoise", None) 
+    tag_data_train = config["tag_data_train"]
+    tag_inf_train = config["tag_inf_train"]
+    sweep_name = config["sweep_name"]
+    ### testing
+    data_mode_test = config["data_mode_test"]
+    evaluate_mean = config["evaluate_mean"]
+    idxs_obs = config["idxs_obs"]
+    tag_mock = config['tag_mock']
+    tag_data_test = config["tag_data_test"]
+    
+    if evaluate_mean:
+        tag_test = f'{tag_data_test}_mean'
+    else:
+        tag_test = tag_data_test
+    dir_sbi = f'{dir_results}/results_sbi/sbi{tag_inf_train}'
+    fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
+    if not overwrite and os.path.exists(fn_samples_test_pred):
+        print(f"Oh look, samples {fn_samples_test_pred} already exists, and overwrite={overwrite}! Skipping testing.")
+        return
+    
+    print(statistics, tag_params, tag_biasparams)
+                
+    k, y, y_err = data_loader.load_data_ood(data_mode_test, statistics, tag_mock, tag_data=tag_data_train)
+
+    param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams, tag_Anoise=tag_Anoise)
+
+    sbi_network = sbi_model.SBIModel(
+                tag_sbi=tag_inf_train,
+                run_mode='load',
+                sweep_name=sweep_name,
+                param_names=param_names_train,
+                statistics=statistics,
+                )
+    sbi_network.run() #need this to do the loading
+    # TODO make this work for both emu and muchisimocks # ?? not sure what this means rn
+    if idxs_obs is None:
+        y_obs = y
+    else:
+        y_obs = []
+        for i_stat in range(len(statistics)):
+            y_obs.append(y[i_stat][idxs_obs])
+
+    # maybe should load this in as a separate dataset, but for now seems fine to do this way
+    if evaluate_mean:
+        # make array of arrays-of-means of each stat
+        y_mean = []
+        for i_stat in range(len(statistics)):
+            y_mean_i = np.mean(y[i_stat], axis=0)
+            y_mean.append(y_mean_i)
+        sbi_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test=tag_test)
+    else:
+        # run on full test set
+        #print(f"y_obs shape: {len(y_obs)}, {len(y_obs[0])}, {len(y_obs[0][0])}")
         sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_test)
 
 

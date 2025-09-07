@@ -641,7 +641,7 @@ def predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim,
     print(f"TIME for making eulerian fields {tag_bfields}: {timenow-timeprev:.2f} s ({(timenow-timeprev)/60:.2f} min)", flush=True)
 
     print("Cutting k-modes")
-    bias_terms_eul_pred_kcut = remove_lowk_modes(bias_terms_eul_pred, box_size, n_grid_target)
+    bias_terms_eul_pred_kcut = remove_highk_modes(bias_terms_eul_pred, box_size, n_grid_target)
     timeprev = timenow
     timenow = time.time()
     print(f"TIME for cutting fields to certain kmode {tag_bfields}: {timenow-timeprev:.2f} s ({(timenow-timeprev)/60:.2f} min)", flush=True)
@@ -678,7 +678,7 @@ def deconvolve_bias_field(bias_terms, n_grid_orig):
     return bias_terms_eul_deconvolved
 
 
-def remove_lowk_modes(bias_terms_eul_pred, box_size, n_grid_target):
+def remove_highk_modes(bias_terms_eul_pred, box_size, n_grid_target):
     n_grid = bias_terms_eul_pred.shape[-1]
     k_nyq = np.pi/box_size*n_grid_target
     kmesh = bacco.visualization.np_get_kmesh( (n_grid, n_grid, n_grid), box_size, real=True)
