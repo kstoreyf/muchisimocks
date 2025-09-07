@@ -75,7 +75,11 @@ def load_data_shame(statistic, tag_mock):
     if statistic == 'pk':
         k, stat, error, pk_obj = load_pk(fn_statistics)
     elif statistic == 'bispec':
-        k, stat, error, bispec_obj = load_bispec(fn_statistics)
+        # easiest way to get n_grid, which is needed for load_bispec
+        fn_cat_mesh = f'../data/data_shame/data{tag_mock}/tracer_field.npy'
+        tracer_field = np.load(fn_cat_mesh, allow_pickle=True)
+        n_grid_mock = tracer_field.shape[0]
+        k, stat, error, bispec_obj = load_bispec(fn_statistics, n_grid_mock)
     else:
         raise ValueError(f"Statistic {statistic} not recognized / computed for this dataset (shame, {tag_mock})!")
     print(f"Loaded {statistic} with shape {stat.shape}")
@@ -259,6 +263,26 @@ def load_params(tag_params=None, tag_biasparams=None,
     return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias
     
     
+def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
+    if data_mode == 'shame':
+        # needed this line bc was getting error message
+        import bacco
+        # TODO check that this was actually its params! just says Planck in filename
+        pdict = bacco.cosmo_parameters.Planck18
+        bacco.configuration.update({'growth':{'method': 'reps'}})
+        cosmo_mock = utils.get_cosmo(pdict)
+
+        param_dict = {}
+        for k, v in cosmo_mock.pars.items():
+            kname = k
+            if k=='sigma8':
+                kname = 'sigma8_cold'
+            param_dict[kname] = v
+        return param_dict
+    else:
+        raise ValueError(f"Data mode {data_mode} not recognized!")
+   
+    
 def load_cosmo_params(tag_params, dir_params='../data/params'):
     # TODO this is so messy! figure out what to do about lh prefix
     if 'fisher' in tag_params:
@@ -427,7 +451,18 @@ def load_theta_test(tag_params_test, tag_biasparams_test, tag_Anoise_test=None,
     print(len(theta_test))
     return np.array(theta_test)
     
-    
+
+def load_theta_ood(data_mode, tag_mock,
+                   cosmo_param_names_vary=None, bias_param_names_vary=None, noise_param_names_vary=None,):
+    param_dict = load_params_ood(data_mode, tag_mock)
+    theta_test = [param_dict[pname] for pname in cosmo_param_names_vary]
+    theta_test.extend([-999 for pname in bias_param_names_vary])
+    if 'An1' in tag_mock:
+        theta_test.extend([1])
+    else:
+        theta_test.extend([-999 for pname in noise_param_names_vary])
+    return np.array(theta_test)
+
     
 
 def get_param_names(tag_params=None, tag_biasparams=None, tag_Anoise=None, dir_params='../data/params'):
