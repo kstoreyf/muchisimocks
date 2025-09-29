@@ -13,7 +13,7 @@
 ##SBATCH --job-name=bispec_quijote_p0_n1000_b1000_p0_n1_step100
 ##SBATCH --job-name=bispec_quijote_p0_n1000_b1000_p0_n1_noise_quijote_p0_n1000_An1_p0_n1_step100
 ##SBATCH --job-name=bispec_test_p5_n1000_biaszen_p4_n1000_noise_test_p5_n1000_An_p1_n1000_step100
-#SBATCH --job-name=bispec_p5_n10000_biaszen_p4_n200000_noise_p5_n10000_An_p1_n10000_step100_round2
+#SBATCH --job-name=bispec_p5_n10000_biaszen_p4_n200000_noise_p5_n10000_An1_p0_n1_step100
 ##SBATCH --time=0:10:00 # time per task, but doing Nsteps; ~10s for bispec 
 #SBATCH --time=8:00:00 # time per task, but doing Nsteps; for 20000 (most), use 8h to be safe. lower, 1h fine
 #SBATCH --nodes=1              # nodes per instance
@@ -79,7 +79,10 @@ echo "idx_mock_start=${idx_mock_start}, idx_mock_end=${idx_mock_end}"
 
 ### noisy
 # training
-python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n200000 --tag_noise _noise_p5_n10000 --tag_Anoise _An_p1_n10000
+# span noise range
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n200000 --tag_noise _noise_p5_n10000 --tag_Anoise _An_p1_n10000
+# noise An=1
+python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n200000 --tag_noise _noise_p5_n10000 --tag_Anoise _An1_p0_n1
 # testing
 # CV quijote
 #python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1 --tag_noise _noise_quijote_p0_n1000 --tag_Anoise _An1_p0_n1

@@ -604,15 +604,19 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         if color is None:
             color = utils.color_dict_methods[chain_data['inf_method']]
         
-        smooth = smooth_dict[chain_data['inf_method']]
-        bins = bins_dict[chain_data['inf_method']]
+        # smooth = smooth_dict[chain_data['inf_method']]
+        # bins = bins_dict[chain_data['inf_method']]
+        smooth = 1
+        bins = 10
         
         c.add_chain(chainconsumer.Chain(
             samples=samples_df,
             name=chain_data['label'],
             color=color,
             smooth=smooth,
-            bins=bins
+            bins=bins,
+            #plot_cloud=True,
+            plot_cloud=False,
         ))
 
     # Set up plot configuration
@@ -626,6 +630,15 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         )
     )
 
+    # c.set_override(
+    #     chainconsumer.ChainConfig(
+    #         shade_alpha=1.0,
+    #         sigmas=[0,1,2],
+    #         shade_gradient=1.0,
+    #         plot_cloud=True,
+    #     )
+    # )
+    
     # Create truth location for available parameters only
     truth_loc = {}
     for pn in param_names_any_available:

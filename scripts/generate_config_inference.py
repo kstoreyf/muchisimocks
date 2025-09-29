@@ -21,8 +21,8 @@ def main():
     for statistics in stat_arr:
         for n_train in n_train_arr:
             #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            #generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
     #generate_runlike_config(overwrite=overwrite)
     
     
@@ -45,8 +45,9 @@ def generate_train_config(dir_config='../configs/configs_train',
     #tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
     tag_noise = '_noise_p5_n10000'
-    tag_Anoise = '_An_p1_n10000'
-
+    #tag_Anoise = '_An_p1_n10000'
+    tag_Anoise = '_An1_p0_n1' #fix Anoise=1
+    
     # emu-specific
     n_rlzs_per_cosmo = 1
     
@@ -140,7 +141,8 @@ def generate_test_config(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n100000' #10x
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
     tag_noise = '_noise_p5_n10000'
-    tag_Anoise = '_An_p1_n10000'
+    #tag_Anoise = '_An_p1_n10000'
+    tag_Anoise = '_An1_p0_n1' #fix Anoise=1
     #tag_noise = None
     #tag_Anoise = None
 
@@ -152,22 +154,23 @@ def generate_test_config(dir_config='../configs/configs_test',
     n_train_sweep = None
     
     ### test params
+    data_mode_test = 'muchisimocks'
     idxs_obs = None # if none, all (unless evaluate mean)
     ## settings for fixed cosmo
-    # evaluate_mean = True 
-    # tag_params_test = '_quijote_p0_n1000'
-    # tag_biasparams_test = '_b1000_p0_n1'
-    # tag_noise_test = '_noise_quijote_p0_n1000'
-    # tag_Anoise_test = '_An1_p0_n1'
+    evaluate_mean = True 
+    tag_params_test = '_quijote_p0_n1000'
+    tag_biasparams_test = '_b1000_p0_n1'
+    tag_noise_test = '_noise_quijote_p0_n1000'
+    tag_Anoise_test = '_An1_p0_n1'
     ## settings for coverage test
-    evaluate_mean = False
-    tag_params_test = '_test_p5_n1000'
-    tag_biasparams_test = '_biaszen_p4_n1000'
-    tag_noise_test = '_noise_test_p5_n1000'
-    tag_Anoise_test = '_An_p1_n1000'
+    # evaluate_mean = False
+    # tag_params_test = '_test_p5_n1000'
+    # tag_biasparams_test = '_biaszen_p4_n1000'
+    # tag_noise_test = '_noise_test_p5_n1000'
+    # tag_Anoise_test = '_An_p1_n1000'
     
     # this if-else is just so it's easier for me to switch between the two; may not need
-    if data_mode == 'emu':
+    if data_mode_test == 'emu':
         # train
         tag_errG = '_boxsize1000'
         tag_datagen = f'{tag_errG}_nrlzs{n_rlzs_per_cosmo}'
@@ -180,7 +183,7 @@ def generate_test_config(dir_config='../configs/configs_test',
                             'tag_errG': tag_errG,
                             'tag_datagen': tag_datagen,
                             'tag_noiseless': tag_noiseless}
-    elif data_mode == 'muchisimocks':
+    elif data_mode_test == 'muchisimocks':
         # train
         tag_datagen = ''
         # test
@@ -222,6 +225,7 @@ def generate_test_config(dir_config='../configs/configs_test',
     
     config = {
         "data_mode": data_mode,
+        "data_mode_test": data_mode_test,
         "statistics": statistics,
         "tag_params": tag_params,
         "tag_biasparams": tag_biasparams,
@@ -277,7 +281,8 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n100000' #10x
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
     tag_noise = '_noise_p5_n10000'
-    tag_Anoise = '_An_p1_n10000'
+    #tag_Anoise = '_An_p1_n10000'
+    tag_Anoise = '_An1_p0_n1' #fix Anoise=1
     tag_datagen = ''
     #tag_noise = None
     #tag_Anoise = None

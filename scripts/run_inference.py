@@ -38,7 +38,8 @@ def main():
     if args.config_test:
         with open(args.config_test, "r") as file:
             test_config = yaml.safe_load(file)
-        if test_config.get("data_mode_test", "") == "muchisimocks":
+        data_mode_test_default = "muchisimocks"
+        if test_config.get("data_mode_test", data_mode_test_default) == "muchisimocks":
             test_likefree_inference(test_config)
         else:
             test_likefree_inference_ood(test_config)

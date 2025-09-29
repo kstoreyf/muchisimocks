@@ -54,8 +54,8 @@ def load_data_ood(data_mode, statistics, tag_mock,
         else:
             raise ValueError(f"Data mode {data_mode} not recognized!")
         print(f"Loaded {statistic} data with shape {y_i.shape}")
-        if tag_mock is None:
-            print("No tag_mock provided, so not masking data")
+        if tag_data is None:
+            print("No tag_data provided, so not masking data")
         else:
             # tag_data is from training data!
             k_i, y_i, y_err_i = mask_data(statistic, tag_data, k_i, y_i, y_err_i)
@@ -456,11 +456,11 @@ def load_theta_ood(data_mode, tag_mock,
                    cosmo_param_names_vary=None, bias_param_names_vary=None, noise_param_names_vary=None,):
     param_dict = load_params_ood(data_mode, tag_mock)
     theta_test = [param_dict[pname] for pname in cosmo_param_names_vary]
-    theta_test.extend([-999 for pname in bias_param_names_vary])
+    theta_test.extend([np.nan for pname in bias_param_names_vary])
     if 'An1' in tag_mock:
         theta_test.extend([1])
     else:
-        theta_test.extend([-999 for pname in noise_param_names_vary])
+        theta_test.extend([np.nan for pname in noise_param_names_vary])
     return np.array(theta_test)
 
     
