@@ -12,9 +12,9 @@ def main():
     overwrite = False
     #overwrite = True
     #generate_train_config(overwrite=overwrite)
-    stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
+    #stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
     #stat_arr = [['pk']]
-    #stat_arr = [['bispec']]
+    stat_arr = [['bispec']]
     n_train_arr = [10000]
     #stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
@@ -140,11 +140,11 @@ def generate_test_config(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n50000' #5x
     #tag_biasparams = '_biaszen_p4_n100000' #10x
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
-    tag_noise = '_noise_p5_n10000'
+    #tag_noise = '_noise_p5_n10000'
     #tag_Anoise = '_An_p1_n10000'
-    tag_Anoise = '_An1_p0_n1' #fix Anoise=1
-    #tag_noise = None
-    #tag_Anoise = None
+    #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
+    tag_noise = None
+    tag_Anoise = None
 
     n_rlzs_per_cosmo = 1
     # For loading a model trained with wandb sweep; best of that sweep will be used
@@ -160,8 +160,10 @@ def generate_test_config(dir_config='../configs/configs_test',
     evaluate_mean = True 
     tag_params_test = '_quijote_p0_n1000'
     tag_biasparams_test = '_b1000_p0_n1'
-    tag_noise_test = '_noise_quijote_p0_n1000'
-    tag_Anoise_test = '_An1_p0_n1'
+    tag_noise_test = None
+    tag_Anoise_test = None
+    #tag_noise_test = '_noise_quijote_p0_n1000'
+    #tag_Anoise_test = '_An1_p0_n1'
     ## settings for coverage test
     # evaluate_mean = False
     # tag_params_test = '_test_p5_n1000'

@@ -624,8 +624,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         chainconsumer.PlotConfig(
             flip=True,
             labels=utils.param_label_dict,
-            contour_label_font_size=None,
-            summary_font_size=30,
+            #contour_label_font_size=12,
+            summary_font_size=0,
             extents=extents,
             legend_kwargs={'bbox_to_anchor': (1.05, 1.0), 
                            'fontsize':18}

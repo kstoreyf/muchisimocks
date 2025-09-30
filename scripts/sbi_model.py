@@ -474,7 +474,7 @@ class SBIModel():
                 with open(checkpoint_file, 'w') as f:
                     f.write(str(samples_completed))
                 
-                print(f"Batch completed in {batch_end - batch_start:.2f}s")
+                print(f"Batch completed in {batch_end - batch_start:.2f}s ({(batch_end - batch_start) / 60:.2f} min) ({(batch_end - batch_start) / 3600:.2f} hrs")
                 print(f"Saved {samples_completed}/{samples_total} samples")
                 
         except Exception as e:
