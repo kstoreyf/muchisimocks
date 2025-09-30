@@ -26,22 +26,22 @@ for n_train in "${n_train_arr[@]}"; do
         ## no noise
         tag_noise=""
         tag_Anoise=""   
-        #config_train_file="../configs/configs_train/config_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}.yaml"
+        config_train_file="../configs/configs_train/config_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}.yaml"
         # if only want to train on a pre-trained model, set config_train_file to "none";
         # but if you accidentally leave config_train_file not blank, the default is not to overwrite, so it shouldn't matter!
-        config_train_file="none"
+        #config_train_file="none"
 
         ### TESTING ###
         ### cosmic variance (quijote)
-        # tag_params_test="_quijote_p0_n1000"
-        # tag_biasparams_test="_b1000_p0_n1"
-        # tag_noise_test="_noise_quijote_p0_n1000"
+        tag_params_test="_quijote_p0_n1000"
+        tag_biasparams_test="_b1000_p0_n1"
+        tag_noise_test="_noise_quijote_p0_n1000"
         # tag_Anoise_test="_An1_p0_n1"
         # tag_mean="_mean"
         ### coverage
-        tag_params_test="_test_p5_n1000"
-        tag_biasparams_test="_biaszen_p4_n1000"
-        tag_noise_test="_noise_test_p5_n1000"
+        # tag_params_test="_test_p5_n1000"
+        # tag_biasparams_test="_biaszen_p4_n1000"
+        # tag_noise_test="_noise_test_p5_n1000"
         # tag_Anoise_test="_An_p1_n1000"
         # tag_mean=""
         ### no noise

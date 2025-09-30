@@ -606,8 +606,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         
         # smooth = smooth_dict[chain_data['inf_method']]
         # bins = bins_dict[chain_data['inf_method']]
-        smooth = 1
-        bins = 10
+        smooth = 4
+        bins = 8
         
         c.add_chain(chainconsumer.Chain(
             samples=samples_df,
@@ -624,9 +624,11 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         chainconsumer.PlotConfig(
             flip=True,
             labels=utils.param_label_dict,
-            contour_label_font_size=12,
+            contour_label_font_size=None,
+            summary_font_size=30,
             extents=extents,
-            legend_kwargs={'bbox_to_anchor': (1.05, 1.0)}
+            legend_kwargs={'bbox_to_anchor': (1.05, 1.0), 
+                           'fontsize':18}
         )
     )
 
@@ -655,7 +657,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     # and leave subplots blank for parameter combinations where data is missing
     fig = c.plotter.plot(figsize=figsize)
     if title is not None:
-        fig.suptitle(title)
+        fig.suptitle(title, fontsize=16)
     
     # Don't return the figure to avoid duplicate display in notebooks
     plt.show()

@@ -546,6 +546,10 @@ def chi2(theta_true, theta_pred, covs_pred):
     return chi2s if len(chi2s) > 1 else chi2s[0]
 
 
+def mse(theta_true, theta_pred):
+    return np.mean((theta_true - theta_pred)**2, axis=-1)
+
+
 def figure_of_merit(covs_pred):
     foms = []
     if covs_pred.ndim == 3:
