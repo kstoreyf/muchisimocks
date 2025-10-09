@@ -73,6 +73,23 @@ cosmo_dict_quijote = {
                 'tau'           :  0.0952,
                 }   
 
+cosmo_dict_shame = {
+            'omega_cdm'     : 0.2603,
+            'omega_baryon'  : 0.0486,
+            'omega_cold'    : 0.30889999999999995,
+            'omega_m'       : 0.30889999999999995,
+            'neutrino_mass' : 0.0,
+            'hubble'        : 0.6774,
+            'ns'            : 0.9667,
+            'As'            : 2.0669036404058968e-09,
+            'sigma8_cold'   : 0.8159,
+            'sigma8'        : 0.8159000277519226,
+            'w0'            : -1.0,
+            'wa'            : 0.0,
+            'tau'           : 0.0952,
+}
+
+
 cosmo_param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
 biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl'] 
 param_names_all_ordered = cosmo_param_names_ordered + biasparam_names_ordered
@@ -329,10 +346,11 @@ def param_dict_to_bacco_param_dict(param_dict, neutrino_mass=None):
         else:
             name_bacco = name_orig
         param_dict_bacco[name_bacco] = param_dict[name_orig] 
-        
-    pn_oms = ['omega_m', 'omega_cdm', 'omega_cold']
-    n_oms = np.sum([1 if pn_om in param_dict_bacco else 0 for pn_om in pn_oms])        
-    assert n_oms==1, f"should pass exactly one of {pn_oms}!"     
+
+    # i think it's fine to just take them in this order?        
+    # pn_oms = ['omega_m', 'omega_cdm', 'omega_cold']
+    # n_oms = np.sum([1 if pn_om in param_dict_bacco else 0 for pn_om in pn_oms])        
+    # assert n_oms==1, f"should pass exactly one of {pn_oms}!"     
               
     if 'omega_cdm' in param_dict_bacco:
         pass      

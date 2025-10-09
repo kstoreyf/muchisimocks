@@ -4,10 +4,10 @@
 #n_train_arr=(500 1000 2000 4000 6000 8000 10000)
 n_train_arr=(10000)
 #n_train_arr=(500 1000 2000 4000 6000 8000)
-#tag_stats_arr=("_pk" "_bispec" "_pk_bispec") 
+tag_stats_arr=("_pk" "_bispec" "_pk_bispec") 
 #tag_stats_arr=("_bispec" "_pk_bispec") 
 #tag_stats_arr=("_pk") 
-tag_stats_arr=("_bispec") 
+#tag_stats_arr=("_bispec") 
 #tag_stats_arr=("_pk" "_bispec") 
 #tag_stats_arr=("_pk_bispec")
 #tag_stats_arr=("_bispec" "_pk_bispec") 
@@ -21,11 +21,11 @@ for n_train in "${n_train_arr[@]}"; do
         tag_params="_p5_n10000"
         tag_biasparams="_biaszen_p4_n200000"  
         tag_noise="_noise_p5_n10000"
-        #tag_Anoise="_An_p1_n10000"    
+        tag_Anoise="_An_p1_n10000"    
         #tag_Anoise="_An1_p0_n1"    
         ## no noise
-        tag_noise=""
-        tag_Anoise=""   
+        # tag_noise=""
+        # tag_Anoise=""   
         #config_train_file="../configs/configs_train/config_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}.yaml"
         # if only want to train on a pre-trained model, set config_train_file to "none";
         # but if you accidentally leave config_train_file not blank, the default is not to overwrite, so it shouldn't matter!
@@ -39,21 +39,21 @@ for n_train in "${n_train_arr[@]}"; do
         #tag_noise_test="_noise_quijote_p0_n1000"
         #tag_Anoise_test="_An1_p0_n1"
         ### coverage
-        tag_params_test="_test_p5_n1000"
-        tag_biasparams_test="_biaszen_p4_n1000"
-        tag_mean=""
+        # tag_params_test="_test_p5_n1000"
+        # tag_biasparams_test="_biaszen_p4_n1000"
+        # tag_mean=""
         # tag_noise_test="_noise_test_p5_n1000"
         # tag_Anoise_test="_An_p1_n1000"
         ### no noise
-        tag_noise_test=""
-        tag_Anoise_test=""
+        # tag_noise_test=""
+        # tag_Anoise_test=""
 
         ### Muchisimocks test set 
-        config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}_TEST_muchisimocks${tag_stats}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_Anoise_test}${tag_mean}.yaml"
+        #config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}_TEST_muchisimocks${tag_stats}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_Anoise_test}${tag_mean}.yaml"
         ### OOD test set
-        # data_mode="shame"
-        # tag_mock="_An1"
-        # config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}_TEST_${data_mode}${tag_stats}${tag_mock}.yaml"
+        data_mode="shame"
+        tag_mock="_An1"
+        config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}_TEST_${data_mode}${tag_stats}${tag_mock}.yaml"
         ### no test
         #config_test_file="none"
 

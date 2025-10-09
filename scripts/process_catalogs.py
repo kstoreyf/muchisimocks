@@ -23,12 +23,13 @@ def main():
     Main function to process SHAMe catalog and compare with muchisimocks data.
     """
     # Configuration
-    dir_cat = '../data/shame_catalogues_to_share'
-    fn_cat = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_0.00.h5'
+    dir_cat = '../data/shame_catalogues_to_share/kate'
+    fn_cat0 = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_0.00_0.00022.h5'
+    fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14_0.00022.h5'
     data_mode = 'shame'
     tag_mock = '_An1'
     statistics = ['pk', 'bispec']
-    overwrite = False
+    overwrite = True
     
     # Grid and box parameters
     box_size_mock = 1024.0
@@ -36,11 +37,18 @@ def main():
     print("=== Processing SHAMe Catalog ===")
     
     # Process catalog to tracer_field field
-    fn_cat_mesh = f'../data/data_{data_mode}/data{tag_mock}/tracer_field.npy'
-    tracer_field, n_grid_mock = process_catalog_to_mesh(
-        fn_cat, box_size_mock, fn_cat_mesh=fn_cat_mesh, overwrite=overwrite
+    fn_cat0_mesh = f'../data/data_{data_mode}/data{tag_mock}/tracer_field_phase0.npy'
+    tracer_field_0, n_grid_mock_0 = process_catalog_to_mesh(
+        fn_cat0, box_size_mock, fn_cat_mesh=fn_cat0_mesh, overwrite=overwrite
+    )
+    fn_catpi_mesh = f'../data/data_{data_mode}/data{tag_mock}/tracer_field_phasepi.npy'
+    tracer_field_pi, n_grid_mock_pi = process_catalog_to_mesh(
+        fn_catpi, box_size_mock, fn_cat_mesh=fn_catpi_mesh, overwrite=overwrite
     )
     
+    #cosmo = utils.get_cosmo(utils.cosmo_dict_shame)
+    cosmo = None #feel like should be assuming i don't know cosmo?
+
     for statistic in statistics:
         dir_statistics = f'../data/data_{data_mode}/data{tag_mock}/{statistic}s'
         fn_stat = f'{dir_statistics}/{statistic}.npy'
@@ -50,22 +58,33 @@ def main():
         
         if statistic=='pk':
             print("\n=== Computing Power Spectrum ===")
-            compute_pk(tracer_field, box_size_mock,
-                                 fn_stat=fn_stat)
+            pk_0 = compute_pk(tracer_field_0, box_size_mock, cosmo=cosmo)
+            pk_pi = compute_pk(tracer_field_pi, box_size_mock, cosmo=cosmo)
+            pk_mean = {} #for now ignoring any other entries in the dict, haven't been using
+            pk_mean['k'] = pk_0['k'] 
+            pk_mean['pk'] = 0.5 * (pk_0['pk'] + pk_pi['pk'])
+            pk_mean['pk_gaussian_error'] = 0.5 * (pk_0['pk_gaussian_error'] + pk_pi['pk_gaussian_error']) #??
+            Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
+            np.save(fn_stat, pk_mean)
             print(f"Power spectrum saved to {fn_stat}")
         
         elif statistic=='bispec':
             print("\n=== Computing Bispectrum ===")
-            compute_bispectrum(
-                tracer_field, box_size_mock, n_grid_mock,
-                fn_stat=fn_stat
-            )
+            bspec_0, bk_corr_0 = compute_bispectrum(
+                tracer_field_0, box_size_mock, n_grid_mock_0)
+            bspec_pi, bk_corr_pi = compute_bispectrum(
+                tracer_field_pi, box_size_mock, n_grid_mock_pi)
+            
+            bspec_mean = bspec_0  # Both should have same k-bins
+            bk_corr_mean = {} #for now ignoring any other entries in the dict, haven't been using
+            bk_corr_mean['b0'] = 0.5 * (bk_corr_0['b0'] + bk_corr_pi['b0'])
+            cs.save_bispectrum(fn_stat, bspec_mean, bk_corr_mean)
             print(f"Bispectrum saved to {fn_stat}")
 
         else:
             raise ValueError(f"Statistic {statistic} not recognized!")
         
-    print(f"Finished processing SHAMe catalog {fn_cat}")
+    print(f"Finished processing SHAMe catalog {fn_cat0} (and its pi partner)")
     
 
 def round_to_nearest_even(x):
@@ -108,6 +127,7 @@ def remove_highk_modes(field, box_size_mock, n_grid_target):
 
 def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None, 
                             n_grid_target=128, n_grid_orig=512, box_size_muchisimocks=1000.0, 
+                            cosmo=None,
                             overwrite=False):
     """
     Process a catalog file to create density mesh and tracer_field field.
@@ -160,7 +180,7 @@ def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None,
         interlacing=False, 
         deposit_method='cic',
         zspace=False, 
-        cosmology=None
+        cosmology=cosmo
     )
     print(f"High-res mesh shape: {cat_mesh_ngorig.shape}")
     

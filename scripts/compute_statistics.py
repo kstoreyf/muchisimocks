@@ -562,17 +562,22 @@ def compute_bispectrum(base, tracer_field, fn_stat=None):
     bk_corr = bspec.Bk_ideal(tracer_field, discreteness_correction=True)
 
     if fn_stat is not None:
-        k123 = bspec.get_ks()
-        weight = k123.prod(axis=0)
-        bispec_results_dict = {
-            'k123': k123,
-            'bispectrum': bk_corr,
-            'weight': weight,
-        }
-        Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
-        np.save(fn_stat, bispec_results_dict)
+        save_bispectrum(fn_stat, bspec, bk_corr)
             
     return bspec, bk_corr
+
+
+def save_bispectrum(fn_stat, bspec, bk_corr):
+    k123 = bspec.get_ks()
+    weight = k123.prod(axis=0)
+    bispec_results_dict = {
+        'k123': k123,
+        'bispectrum': bk_corr,
+        'weight': weight,
+    }
+    Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
+    np.save(fn_stat, bispec_results_dict)
+    return
 
 
 if __name__ == '__main__':
