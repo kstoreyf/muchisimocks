@@ -29,7 +29,7 @@ class SBIModel():
                      theta_test=None, y_test_unscaled=None, y_err_test_unscaled=None,
                      statistics=None, param_names=None, dict_bounds=None, 
                      run_mode='single', tag_sbi='', n_threads=1, 
-                     sweep_name=None,
+                     sweep_name=None, overwrite=False,
                      ):
         
         # training does not seem to be parallelizeable! getting no speedup
@@ -91,6 +91,7 @@ class SBIModel():
         self.sweep_name = sweep_name
         
         self.n_threads = n_threads
+        self.overwrite = overwrite
 
         
     def run(self, max_epochs=1000):
@@ -383,13 +384,18 @@ class SBIModel():
         checkpoint_file = f"{self.dir_sbi}/checkpoint_samples_test{tag_test}.txt"
         
         # Check for existing samples and checkpoint
-        samples_total = len(y_test_unscaled[0])
+        #samples_total = len(y_test_unscaled[0])
+        if y_test_unscaled[0].ndim == 1:
+            samples_total = 1
+        else:
+            samples_total = len(y_test_unscaled[0])
         samples_completed = 0
         existing_samples = None
         
         print(f"Checkpoint file: {checkpoint_file}")
         
-        if resume:
+        if resume and not self.overwrite:
+                        
             # Check if final file already exists (complete run)
             if os.path.exists(fn_samples_test_pred):
                 existing_samples = np.load(fn_samples_test_pred)
@@ -424,6 +430,11 @@ class SBIModel():
                 
             if samples_completed > 0:
                 print(f"Resuming from {samples_completed} completed samples")
+        
+        if self.overwrite:
+            print("Overwrite is True - starting fresh")
+            samples_completed = 0
+            existing_samples = None
         
         start_time = time.time()
         

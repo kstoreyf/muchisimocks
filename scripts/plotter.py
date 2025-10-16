@@ -604,10 +604,10 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         if color is None:
             color = utils.color_dict_methods[chain_data['inf_method']]
         
-        # smooth = smooth_dict[chain_data['inf_method']]
-        # bins = bins_dict[chain_data['inf_method']]
-        smooth = 4
-        bins = 8
+        smooth = smooth_dict[chain_data['inf_method']]
+        bins = bins_dict[chain_data['inf_method']]
+        # smooth = 4
+        # bins = 8
         
         c.add_chain(chainconsumer.Chain(
             samples=samples_df,

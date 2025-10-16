@@ -162,6 +162,7 @@ def train_likefree_inference(config, overwrite=False):
                 param_names=param_names,
                 statistics=statistics,
                 dict_bounds=dict_bounds,
+                overwrite=overwrite,
                 )
     sbi_network.run(max_epochs=2000)
     #sbi_network.run(max_epochs=10)
@@ -229,6 +230,7 @@ def test_likefree_inference(config, overwrite=False):
                 sweep_name=sweep_name,
                 param_names=param_names_train,
                 statistics=statistics,
+                overwrite=overwrite,
                 )
     sbi_network.run() #need this to do the loading
     # TODO make this work for both emu and muchisimocks # ?? not sure what this means rn
@@ -253,7 +255,7 @@ def test_likefree_inference(config, overwrite=False):
         sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_test)
 
 
-def test_likefree_inference_ood(config, overwrite=False):
+def test_likefree_inference_ood(config, overwrite=True):
     """
     Test function using parameters from the config file."""
 
@@ -303,6 +305,7 @@ def test_likefree_inference_ood(config, overwrite=False):
                 sweep_name=sweep_name,
                 param_names=param_names_train,
                 statistics=statistics,
+                overwrite=overwrite,
                 )
     sbi_network.run() #need this to do the loading
     # TODO make this work for both emu and muchisimocks # ?? not sure what this means rn

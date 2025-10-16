@@ -12,17 +12,17 @@ def main():
     overwrite = False
     #overwrite = True
     #generate_train_config(overwrite=overwrite)
-    #stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
+    stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
     #stat_arr = [['pk']]
-    stat_arr = [['bispec']]
+    #stat_arr = [['bispec']]
     n_train_arr = [10000]
     #stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
     for statistics in stat_arr:
         for n_train in n_train_arr:
             #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            #generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
     #generate_runlike_config(overwrite=overwrite)
     
     
@@ -157,7 +157,7 @@ def generate_test_config(dir_config='../configs/configs_test',
     data_mode_test = 'muchisimocks'
     idxs_obs = None # if none, all (unless evaluate mean)
     ## settings for fixed cosmo
-    evaluate_mean = True 
+    evaluate_mean = True
     tag_params_test = '_quijote_p0_n1000'
     tag_biasparams_test = '_b1000_p0_n1'
     tag_noise_test = None
@@ -283,8 +283,8 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n100000' #10x
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
     tag_noise = '_noise_p5_n10000'
-    #tag_Anoise = '_An_p1_n10000'
-    tag_Anoise = '_An1_p0_n1' #fix Anoise=1
+    tag_Anoise = '_An_p1_n10000'
+    #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
     tag_datagen = ''
     #tag_noise = None
     #tag_Anoise = None
@@ -300,7 +300,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     idxs_obs = None # if none, all (unless evaluate mean)
     evaluate_mean = False
     data_mode_test = 'shame'
-    tag_mock = '_An1'
+    tag_mock = '_An1_orig_phase0' 
     
     ### train tags
     # don't need train kwargs here bc not actually loading the data; just getting tag to reload model

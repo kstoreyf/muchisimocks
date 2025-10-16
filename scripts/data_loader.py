@@ -75,11 +75,7 @@ def load_data_shame(statistic, tag_mock):
     if statistic == 'pk':
         k, stat, error, pk_obj = load_pk(fn_statistics)
     elif statistic == 'bispec':
-        # easiest way to get n_grid, which is needed for load_bispec (just take one of the phases)
-        fn_cat_mesh = f'../data/data_shame/data{tag_mock}/tracer_field_phase0.npy'
-        tracer_field = np.load(fn_cat_mesh, allow_pickle=True)
-        n_grid_mock = tracer_field.shape[0]
-        k, stat, error, bispec_obj = load_bispec(fn_statistics, n_grid_mock)
+        k, stat, error, bispec_obj = load_bispec(fn_statistics)
     else:
         raise ValueError(f"Statistic {statistic} not recognized / computed for this dataset (shame, {tag_mock})!")
     print(f"Loaded {statistic} with shape {stat.shape}")
@@ -963,9 +959,18 @@ def load_pk(fn_stat):
     return k, stat, error, pk_obj
 
 
-def load_bispec(fn_stat, n_grid):
-    # n_grid used for normalization
+def load_bispec(fn_stat, n_grid=None):
+    # n_grid used for normalization        
     bispec_obj = np.load(fn_stat, allow_pickle=True).item()
+    if 'n_grid' in bispec_obj:
+        n_grid_loaded = bispec_obj['n_grid']
+        if n_grid is None:
+            n_grid = n_grid_loaded
+        elif n_grid != n_grid_loaded:
+            raise ValueError(f"WARNING: n_grid mismatch in bispec file {fn_stat} (expected {n_grid}, got {n_grid_loaded})")
+    else:
+        assert n_grid is not None, "n_grid must be provided (or in bispec_obj) if not in bispec file"
+
     norm = n_grid**3
     k = bispec_obj['k123']
     stat = norm**3 * bispec_obj['weight'] * bispec_obj['bispectrum']['b0']

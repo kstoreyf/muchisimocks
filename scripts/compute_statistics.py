@@ -567,7 +567,7 @@ def compute_bispectrum(base, tracer_field, fn_stat=None):
     return bspec, bk_corr
 
 
-def save_bispectrum(fn_stat, bspec, bk_corr):
+def save_bispectrum(fn_stat, bspec, bk_corr, n_grid=None):
     k123 = bspec.get_ks()
     weight = k123.prod(axis=0)
     bispec_results_dict = {
@@ -575,6 +575,8 @@ def save_bispectrum(fn_stat, bspec, bk_corr):
         'bispectrum': bk_corr,
         'weight': weight,
     }
+    if n_grid is not None:
+        bispec_results_dict['n_grid'] = n_grid
     Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
     np.save(fn_stat, bispec_results_dict)
     return

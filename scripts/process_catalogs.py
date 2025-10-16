@@ -23,13 +23,20 @@ def main():
     Main function to process SHAMe catalog and compare with muchisimocks data.
     """
     # Configuration
-    dir_cat = '../data/shame_catalogues_to_share/kate'
-    fn_cat0 = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_0.00_0.00022.h5'
-    fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14_0.00022.h5'
+    # dir_cat = '../data/shame_catalogues_to_share/kate'
+    # fn_cat0 = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_0.00_0.00022.h5' #_An1
+    # fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14_0.00022.h5'
+    
+    dir_cat = '../data/shame_catalogues_to_share' 
+    fn_cat0 = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_0.00.h5' #'_An1_orig
+    #fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14.h5'
+    
     data_mode = 'shame'
-    tag_mock = '_An1'
+    tag_mock = '_An1_orig'
     statistics = ['pk', 'bispec']
     overwrite = True
+    
+    save_indiv_phases = True  # Whether to save individual phase statistics
     
     # Grid and box parameters
     box_size_mock = 1024.0
@@ -41,45 +48,66 @@ def main():
     tracer_field_0, n_grid_mock_0 = process_catalog_to_mesh(
         fn_cat0, box_size_mock, fn_cat_mesh=fn_cat0_mesh, overwrite=overwrite
     )
-    fn_catpi_mesh = f'../data/data_{data_mode}/data{tag_mock}/tracer_field_phasepi.npy'
-    tracer_field_pi, n_grid_mock_pi = process_catalog_to_mesh(
-        fn_catpi, box_size_mock, fn_cat_mesh=fn_catpi_mesh, overwrite=overwrite
-    )
+    # fn_catpi_mesh = f'../data/data_{data_mode}/data{tag_mock}/tracer_field_phasepi.npy'
+    # tracer_field_pi, n_grid_mock_pi = process_catalog_to_mesh(
+    #     fn_catpi, box_size_mock, fn_cat_mesh=fn_catpi_mesh, overwrite=overwrite
+    # )
     
-    #cosmo = utils.get_cosmo(utils.cosmo_dict_shame)
-    cosmo = None #feel like should be assuming i don't know cosmo?
+    # ok to assume we know cosmo bc just use for periodic box correction
+    cosmo = utils.get_cosmo(utils.cosmo_dict_shame)
+    #cosmo = None #feel like should be assuming i don't know cosmo?
 
     for statistic in statistics:
         dir_statistics = f'../data/data_{data_mode}/data{tag_mock}/{statistic}s'
+        dir_statistics_phase0 = f'../data/data_{data_mode}/data{tag_mock}_phase0/{statistic}s'
+        dir_statistics_phasepi = f'../data/data_{data_mode}/data{tag_mock}_phasepi/{statistic}s'
         fn_stat = f'{dir_statistics}/{statistic}.npy'
-        if not overwrite and Path(fn_stat).exists():
-            print(f"Statistic {statistic} already computed at {fn_stat}, skipping")
-            continue
+        # if not overwrite and Path(fn_stat).exists():
+        #     print(f"Statistic {statistic} already computed at {fn_stat}, skipping")
+        #     continue
         
         if statistic=='pk':
             print("\n=== Computing Power Spectrum ===")
             pk_0 = compute_pk(tracer_field_0, box_size_mock, cosmo=cosmo)
-            pk_pi = compute_pk(tracer_field_pi, box_size_mock, cosmo=cosmo)
-            pk_mean = {} #for now ignoring any other entries in the dict, haven't been using
-            pk_mean['k'] = pk_0['k'] 
-            pk_mean['pk'] = 0.5 * (pk_0['pk'] + pk_pi['pk'])
-            pk_mean['pk_gaussian_error'] = 0.5 * (pk_0['pk_gaussian_error'] + pk_pi['pk_gaussian_error']) #??
-            Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
-            np.save(fn_stat, pk_mean)
-            print(f"Power spectrum saved to {fn_stat}")
+            #pk_pi = compute_pk(tracer_field_pi, box_size_mock, cosmo=cosmo)
+            if save_indiv_phases:
+                fn_stat_0 = f'{dir_statistics_phase0}/{statistic}.npy'
+                fn_stat_pi = f'{dir_statistics_phasepi}/{statistic}.npy'
+                Path.absolute(Path(fn_stat_0).parent).mkdir(parents=True, exist_ok=True)
+                np.save(fn_stat_0, pk_0)
+                print(f"Power spectrum for phase 0 saved to {fn_stat_0}")
+                Path.absolute(Path(fn_stat_pi).parent).mkdir(parents=True, exist_ok=True)
+                #np.save(fn_stat_pi, pk_pi)
+            #     print(f"Power spectrum for phase pi saved to {fn_stat_pi}")
+            # pk_mean = {} #for now ignoring any other entries in the dict, haven't been using
+            # pk_mean['k'] = pk_0['k'] 
+            # pk_mean['pk'] = 0.5 * (pk_0['pk'] + pk_pi['pk'])
+            # pk_mean['pk_gaussian_error'] = 0.5 * (pk_0['pk_gaussian_error'] + pk_pi['pk_gaussian_error']) #??
+            # Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
+            # np.save(fn_stat, pk_mean)
+            # print(f"Power spectrum saved to {fn_stat}")
         
         elif statistic=='bispec':
             print("\n=== Computing Bispectrum ===")
             bspec_0, bk_corr_0 = compute_bispectrum(
                 tracer_field_0, box_size_mock, n_grid_mock_0)
-            bspec_pi, bk_corr_pi = compute_bispectrum(
-                tracer_field_pi, box_size_mock, n_grid_mock_pi)
+            #bspec_pi, bk_corr_pi = compute_bispectrum(
+            #    tracer_field_pi, box_size_mock, n_grid_mock_pi)
+            if save_indiv_phases:
+                fn_stat_0 = f'{dir_statistics_phase0}/{statistic}.npy'
+                fn_stat_pi = f'{dir_statistics_phasepi}/{statistic}.npy'
+                Path.absolute(Path(fn_stat_0).parent).mkdir(parents=True, exist_ok=True)
+                cs.save_bispectrum(fn_stat_0, bspec_0, bk_corr_0, n_grid=n_grid_mock_0)
+                # print(f"Bispectrum for phase 0 saved to {fn_stat_0}")
+                # Path.absolute(Path(fn_stat_pi).parent).mkdir(parents=True, exist_ok=True)
+                # cs.save_bispectrum(fn_stat_pi, bspec_pi, bk_corr_pi, n_grid=n_grid_mock_pi)
+                # print(f"Bispectrum for phase pi saved to {fn_stat_pi}")
             
-            bspec_mean = bspec_0  # Both should have same k-bins
-            bk_corr_mean = {} #for now ignoring any other entries in the dict, haven't been using
-            bk_corr_mean['b0'] = 0.5 * (bk_corr_0['b0'] + bk_corr_pi['b0'])
-            cs.save_bispectrum(fn_stat, bspec_mean, bk_corr_mean)
-            print(f"Bispectrum saved to {fn_stat}")
+            # bspec_mean = bspec_0  # Both should have same k-bins
+            # bk_corr_mean = {} #for now ignoring any other entries in the dict, haven't been using
+            # bk_corr_mean['b0'] = 0.5 * (bk_corr_0['b0'] + bk_corr_pi['b0'])
+            # cs.save_bispectrum(fn_stat, bspec_mean, bk_corr_mean, n_grid=n_grid_mock_0)
+            # print(f"Bispectrum saved to {fn_stat}")
 
         else:
             raise ValueError(f"Statistic {statistic} not recognized!")
