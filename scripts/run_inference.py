@@ -255,7 +255,7 @@ def test_likefree_inference(config, overwrite=False):
         sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_test)
 
 
-def test_likefree_inference_ood(config, overwrite=True):
+def test_likefree_inference_ood(config, overwrite=False):
     """
     Test function using parameters from the config file."""
 
