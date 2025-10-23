@@ -300,7 +300,8 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     idxs_obs = None # if none, all (unless evaluate mean)
     evaluate_mean = False
     data_mode_test = 'shame'
-    tag_mock = '_An1_orig_phase0' 
+    tag_mock = '_nbar0.00054' 
+    #tag_mock = '_An1_orig_phase0' 
     
     ### train tags
     # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
