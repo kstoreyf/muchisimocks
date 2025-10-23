@@ -454,7 +454,14 @@ def load_theta_ood(data_mode, tag_mock,
     theta_test = [param_dict[pname] if pname in param_dict else np.nan for pname in cosmo_param_names_vary]
     theta_test.extend([param_dict[pname] if pname in param_dict else np.nan for pname in bias_param_names_vary])
     if 'An1' in tag_mock:
-        theta_test.extend([1])
+        A_noise = 1.0
+        theta_test.extend([A_noise])
+    elif 'nbar' in tag_mock:
+        nbar = float(tag_mock.split('_nbar')[-1])
+        nbar_fiducial = 2.2e-4 # TODO get from noise field generation script
+        A_noise = 1.0 / np.sqrt(nbar/nbar_fiducial)
+        print(nbar, A_noise)
+        theta_test.extend([A_noise])
     else:
         theta_test.extend([param_dict[pname] if pname in param_dict else np.nan for pname in noise_param_names_vary])
     return np.array(theta_test)
