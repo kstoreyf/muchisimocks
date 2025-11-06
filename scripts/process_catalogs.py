@@ -11,6 +11,7 @@ from pathlib import Path
 import pyfftw
 
 import bacco
+import bacco.probabilistic_bias as pb
 
 import sys
 sys.path.append('/dipc/kstoreyf/muchisimocks/scripts')
@@ -18,14 +19,15 @@ import utils
 import compute_statistics as cs
 
 
+
 def main():
     """
     Main function to process SHAMe catalog and compare with muchisimocks data.
     """
     # Configuration
-    tag_mock = '_nbar0.00054'
+    tag_mock = '_An1_deconvolve'
     #tag_mock = '_An1_orig'
-    if tag_mock=='_An1':
+    if tag_mock=='_An1' or tag_mock=='_An1_deconvolve':
         dir_cat = '../data/shame_catalogues_to_share/kate'
         fn_cat0 = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_0.00_0.00022.h5' #_An1
         fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14_0.00022.h5'
@@ -43,7 +45,7 @@ def main():
     
     data_mode = 'shame'
     statistics = ['pk', 'bispec']
-    overwrite = False
+    overwrite = True
     
     save_indiv_phases = True  # Whether to save individual phase statistics
     
@@ -224,8 +226,11 @@ def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None,
     # Remove high-k modes to downsample
     cat_field_kcut = remove_highk_modes(cat_mesh_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
     
+    cat_field_kcut_deconvolved = pb.convolve_linear_interpolation_kernel(cat_field_kcut, 
+                                                                        npix=n_grid_orig_mock, mode="deconvolve")
+    
     # Convert to tracer_field
-    cat_overdensity = (cat_field_kcut - np.mean(cat_field_kcut))/np.mean(cat_field_kcut)
+    cat_overdensity = (cat_field_kcut_deconvolved - np.mean(cat_field_kcut_deconvolved))/np.mean(cat_field_kcut_deconvolved)
     cat_overdensity /= n_grid_mock**3 
     
     if fn_cat_mesh is not None:
