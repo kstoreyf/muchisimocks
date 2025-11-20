@@ -579,3 +579,80 @@ def figure_of_merit(covs_pred):
     else:
         raise ValueError(f"covs_pred shape {covs_pred.shape} is weird!")
     return foms
+
+
+def remove_highk_modes(field, box_size_mock, n_grid_target):
+    """
+    Remove high-k modes from a field to downsample it to a target grid size.
+    
+    Parameters:
+    -----------
+    field : array_like
+        Input field to filter
+    box_size_mock : float
+        Box size of the mock in Mpc/h
+    n_grid_target : int
+        Target grid size (must be even)
+        
+    Returns:
+    --------
+    field_kcut : ndarray
+        Filtered field with high-k modes removed
+    """
+    import bacco
+    import pyfftw
+    
+    n_grid = field.shape[-1]
+    k_nyq = np.pi/box_size_mock*n_grid_target
+    kmesh = bacco.visualization.np_get_kmesh( (n_grid, n_grid, n_grid), box_size_mock, real=True)
+    mask = (kmesh[:,:,:,0]<=k_nyq) & (kmesh[:,:,:,1]<=k_nyq) & (kmesh[:,:,:,2]<=k_nyq) & (kmesh[:,:,:,0]>-k_nyq) & (kmesh[:,:,:,1]>-k_nyq) & (kmesh[:,:,:,2]>-k_nyq)
+    assert n_grid_target%2==0, "n_grid_target must be even!"
+
+    deltak = pyfftw.builders.rfftn(field, auto_align_input=False, auto_contiguous=False, avoid_copy=True)
+    deltakcut = deltak()[mask]
+    deltakcut= deltakcut.reshape(n_grid_target, n_grid_target, int(n_grid_target/2)+1)
+    field_kcut = pyfftw.builders.irfftn(deltakcut, axes=(0,1,2))()
+        
+    return field_kcut
+
+
+def remove_highk_modes_velocity(velocity_field, box_size, n_grid_target):
+    """
+    Downsample velocity field by removing high-k modes.
+    
+    Parameters:
+    -----------
+    velocity_field : array, shape (3, n_grid, n_grid, n_grid)
+        Velocity field with components [vx, vy, vz]
+    box_size : float
+        Physical size of the box
+    n_grid_target : int
+        Target grid resolution (must be even)
+    
+    Returns:
+    --------
+    velocity_field_kcut : array, shape (3, n_grid_target, n_grid_target, n_grid_target)
+        Downsampled velocity field
+    """
+    import bacco
+    import pyfftw
+    
+    n_grid = velocity_field.shape[-1]
+    k_nyq = np.pi/box_size*n_grid_target
+    kmesh = bacco.visualization.np_get_kmesh((n_grid, n_grid, n_grid), box_size, real=True)
+    mask = (kmesh[:,:,:,0]<=k_nyq) & (kmesh[:,:,:,1]<=k_nyq) & (kmesh[:,:,:,2]<=k_nyq) & \
+           (kmesh[:,:,:,0]>-k_nyq) & (kmesh[:,:,:,1]>-k_nyq) & (kmesh[:,:,:,2]>-k_nyq)
+    
+    velocity_field_kcut = []
+    assert n_grid_target%2==0, "n_grid_target must be even!"
+    
+    for component_id in range(3):  # Loop over vx, vy, vz
+        v_component = velocity_field[component_id]
+        vk = pyfftw.builders.rfftn(v_component, auto_align_input=False, auto_contiguous=False, avoid_copy=True)
+        vk_cut = vk()[mask]
+        vk_cut = vk_cut.reshape(n_grid_target, n_grid_target, int(n_grid_target/2)+1)
+        v_downsampled = pyfftw.builders.irfftn(vk_cut, axes=(0,1,2))()
+        velocity_field_kcut.append(v_downsampled)
+    
+    velocity_field_kcut = np.array(velocity_field_kcut)
+    return velocity_field_kcut

@@ -134,39 +134,6 @@ def round_to_nearest_even(x):
     return int(round(x / 2) * 2)
 
 
-# TODO unify with function in data_creation_pipeline.py
-def remove_highk_modes(field, box_size_mock, n_grid_target):
-    """
-    Remove high-k modes from a field to downsample it to a target grid size.
-    
-    Parameters:
-    -----------
-    field : array_like
-        Input field to filter
-    box_size_mock : float
-        Box size of the mock in Mpc/h
-    n_grid_target : int
-        Target grid size (must be even)
-        
-    Returns:
-    --------
-    field_kcut : ndarray
-        Filtered field with high-k modes removed
-    """
-    n_grid = field.shape[-1]
-    k_nyq = np.pi/box_size_mock*n_grid_target
-    kmesh = bacco.visualization.np_get_kmesh( (n_grid, n_grid, n_grid), box_size_mock, real=True)
-    mask = (kmesh[:,:,:,0]<=k_nyq) & (kmesh[:,:,:,1]<=k_nyq) & (kmesh[:,:,:,2]<=k_nyq) & (kmesh[:,:,:,0]>-k_nyq) & (kmesh[:,:,:,1]>-k_nyq) & (kmesh[:,:,:,2]>-k_nyq)
-    assert n_grid_target%2==0, "n_grid_target must be even!"
-
-    deltak = pyfftw.builders.rfftn(field, auto_align_input=False, auto_contiguous=False, avoid_copy=True)
-    deltakcut = deltak()[mask]
-    deltakcut= deltakcut.reshape(n_grid_target, n_grid_target, int(n_grid_target/2)+1)
-    field_kcut = pyfftw.builders.irfftn(deltakcut, axes=(0,1,2))()
-        
-    return field_kcut
-
-
 def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None, 
                             n_grid_target=128, n_grid_orig=512, box_size_muchisimocks=1000.0, 
                             cosmo=None,
@@ -227,7 +194,7 @@ def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None,
     print(f"High-res mesh shape: {cat_mesh_ngorig.shape}")
     
     # Remove high-k modes to downsample
-    cat_field_kcut = remove_highk_modes(cat_mesh_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
+    cat_field_kcut = utils.remove_highk_modes(cat_mesh_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
     
     # tested in data_creation_pipeline that doing kcut then deconvolve is basically equivalent to deconvolve then kcut,
     # and much faster

@@ -1,7 +1,8 @@
 #!/bin/bash
 #SBATCH --qos=regular
+#SBATCH --job-name=gen_noise_fields
 ##SBATCH --job-name=datagen_p5_n10000_idx1004
-#SBATCH --job-name=datagen_shame
+##SBATCH --job-name=datagen_shame
 ##SBATCH --job-name=gen_noise_fields
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_b1000_p0_n1_quijote_p0_n1000_b1000_p0_n1_samp10000
 ##SBATCH --job-name=run_inf_sbi_p5_n10000_biaszen_p4_n10000_quijote_p0_n1000_biaszen_p4_n1000_nsf_samp10000
@@ -22,7 +23,7 @@
 ##SBATCH --job-name=run_inf_emu_pk_p5_n10000_biaszen_p4_n10000_boxsize1000_nrlzs1_ntrain10000
 #SBATCH --time=4:00:00
 #SBATCH --nodes=1              # nodes per instance
-#SBATCH --gres=gpu:1 		   #gpu only needed for datagen!
+##SBATCH --gres=gpu:1 		   #gpu only needed for datagen!
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=24             # tasks per instance
 #SBATCH --mem=35G 	       # 35 for datagen (30 hit oom)
@@ -61,7 +62,7 @@ conda activate benv
 #echo "idx_LH_start=${idx_LH_start}, idx_LH_end=${idx_LH_end}"
 #python data_creation_pipeline.py ${idx_LH_start} ${idx_LH_end}
 
-python data_creation_pipeline.py
+#python data_creation_pipeline.py
 #python cuda_minimal.py
 #python compute_biased_pks_fields.py
-#python generate_noise_fields.py
+python generate_noise_fields.py

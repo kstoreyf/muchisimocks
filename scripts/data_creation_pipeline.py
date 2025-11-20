@@ -453,7 +453,11 @@ def predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim,
     print(f"TIME for making eulerian fields {tag_bfields}: {timenow-timeprev:.2f} s ({(timenow-timeprev)/60:.2f} min)", flush=True)
 
     print("Cutting k-modes")
-    bias_terms_eul_pred_kcut = remove_highk_modes(bias_terms_eul_pred, box_size, n_grid_target)
+    for bias_term in bias_terms_eul_pred:
+        assert bias_term.shape == (n_grid, n_grid, n_grid), "bias term shape not as expected"
+        bias_term_kcut = utils.remove_highk_modes(bias_term, box_size, n_grid_target)
+        bias_terms_eul_pred_kcut.append(bias_term_kcut)
+    bias_terms_eul_pred_kcut = np.array(bias_terms_eul_pred_kcut)
     timeprev = timenow
     timenow = time.time()
     print(f"TIME for cutting fields to certain kmode {tag_bfields}: {timenow-timeprev:.2f} s ({(timenow-timeprev)/60:.2f} min)", flush=True)
@@ -489,62 +493,6 @@ def deconvolve_bias_field(bias_terms, n_grid_orig):
     bias_terms_eul_deconvolved = np.array(bias_terms_eul_deconvolved)
     return bias_terms_eul_deconvolved
 
-
-def remove_highk_modes(bias_terms_eul_pred, box_size, n_grid_target):
-    n_grid = bias_terms_eul_pred.shape[-1]
-    k_nyq = np.pi/box_size*n_grid_target
-    kmesh = bacco.visualization.np_get_kmesh( (n_grid, n_grid, n_grid), box_size, real=True)
-    mask = (kmesh[:,:,:,0]<=k_nyq) & (kmesh[:,:,:,1]<=k_nyq) & (kmesh[:,:,:,2]<=k_nyq) & (kmesh[:,:,:,0]>-k_nyq) & (kmesh[:,:,:,1]>-k_nyq) & (kmesh[:,:,:,2]>-k_nyq)
-    bias_terms_eul_pred_kcut=[]
-    assert n_grid_target%2==0, "n_grid_target must be even!"
-    for fid in range(5):
-        field = bias_terms_eul_pred[fid]
-        deltak = pyfftw.builders.rfftn(field, auto_align_input=False, auto_contiguous=False, avoid_copy=True)
-        deltakcut = deltak()[mask]
-        deltakcut= deltakcut.reshape(n_grid_target, n_grid_target, int(n_grid_target/2)+1)
-        delta = pyfftw.builders.irfftn(deltakcut, axes=(0,1,2))()
-        bias_terms_eul_pred_kcut.append(delta)
-    bias_terms_eul_pred_kcut = np.array(bias_terms_eul_pred_kcut)
-    return bias_terms_eul_pred_kcut
-
-
-def remove_highk_modes_velocity(velocity_field, box_size, n_grid_target):
-    """
-    Downsample velocity field by removing high-k modes.
-    
-    Parameters:
-    -----------
-    velocity_field : array, shape (3, n_grid, n_grid, n_grid)
-        Velocity field with components [vx, vy, vz]
-    box_size : float
-        Physical size of the box
-    n_grid_target : int
-        Target grid resolution (must be even)
-    
-    Returns:
-    --------
-    velocity_field_kcut : array, shape (3, n_grid_target, n_grid_target, n_grid_target)
-        Downsampled velocity field
-    """
-    n_grid = velocity_field.shape[-1]
-    k_nyq = np.pi/box_size*n_grid_target
-    kmesh = bacco.visualization.np_get_kmesh((n_grid, n_grid, n_grid), box_size, real=True)
-    mask = (kmesh[:,:,:,0]<=k_nyq) & (kmesh[:,:,:,1]<=k_nyq) & (kmesh[:,:,:,2]<=k_nyq) & \
-           (kmesh[:,:,:,0]>-k_nyq) & (kmesh[:,:,:,1]>-k_nyq) & (kmesh[:,:,:,2]>-k_nyq)
-    
-    velocity_field_kcut = []
-    assert n_grid_target%2==0, "n_grid_target must be even!"
-    
-    for component_id in range(3):  # Loop over vx, vy, vz
-        v_component = velocity_field[component_id]
-        vk = pyfftw.builders.rfftn(v_component, auto_align_input=False, auto_contiguous=False, avoid_copy=True)
-        vk_cut = vk()[mask]
-        vk_cut = vk_cut.reshape(n_grid_target, n_grid_target, int(n_grid_target/2)+1)
-        v_downsampled = pyfftw.builders.irfftn(vk_cut, axes=(0,1,2))()
-        velocity_field_kcut.append(v_downsampled)
-    
-    velocity_field_kcut = np.array(velocity_field_kcut)
-    return velocity_field_kcut
 
 
 def fv2bro(t_fv_field) :
