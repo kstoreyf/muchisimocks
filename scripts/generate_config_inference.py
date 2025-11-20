@@ -283,8 +283,8 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n100000' #10x
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
     tag_noise = '_noise_p5_n10000'
-    tag_Anoise = '_An_p1_n10000'
-    #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
+    #tag_Anoise = '_An_p1_n10000'
+    tag_Anoise = '_An1_p0_n1' #fix Anoise=1
     tag_datagen = ''
     #tag_noise = None
     #tag_Anoise = None
@@ -300,7 +300,8 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     idxs_obs = None # if none, all (unless evaluate mean)
     evaluate_mean = False
     data_mode_test = 'shame'
-    tag_mock = '_nbar0.00054' 
+    tag_mock = '_nbar0.00022'
+    #tag_mock = '_nbar0.00054' 
     #tag_mock = '_An1_orig_phase0' 
     
     ### train tags

@@ -37,13 +37,28 @@ def main():
     if idx_mock_end is None:
         idx_mock_end = args.idx_mock_start + 1
     for idx_mock in range(args.idx_mock_start, idx_mock_end):
-        if args.modecosmo == 'lh' or args.modecosmo == 'fisher':
-            run_creation(idx_mock, modecosmo=args.modecosmo, tag_params=args.tag_params)
-        elif args.modecosmo == 'fixed':
-            run_fixedcosmo(idx_mock)
-        else:
-            raise ValueError(f"modecosmo {args.modecosmo} not recognized")
+        # if args.modecosmo == 'lh' or args.modecosmo == 'fisher':
+        #     run_creation(idx_mock, modecosmo=args.modecosmo, tag_params=args.tag_params)
+        # elif args.modecosmo == 'fixed':
+        #     run_fixedcosmo(idx_mock)
+        run_creation(idx_mock, modecosmo=args.modecosmo, tag_params=args.tag_params)
+        #else:
+        #    raise ValueError(f"modecosmo {args.modecosmo} not recognized")
             
+
+def run_fromdict():
+    import data_loader
+    
+    tag_mock = None # cosmo is the same for all shame mocks
+    param_dict = data_loader.load_params_ood('shame', tag_mock)
+    seed = 0
+    idx_mock = 0
+    dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib_ood/shame'
+    run_single(param_dict, seed, idx_mock, dir_mocks,
+               n_grid=512, n_grid_target=128, box_size=1000.,
+               n_threads_bacco=8, n_workers_m2m=0,
+               subdir_prefix='mock')
+
 
 def run_creation(idx_mock, modecosmo='lh', tag_params=None):
     
@@ -59,6 +74,10 @@ def run_creation(idx_mock, modecosmo='lh', tag_params=None):
         #tag_mocks = tag_params + '_rerun'
         seed = idx_mock
         subdir_prefix='LH'
+    elif modecosmo == 'fixed':
+        tag_mocks = tag_params
+        seed = idx_mock
+        subdir_prefix='mock'
     # main for fisher: tag_params = f'_fisher_quijote'
     elif modecosmo == 'fisher':
         assert tag_params is not None, "for modecosmo=fisher, must provide tag_params"
@@ -84,6 +103,7 @@ def run_creation(idx_mock, modecosmo='lh', tag_params=None):
     # Deal with cosmological parameters
     
     # TODO update so can handle fixedcosmo case in this same framework
+    # DOING
     
     dir_params = '../data/params'
     fn_params_orig = f'{dir_params}/params_{modecosmo}{tag_params}.txt'
@@ -91,18 +111,25 @@ def run_creation(idx_mock, modecosmo='lh', tag_params=None):
     # copy parameters to mocks folder to make sure we know which params were used
     fn_params = f'{dir_mocks}/params_{modecosmo}{tag_params}.txt'
     fn_params_fixed = f'{dir_mocks}/params_fixed{tag_params}.txt'
-    if not os.path.exists(fn_params):
-        os.system(f'cp {fn_params_orig} {fn_params}')
+    
+
     if not os.path.exists(fn_params_fixed):
         os.system(f'cp {fn_params_fixed_orig} {fn_params_fixed}')
-    params_df = pd.read_csv(fn_params)
-    # had to remove the index call when added fisher param option, not sure how worked before?
-    #params_df = pd.read_csv(fn_params, index_col=0) 
     param_dict_fixed = pd.read_csv(fn_params_fixed).loc[0].to_dict()
-    print(f"Loaded in params from {fn_params} and {fn_params_fixed}")
-    
-    param_dict = params_df.loc[idx_mock].to_dict()
-    param_dict.update(param_dict_fixed)
+    print(f"Loaded in params from {fn_params_fixed}")
+        
+    if modecosmo == 'fixed':
+        param_dict = param_dict_fixed
+    else:
+        if not os.path.exists(fn_params):
+            os.system(f'cp {fn_params_orig} {fn_params}')
+        params_df = pd.read_csv(fn_params)
+        # had to remove the index call when added fisher param option, not sure how worked before?
+        #params_df = pd.read_csv(fn_params, index_col=0) 
+        print(f"Loaded in params from {fn_params}")
+        param_dict = params_df.loc[idx_mock].to_dict()
+        param_dict.update(param_dict_fixed)
+        
     print("param_dict:", param_dict, flush=True)
     
     run_single(param_dict, seed, idx_mock, dir_mocks,
@@ -110,9 +137,9 @@ def run_creation(idx_mock, modecosmo='lh', tag_params=None):
                n_threads_bacco=n_threads_bacco, n_workers_m2m=n_workers_m2m,
                subdir_prefix=subdir_prefix)
     
-
-def run_fixedcosmo(idx_mock):
     
+### DEPRECATED FUNCTION - use run_creation with modecosmo='fixed' instead
+def run_fixedcosmo(idx_mock):
     print("Setting up", flush=True)
     n_grid = 512
     n_grid_target = 128
@@ -148,7 +175,7 @@ def run_single(param_dict, seed, idx_mock, dir_mocks,
                subdir_prefix='lh'):
     
     deconvolve_lr_field = True
-    run_zspace = True
+    run_zspace = False
     # want to set thee below only in case we really want only parts.
     # otherwise keep true, and logic will be decided by run_zspace
     run_m2m_disp = False
@@ -160,7 +187,7 @@ def run_single(param_dict, seed, idx_mock, dir_mocks,
         run_m2m_vel = True
         
     save_intermeds = False
-    save_hr_field = True
+    save_hr_field = False
     save_vel_field = True
     
     overwrite_m2m_disp = False
@@ -253,7 +280,7 @@ def run_single(param_dict, seed, idx_mock, dir_mocks,
         np.save(fn_ZA_disp, disp_field, allow_pickle=True)
         norm=n_grid**3.
         np.save(fn_lin, sim.linear_field[0]*norm, allow_pickle=True)
-        if run_zspace:
+        if run_m2m_vel:
             #np.save(fn_ZA_vel, sim.sdm['vel'].reshape((-1,n_grid,n_grid,n_grid)), allow_pickle=True)
             # Changed the above line to the following, which corrected the dimension ordering of vel field
             velocities = sim.sdm['vel']
@@ -528,4 +555,5 @@ def fv2bro(t_fv_field) :
 
 if __name__=='__main__':
     main()
+    #run_fromdict()
 

@@ -28,6 +28,8 @@ def main():
     parser.add_argument("-l", "--config-runlike", type=str, help="Path to the runlike YAML configuration file.")
     args = parser.parse_args()
 
+    
+
     # Run training if a training config file is provided
     if args.config_train:
         with open(args.config_train, "r") as file:
@@ -42,7 +44,8 @@ def main():
         if test_config.get("data_mode_test", data_mode_test_default) == "muchisimocks":
             test_likefree_inference(test_config)
         else:
-            test_likefree_inference_ood(test_config)
+            overwrite = True
+            test_likefree_inference_ood(test_config, overwrite=overwrite)
 
     # WARNING not implemented yet !
     if args.config_runlike:

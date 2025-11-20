@@ -25,7 +25,10 @@ def main():
     Main function to process SHAMe catalog and compare with muchisimocks data.
     """
     # Configuration
-    tag_mock = '_An1_deconvolve'
+    tag_mock = '_nbar0.00011'  
+    #tag_mock = '_nbar0.00022'  
+    #tag_mock = '_nbar0.00054'  
+    #tag_mock = '_An1_deconvolve'
     #tag_mock = '_An1_orig'
     if tag_mock=='_An1' or tag_mock=='_An1_deconvolve':
         dir_cat = '../data/shame_catalogues_to_share/kate'
@@ -226,6 +229,8 @@ def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None,
     # Remove high-k modes to downsample
     cat_field_kcut = remove_highk_modes(cat_mesh_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
     
+    # tested in data_creation_pipeline that doing kcut then deconvolve is basically equivalent to deconvolve then kcut,
+    # and much faster
     cat_field_kcut_deconvolved = pb.convolve_linear_interpolation_kernel(cat_field_kcut, 
                                                                         npix=n_grid_orig_mock, mode="deconvolve")
     
