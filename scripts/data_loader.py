@@ -272,7 +272,17 @@ def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
                 kname = 'sigma8_cold'
             param_dict[kname] = v
 
-        param_dict.update({'b1': 0.47409821, 'b2': 0.06306578, 'bs2': -0.17022439, 'bl': -0.83432633}) #(via marcos)
+        # dividing b2 by 2 bc marcos said there is a mismatch in the definition of b2 bw prob bias and hybrid bias
+        if tag_mock == '_nbar0.00011':
+            param_dict.update({'b1': 0.52922445, 'b2': 0.13816352/2, 'bs2': -0.21806094, 'bl': -1.0702721})
+        elif tag_mock == '_nbar0.00022':
+            param_dict.update({'b1': 0.47410742, 'b2': 0.06350746/2, 'bs2': -0.16940883, 'bl': -0.82443643})
+        elif tag_mock == '_nbar0.00054':
+            param_dict.update({'b1': 0.40209658, 'b2': -0.00958755/2, 'bs2': -0.09669132, 'bl': -0.79150708})
+        else:
+            raise ValueError(f"tag_mock {tag_mock} not recognized for shame OOD data!")
+        #
+        # param_dict.update({'b1': 0.47409821, 'b2': 0.06306578, 'bs2': -0.17022439, 'bl': -0.83432633}) #(via marcos)
 
         return param_dict
     else:

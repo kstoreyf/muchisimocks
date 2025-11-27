@@ -656,3 +656,8 @@ def remove_highk_modes_velocity(velocity_field, box_size, n_grid_target):
     
     velocity_field_kcut = np.array(velocity_field_kcut)
     return velocity_field_kcut
+
+
+def round_to_nearest_even(x):
+    """Round a number to the nearest even integer (needed for FFTs)."""
+    return int(round(x / 2) * 2)
