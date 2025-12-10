@@ -865,6 +865,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
 
     # Main processing loop - cleaner structure
     for idx_LH in idxs_LH:
+        #print(f"idx_LH={idx_LH}")
         cosmology_results = _process_single_cosmology(
             idx_LH, statistic, stat_name, mode_precomputed, dir_statistics,
             params_df, biasparams_df, biasparams_dict_fixed,

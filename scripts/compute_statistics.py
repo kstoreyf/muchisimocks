@@ -36,7 +36,7 @@ def parse_args():
     parser.add_argument('--tag_noise', type=str, default=None,
                         help='Tag for noise fields')
     parser.add_argument('--tag_Anoise', type=str, default=None,
-                        help='Tag for noise fields')
+                        help='Tag for noise parameter set')
     parser.add_argument('--idx_mock_start', type=int,
                         help='Index of the LH realization to start')
     parser.add_argument('--idx_mock_end', type=int,
@@ -70,12 +70,23 @@ def parse_args():
         
     print(args.idx_mock_start, args.idx_mock_end)
     for idx_mock in range(args.idx_mock_start, args.idx_mock_end):
-        print(idx_mock)
+        #print(idx_mock)
         run(statistic, idx_mock,
             tag_params=tag_params, tag_biasparams=tag_biasparams,
             tag_noise=tag_noise, tag_Anoise=tag_Anoise,
             n_threads=n_threads, overwrite=overwrite, 
             base_bispec=base)
+        # try:
+        #     run(statistic, idx_mock,
+        #     tag_params=tag_params, tag_biasparams=tag_biasparams,
+        #     tag_noise=tag_noise, tag_Anoise=tag_Anoise,
+        #     n_threads=n_threads, overwrite=overwrite, 
+        #     base_bispec=base)
+        # except Exception as e:
+        #     print(f"Failed to compute statistic for idx_mock={idx_mock}: {e}")
+        #     print("Continuing to next index...")
+        #     continue
+        
         
 
 def run_loop():
@@ -231,52 +242,59 @@ def run(statistic, idx_mock,
 
     # Main computation loop
     for i, fn_statistic in enumerate(files_to_compute):
-        print(f"Computing {statistic} for idx_mock={idx_mock}, fn_statistic={fn_statistic}", flush=True)
         
-        idx_bias = idxs_bias_to_compute[i]
-        idx_noise = idxs_noise_to_compute[i]
-
-        if statistic == 'pnn':
-            start = time.time()
+        try: 
+            print(f"Computing {statistic} for idx_mock={idx_mock}, fn_statistic={fn_statistic}", flush=True)
             
-            bias_terms_eul = get_bias_fields(fn_fields)
-            power_all_terms = compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
-                                                    n_threads=n_threads)
-            end = time.time()
-            print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+            idx_bias = idxs_bias_to_compute[i]
+            idx_noise = idxs_noise_to_compute[i]
+
+            if statistic == 'pnn':
+                start = time.time()
+                
+                bias_terms_eul = get_bias_fields(fn_fields)
+                power_all_terms = compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
+                                                        n_threads=n_threads)
+                end = time.time()
+                print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+                
+            elif statistic == 'pk':
+                start = time.time()
+
+                tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
+                                        biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed,
+                                        n_grid_orig)
+                compute_pk(tracer_field, cosmo, box_size,
+                                        n_threads=n_threads, fn_stat=fn_statistic)
+                end = time.time()
+                print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+
+            elif statistic == 'pklin':
+                # note: doesn't use the muchisimocks data! just takes the seed and 
+                # makes a linear sim w bacco, then computes its pk
+                start = time.time()
+                compute_pk_linear(idx_mock, cosmo, box_size, n_grid_orig,
+                                        n_threads=n_threads, fn_stat=fn_statistic)
+                end = time.time()
+                print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+
+            elif statistic == 'bispec':
+                                
+                start = time.time()
+
+                assert base_bispec is not None, "base_bispec must be provided for bispectrum computation"
+                tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
+                                        biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed,
+                                        n_grid_orig)
+                compute_bispectrum(base_bispec, tracer_field, fn_stat=fn_statistic)
             
-        elif statistic == 'pk':
-            start = time.time()
-
-            tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
-                                    biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed,
-                                    n_grid_orig)
-            compute_pk(tracer_field, cosmo, box_size,
-                                    n_threads=n_threads, fn_stat=fn_statistic)
-            end = time.time()
-            print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
-
-        elif statistic == 'pklin':
-            # note: doesn't use the muchisimocks data! just takes the seed and 
-            # makes a linear sim w bacco, then computes its pk
-            start = time.time()
-            compute_pk_linear(idx_mock, cosmo, box_size, n_grid_orig,
-                                    n_threads=n_threads, fn_stat=fn_statistic)
-            end = time.time()
-            print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
-
-        elif statistic == 'bispec':
-                            
-            start = time.time()
-
-            assert base_bispec is not None, "base_bispec must be provided for bispectrum computation"
-            tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
-                                    biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed,
-                                    n_grid_orig)
-            compute_bispectrum(base_bispec, tracer_field, fn_stat=fn_statistic)
-        
-            end = time.time()
-            print(f"Computed {statistic} for idx_mock={idx_mock}, idx_bias={idx_bias} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+                end = time.time()
+                print(f"Computed {statistic} for idx_mock={idx_mock}, idx_bias={idx_bias} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+        except Exception as e:
+            print(f"Failed to compute {statistic} for idx_mock={idx_mock}, fn_statistic={fn_statistic}: {e}")
+            print("cleaning up and continuing to next statistic...")
+            Path(fn_statistic).unlink(missing_ok=True)
+            continue
             
     end_tot = time.time()
     print(f"Total time to compute {statistic}(s) for idx_mock={idx_mock} in time {end_tot-start_tot:.2f} s", flush=True)
@@ -284,8 +302,11 @@ def run(statistic, idx_mock,
 
 def get_bias_fields(fn_fields):
     # Load the bias fields from the file
+    print("Getting bias fields")
+    print(fn_fields)
     try:
         bias_terms_eul = np.load(fn_fields)
+        print(bias_terms_eul.shape)
     except FileNotFoundError:
         print(f"File {fn_fields} not found, exiting")
         return None
@@ -318,7 +339,8 @@ def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, 
             A_noise_dict = Anoise_dict_fixed.copy()
             if Anoise_df is not None:
                 A_noise_dict.update(Anoise_df.loc[idx_noise].to_dict())
-            A_noise = A_noise_dict['A_noise']      
+            # A_noise is now a vector
+            A_noise = [A_noise_dict[npm] for npm in utils.noiseparam_names_ordered]  
     else:
         noise_field = None
         A_noise = None

@@ -94,6 +94,8 @@ cosmo_param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryo
 biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl'] 
 param_names_all_ordered = cosmo_param_names_ordered + biasparam_names_ordered
 
+noiseparam_names_ordered = ['An_homog', 'An_b1', 'An_b2', 'An_bs2', 'An_bl']
+
 statistics_scaler_funcs = {'pk': 'log_minmax',
                            'bispec': 'minmax',
                           }
@@ -451,7 +453,16 @@ def get_tracer_field(bias_fields_eul, bias_vector,
         if noise_field.shape != tracer_field_eul.shape:
             raise ValueError(f"Noise field shape {noise_field.shape} does not match tracer field shape {tracer_field_eul.shape}")
         # noise field should already be normalized 
-        tracer_field_eul_norm += A_noise * noise_field
+        # additive noise
+        #tracer_field_eul_norm += A_noise * noise_field
+        # multiplicative noise, as in Rubira & Schmidt 2025
+        # for now assuming A_noise is a single number
+        assert len(A_noise)==len(bias_fields_eul), "A_noise must have same length as bias fields (5)"
+        tracer_field_noise = np.sum([bias_fields_eul[ii] * A_noise[ii] * noise_field
+                                    for ii in range(len(bias_fields_eul))], axis=0) 
+        tracer_field_noise /= n_grid_norm**3 
+        #tracer_field_noise = bias_fields_eul[0] * A_noise * noise_field / n_grid_norm**3
+        tracer_field_eul_norm += tracer_field_noise 
     
     return tracer_field_eul_norm
 

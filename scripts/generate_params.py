@@ -47,9 +47,10 @@ def generate_params_LH():
     
     ### noise
     bounds_type = 'Anoise'
-    n_params_vary = 1
-    tag_bounds = '_An'
-    # n_params_vary = 0
+    #n_params_vary = 1
+    #tag_bounds = '_An'
+    tag_bounds = '_Anmult'
+    n_params_vary = 2
     # tag_bounds = '_An1'    
     
     if bounds_type == 'cosmo':
@@ -62,7 +63,7 @@ def generate_params_LH():
         param_names_vary = param_names_vary[:n_params_vary]
         param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(tag_bounds=tag_bounds)
     elif bounds_type == 'Anoise':
-        param_names_vary = ['A_noise']
+        param_names_vary = ['An_homog', 'An_b1', 'An_b2', 'An_bs2', 'An_bl']
         param_names_vary = param_names_vary[:n_params_vary]
         param_names_ordered, bounds_dict, fiducial_dict = define_LH_Anoise(tag_bounds=tag_bounds)
     else:
@@ -270,14 +271,30 @@ def define_LH_Anoise(tag_bounds=''):
     Define the parameter space for the noise field amplitude.
     """
     
-    bounds_dict = {'A_noise': [0.0, 2.0]}
-    
-    fiducial_dict = {'A_noise': 1.0}
-    
+    if tag_bounds == '_An':
+        bounds_dict = {'A_noise': [0.0, 2.0]}
+        fiducial_dict = {'A_noise': 1.0}
+    elif tag_bounds == '_Anmult':
+        # same as b1
+        bounds_dict = {'An_homog':  [0.0, 2.0],
+                       'An_b1'   :  [0.0, 2.0],
+                       'An_b2'   :  [0.0, 2.0],
+                       'An_bs2'  :  [0.0, 2.0],
+                       'An_bl'   :  [0.0, 2.0],
+                      }
+        fiducial_dict = {'An_homog':  1.0,
+                         'An_b1'   :  0.0,
+                         'An_b2'   :  0.0,
+                         'An_bs2'  :  0.0,
+                         'An_bl'   :  0.0,
+                        }
+    else:
+        raise ValueError(f'Unknown tag_bounds {tag_bounds}')
+
     if 'test' in tag_bounds:
         bounds_dict = restrict_bounds(bounds_dict, factor=0.05)
     
-    return ['A_noise'], bounds_dict, fiducial_dict
+    return utils.noiseparam_names_ordered, bounds_dict, fiducial_dict
 
 
 def restrict_bounds(bounds_dict, factor=0.05):

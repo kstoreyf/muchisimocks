@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --qos=regular
 ##SBATCH --job-name=datagen_test_p5_n1000_vel_step100
-#SBATCH --job-name=datagen_quijote_p0_n1000_vel_step100
+##SBATCH --job-name=datagen_quijote_p0_n1000_vel_step100
 ##SBATCH --job-name=datagen_p5_n10000_vel_step100_round2
 ##SBATCH --job-name=datagen_fixedcosmo_step10
 ##SBATCH --job-name=datagen_fisher_quijote_step3
@@ -10,17 +10,17 @@
 ##SBATCH --job-name=bispec_p5_n10000_biaszen_p4_n200000_step100
 ##SBATCH --job-name=pk_noise_quijote_p0_n1000_step100
 ##SBATCH --job-name=pk_noise_p5_n10000_step100
-##SBATCH --job-name=pk_noise_test_p5_n1000_step100
+#SBATCH --job-name=pk_Anmult_p2_test_p5_n1000_step100
 ##SBATCH --job-name=pklin_quijote_p0_n1000_step100
 ##SBATCH --job-name=bispec_quijote_p0_n1000_b1000_p0_n1_step100
 ##SBATCH --job-name=bispec_quijote_p0_n1000_b1000_p0_n1_noise_quijote_p0_n1000_An1_p0_n1_step100
 ##SBATCH --job-name=bispec_test_p5_n1000_biaszen_p4_n1000_noise_test_p5_n1000_An_p1_n1000_step100
 ##SBATCH --job-name=bispec_p5_n10000_biaszen_p4_n200000_noise_p5_n10000_An1_p0_n1_step100
 ##SBATCH --time=0:10:00 # time per task, but doing Nsteps; ~10s for bispec 
-##SBATCH --time=8:00:00 # time per task, but doing Nsteps; for 20000 (most), use 8h to be safe. lower, 1h fine
-#SBATCH --time=24:00:00 #datagen
+#SBATCH --time=8:00:00 # time per task, but doing Nsteps; for 20000 (most), use 8h to be safe. lower, 1h fine
+##SBATCH --time=24:00:00 #datagen
 #SBATCH --nodes=1              # nodes per instance
-#SBATCH --gres=gpu:1  #gpu for datagen; off for bispec
+##SBATCH --gres=gpu:1  #gpu for datagen; off for bispec
 #SBATCH --cpus-per-task=1
 ##SBATCH --cpus-per-task=24
 ##SBATCH --ntasks=1             # tasks per instance
@@ -30,14 +30,14 @@
 ##(Y-X)*step_size = total you want to run
 ##SBATCH --array=0-99%20 # for 10000 training set
 ##SBATCH --array=0-9 # for 1000 test set / quijote
-#SBATCH --array=1-9 
+##SBATCH --array=1-9 
 ##SBATCH --array=0-99%5
-##SBATCH --array=0-0
+#SBATCH --array=0-0
 ##SBATCH --array=0-9 # for 1000 test sets
 ##SBATCH --array=0-2%3
 ##SBATCH --array=99-99
-#SBATCH --mem=35G # got OOM for 30 for datagen	     
-##SBATCH --mem=2G # 2G for bispectrum, 1G too low
+##SBATCH --mem=35G # got OOM for 30 for datagen	     
+#SBATCH --mem=2G # 2G for bispectrum, 1G too low
 #SBATCH --output=logs/%x-%a.out
 
 
@@ -68,7 +68,7 @@ echo "idx_mock_start=${idx_mock_start}, idx_mock_end=${idx_mock_end}"
 
 #python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --tag_params '_p5_n10000'
 #python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --tag_params '_test_p5_n1000'
-python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fixed --tag_params '_quijote_p0_n1000'
+#python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fixed --tag_params '_quijote_p0_n1000'
 #python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fixed
 #python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fisher --tag_params='_fisher_quijote'
 #python cuda_minimal.py
@@ -101,3 +101,7 @@ python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo f
 #python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1 --tag_noise _noise_quijote_p0_n1000 --tag_Anoise _An1_p0_n1
 # coverage
 #python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _test_p5_n1000 --tag_biasparams _biaszen_p4_n1000 --tag_noise _noise_test_p5_n1000 --tag_Anoise _An_p1_n1000
+
+### noisy - mult
+# coverage
+python compute_statistics.py --statistic pk --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _test_p5_n1000 --tag_biasparams _biaszen_p4_n1000 --tag_noise _noise_unit_test_p5_n1000 --tag_Anoise _Anmult_p2_n1000

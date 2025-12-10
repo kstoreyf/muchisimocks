@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --qos=regular
-#SBATCH --job-name=gen_noise_fields
+#SBATCH --job-name=gen_noise_unit_fields
 ##SBATCH --job-name=datagen_p5_n10000_idx1004
 ##SBATCH --job-name=datagen_shame
 ##SBATCH --job-name=gen_noise_fields
@@ -26,7 +26,9 @@
 ##SBATCH --gres=gpu:1 		   #gpu only needed for datagen!
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=24             # tasks per instance
+##SBATCH --ntasks=4             # tasks per instance
 #SBATCH --mem=35G 	       # 35 for datagen (30 hit oom)
+##SBATCH --mem=3G 	       
 #SBATCH --output=logs/%x.out
 
 

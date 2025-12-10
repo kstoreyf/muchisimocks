@@ -1,8 +1,10 @@
 from fileinput import filename
+import gc
 import numpy as np
 import pandas as pd
 from pathlib import Path
 import re
+import time
 
 import bacco
 
@@ -12,8 +14,20 @@ import utils
 def main():
     
     #tag_noise = '_noise_quijote_p0_n1000'
-    tag_noise = '_noise_p5_n10000_advected'
-    #tag_noise = '_noise_test_p5_n1000'
+    #tag_noise = '_noise_p5_n10000'
+    #tag_noise = '_noise_p5_n10000_advected'
+    tag_params = '_p5_n10000'
+    #tag_params = '_test_p5_n1000'
+    #tag_params = '_quijote_p0_n1000'
+    tag_noise = f'_noise_unit{tag_params}'
+    
+    seed_base_dict = {
+        '_noise_unit_p5_n10000': 0,
+        '_noise_unit_quijote_p0_n1000': 10000,
+        '_noise_unit_test_p5_n1000': 20000,
+    }
+    seed_base = seed_base_dict[tag_noise]
+    
     overwrite = False
 
     pattern = r'n(\d+)'
@@ -23,13 +37,14 @@ def main():
         n_fields = int(match.group(1))
     else:
         raise ValueError(f"Pattern '{pattern}' not found in tag '{tag_noise}'")
-    
+    #n_fields = 1
+     
     dir_noise = f'/scratch/kstoreyf/muchisimocks/data/noise_fields/fields{tag_noise}'
     Path(dir_noise).mkdir(parents=True, exist_ok=True)
-
+    
     #make_noise_fields(n_fields, dir_noise, overwrite=overwrite)
-    n_fields = 1
-    make_noise_fields_advected(n_fields, dir_noise, overwrite=overwrite)
+    #make_noise_fields_advected(n_fields, dir_noise, overwrite=overwrite)
+    make_noise_fields_unit(n_fields, dir_noise, seed_base, overwrite=overwrite)
 
 
 def make_noise_fields(n_fields, dir_noise, overwrite=False):
@@ -46,6 +61,9 @@ def make_noise_fields(n_fields, dir_noise, overwrite=False):
     cell_volume = cell_size**3
     rms_cell = 1 / np.sqrt(nbar * cell_volume)
     
+    # TODO should have put rng inside the loop with different seed for each field. 
+    # doing properly for gaussian case; fix if end up using this function
+    print("ALERT fix rng seeding as mentioned in comment if using this function", flush=True)
     rng = np.random.default_rng(seed=42)
     for i in range(n_fields):
         
@@ -62,7 +80,8 @@ def make_noise_fields(n_fields, dir_noise, overwrite=False):
         else:
             np.save(fn_noise, noise_field)
             #print(f"Saved noise field {i}/{n_fields} to {fn_noise}")
-
+    
+    print(f"Generated {n_fields} noise fields in {dir_noise}")
 
 
 def make_noise_fields_advected(n_fields, dir_noise, overwrite=False):
@@ -125,6 +144,38 @@ def make_noise_fields_advected(n_fields, dir_noise, overwrite=False):
             #print(f"Saved noise field {i}/{n_fields} to {fn_noise}")
 
 
+def make_noise_fields_unit(n_fields, dir_noise, seed_base, overwrite=False):
+
+    print(f"Generating n_fields={n_fields} unit noise fields in {dir_noise}")
+    n_grid = 128
+    failed_count = 0
+    
+    for i in range(n_fields):
+        
+        fn_noise = f"{dir_noise}/noise_field_n{i}.npy"
+        if Path(fn_noise).exists() and not overwrite:
+            continue
+            
+        if i % 100 == 0:
+            print(f"Generating noise field {i}/{n_fields} (Failed: {failed_count})")
+        
+        rng = np.random.default_rng(seed=seed_base+i)
+        noise_field = rng.standard_normal((n_grid, n_grid, n_grid))
+        
+        # having io issues; just running many times and it eventually fills them all in
+        try:
+            np.save(fn_noise, noise_field)
+            print(f"Saved noise field {i}/{n_fields} to {fn_noise}")
+        except (OSError, IOError) as e:
+            print(f"I/O ERROR field {i}: {e} - SKIPPING")
+            failed_count += 1
+            # Remove partial file if it exists
+            Path(fn_noise).unlink(missing_ok=True)
+            continue
+
+    print(f"Completed with {failed_count} failed saves")
+        
+        
 
 def gen_noise_field(nbar_fid, n_grid, box_size, seed):
     cell_size = box_size / n_grid  # Mpc/h per cell
