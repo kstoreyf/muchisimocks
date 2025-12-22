@@ -170,6 +170,8 @@ def run(statistic, idx_mock,
 
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, _, _ = \
         data_loader.load_params(tag_params, tag_biasparams, tag_Anoise)
+    print('tag_Anoise =',tag_Anoise)
+    print(len(Anoise_df) if Anoise_df is not None else "Anoise_df is None", flush=True)
 
     if tag_params is not None:  
         if 'p0' in tag_params or 'fisher' in tag_params:
@@ -291,10 +293,11 @@ def run(statistic, idx_mock,
                 end = time.time()
                 print(f"Computed {statistic} for idx_mock={idx_mock}, idx_bias={idx_bias} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
         except Exception as e:
-            print(f"Failed to compute {statistic} for idx_mock={idx_mock}, fn_statistic={fn_statistic}: {e}")
-            print("cleaning up and continuing to next statistic...")
-            Path(fn_statistic).unlink(missing_ok=True)
-            continue
+            raise e
+            #print(f"Failed to compute {statistic} for idx_mock={idx_mock}, fn_statistic={fn_statistic}: {e}")
+            #print("cleaning up and continuing to next statistic...")
+            #Path(fn_statistic).unlink(missing_ok=True)
+            #continue
             
     end_tot = time.time()
     print(f"Total time to compute {statistic}(s) for idx_mock={idx_mock} in time {end_tot-start_tot:.2f} s", flush=True)
@@ -316,6 +319,11 @@ def get_bias_fields(fn_fields):
 
 def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, biasparams_dict_fixed, 
                       Anoise_df, Anoise_dict_fixed, n_grid_orig):
+    
+    print("make_tracer_field")
+    print(fn_fields)
+    print(idx_bias, idx_noise)
+    print(tag_noise)
     
     if tag_noise is not None:
         # Check if idx_noise is None when we need it

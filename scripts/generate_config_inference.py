@@ -44,9 +44,10 @@ def generate_train_config(dir_config='../configs/configs_train',
     #tag_biasparams = '_biaszen_p4_n50000' #5 bias params per cosmo
     #tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
-    tag_noise = '_noise_p5_n10000'
+    tag_noise = '_noise_unit_p5_n10000'
     #tag_Anoise = '_An_p1_n10000'
-    tag_Anoise = '_An1_p0_n1' #fix Anoise=1
+    #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
+    tag_Anoise = '_Anmult_p5_n10000'
     
     # emu-specific
     n_rlzs_per_cosmo = 1
@@ -140,11 +141,12 @@ def generate_test_config(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n50000' #5x
     #tag_biasparams = '_biaszen_p4_n100000' #10x
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
-    #tag_noise = '_noise_p5_n10000'
+    tag_noise = '_noise_unit_p5_n10000'
     #tag_Anoise = '_An_p1_n10000'
     #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
-    tag_noise = None
-    tag_Anoise = None
+    tag_Anoise = '_Anmult_p2_n10000'
+    #tag_noise = None
+    #tag_Anoise = None
 
     n_rlzs_per_cosmo = 1
     # For loading a model trained with wandb sweep; best of that sweep will be used
@@ -160,10 +162,10 @@ def generate_test_config(dir_config='../configs/configs_test',
     evaluate_mean = True
     tag_params_test = '_quijote_p0_n1000'
     tag_biasparams_test = '_b1000_p0_n1'
-    tag_noise_test = None
-    tag_Anoise_test = None
-    #tag_noise_test = '_noise_quijote_p0_n1000'
-    #tag_Anoise_test = '_An1_p0_n1'
+    # tag_noise_test = None
+    # tag_Anoise_test = None
+    tag_noise_test = '_noise_unit_quijote_p0_n1000'
+    tag_Anoise_test = '_Anmult_p0_n1'
     ## settings for coverage test
     # evaluate_mean = False
     # tag_params_test = '_test_p5_n1000'
@@ -282,9 +284,10 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n50000' #5x
     #tag_biasparams = '_biaszen_p4_n100000' #10x
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
-    tag_noise = '_noise_p5_n10000'
+    tag_noise = '_noise_unit_p5_n10000'
+    tag_Anoise = '_Anmult_p5_n10000'
     #tag_Anoise = '_An_p1_n10000'
-    tag_Anoise = '_An1_p0_n1' #fix Anoise=1
+    #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
     tag_datagen = ''
     #tag_noise = None
     #tag_Anoise = None

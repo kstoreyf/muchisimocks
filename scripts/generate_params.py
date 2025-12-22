@@ -23,7 +23,8 @@ def generate_params_LH():
 
     # Run this by uncommenting the part you want; not pretty, I know
 
-    n_samples = 1000
+    n_samples = 1
+    #n_samples = 10000
     #n_samples = 1000000 #100x
     #n_samples = 50000 #5x
     #n_samples = 200000 #20x
@@ -50,7 +51,7 @@ def generate_params_LH():
     #n_params_vary = 1
     #tag_bounds = '_An'
     tag_bounds = '_Anmult'
-    n_params_vary = 2
+    n_params_vary = 0
     # tag_bounds = '_An1'    
     
     if bounds_type == 'cosmo':
@@ -274,7 +275,7 @@ def define_LH_Anoise(tag_bounds=''):
     if tag_bounds == '_An':
         bounds_dict = {'A_noise': [0.0, 2.0]}
         fiducial_dict = {'A_noise': 1.0}
-    elif tag_bounds == '_Anmult':
+    elif '_Anmult' in tag_bounds:
         # same as b1
         bounds_dict = {'An_homog':  [0.0, 2.0],
                        'An_b1'   :  [0.0, 2.0],

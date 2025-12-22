@@ -37,7 +37,7 @@ def main():
         n_fields = int(match.group(1))
     else:
         raise ValueError(f"Pattern '{pattern}' not found in tag '{tag_noise}'")
-    #n_fields = 1
+    n_fields = 1
      
     dir_noise = f'/scratch/kstoreyf/muchisimocks/data/noise_fields/fields{tag_noise}'
     Path(dir_noise).mkdir(parents=True, exist_ok=True)
