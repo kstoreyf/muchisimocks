@@ -20,8 +20,8 @@ def main():
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
     for statistics in stat_arr:
         for n_train in n_train_arr:
-            #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
             generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
     #generate_runlike_config(overwrite=overwrite)
     
@@ -47,7 +47,8 @@ def generate_train_config(dir_config='../configs/configs_train',
     tag_noise = '_noise_unit_p5_n10000'
     #tag_Anoise = '_An_p1_n10000'
     #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
-    tag_Anoise = '_Anmult_p5_n10000'
+    tag_Anoise = '_Anmult_p5_n200000'
+    #tag_Anoise = '_Anmult_p5_n10000'
     
     # emu-specific
     n_rlzs_per_cosmo = 1
@@ -144,7 +145,8 @@ def generate_test_config(dir_config='../configs/configs_test',
     tag_noise = '_noise_unit_p5_n10000'
     #tag_Anoise = '_An_p1_n10000'
     #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
-    tag_Anoise = '_Anmult_p2_n10000'
+    #tag_Anoise = '_Anmult_p2_n10000'
+    tag_Anoise = '_Anmult_p5_n200000'
     #tag_noise = None
     #tag_Anoise = None
 
@@ -285,7 +287,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n100000' #10x
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
     tag_noise = '_noise_unit_p5_n10000'
-    tag_Anoise = '_Anmult_p5_n10000'
+    tag_Anoise = '_Anmult_p5_n200000'
     #tag_Anoise = '_An_p1_n10000'
     #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
     tag_datagen = ''

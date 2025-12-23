@@ -19,10 +19,11 @@ for n_train in "${n_train_arr[@]}"; do
     for tag_stats in "${tag_stats_arr[@]}"; do
         ### TRAINING ###
         tag_params="_p5_n10000"
-        tag_biasparams="_biaszen_p4_n10000"  
-        #tag_biasparams="_biaszen_p4_n200000"  
+        #tag_biasparams="_biaszen_p4_n10000"  
+        tag_biasparams="_biaszen_p4_n200000"  
         tag_noise="_noise_unit_p5_n10000"
-        tag_Anoise="_Anmult_p5_n10000"
+        tag_Anoise="_Anmult_p2_n200000"
+        #tag_Anoise="_Anmult_p2_n10000"
         #tag_Anoise="_An_p1_n10000" # free Anoise
         #tag_Anoise="_An1_p0_n1" # fix Anoise=1
         ## no noise
@@ -49,15 +50,15 @@ for n_train in "${n_train_arr[@]}"; do
         ### no noise
         # tag_noise_test=""
         # tag_Anoise_test=""
-
         ### Muchisimocks test set 
         config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}_TEST_muchisimocks${tag_stats}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_Anoise_test}${tag_mean}.yaml"
+
         ### OOD test set
-        # data_mode="shame"
+        # data_mode="shame" 
         # tag_mock="_nbar0.00022"
         # #tag_mock="_nbar0.00054"
         # config_test_file="../configs/configs_test/config_TRAIN_muchisimocks${tag_stats}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}_ntrain${n_train}_TEST_${data_mode}${tag_stats}${tag_mock}.yaml"
-        ### no test
+        ## no test
         #config_test_file="none"
 
         # Determine job name logic
@@ -80,10 +81,10 @@ for n_train in "${n_train_arr[@]}"; do
 #SBATCH --qos=regular
 #SBATCH --job-name=${job_name}
 #SBATCH --output=logs/${job_name}.out
-##SBATCH --time=24:00:00 #24h for testing on coverage test set (24h is max time limit; some dont converge)
+##SBATCH --time=0:20:00 # quick tests (e.g. shame)
 ##SBATCH --time=1:00:00 #1h for testing on cosmic var test set or single OOD
-##SBATCH --time=4:00:00 #2h for training -> 4 in case
-#SBATCH --time=0:20:00 # quick tests (e.g. shame)
+#SBATCH --time=4:00:00 #2h for training -> 4 in case
+##SBATCH --time=24:00:00 #24h for testing on coverage test set (24h is max time limit; some dont converge)
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=40G #40gb for both training and testing (30 failed one time)

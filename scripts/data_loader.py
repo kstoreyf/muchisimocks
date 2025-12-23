@@ -832,8 +832,9 @@ def _process_precomputed_cosmology(idx_LH, statistic, dir_statistics,
     
     for i, fn_stat in enumerate(fns_statistics):
         if not os.path.exists(fn_stat):
-            print(f"WARNING: Missing {fn_stat}, skipping")
-            continue
+            #print(f"WARNING: Missing {fn_stat}, skipping")
+            #continue
+            raise FileNotFoundError(f"Statistic file {fn_stat} not found!")
             
         idx_bias = idxs_bias[i] if idxs_bias is not None else None
         idx_noise = idxs_noise[i] if idxs_noise is not None else None
@@ -893,8 +894,9 @@ def _process_pnn_cosmology(idx_LH, statistic, stat_name, dir_statistics,
     # Load the single pnn file for this cosmology
     fn_pnn = f"{dir_statistics}/{stat_name}_{idx_LH}.npy"
     if not os.path.exists(fn_pnn):
-        print(f"WARNING: Missing {fn_pnn}, skipping cosmology")
-        return None
+        #print(f"WARNING: Missing {fn_pnn}, skipping cosmology")
+        #return None
+        raise FileNotFoundError(f"PNN file {fn_pnn} not found!")
     
     pnn_obj = np.load(fn_pnn, allow_pickle=True)
     k = pnn_obj[0]['k']
