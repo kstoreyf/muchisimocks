@@ -272,6 +272,9 @@ def define_LH_Anoise(tag_bounds=''):
     Define the parameter space for the noise field amplitude.
     """
     
+    if tag_bounds is None:
+        return [], {}, {}
+    
     if tag_bounds == '_An':
         bounds_dict = {'A_noise': [0.0, 2.0]}
         fiducial_dict = {'A_noise': 1.0}
