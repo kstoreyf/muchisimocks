@@ -205,11 +205,15 @@ def check_df_lengths(params_df, biasparams_df):
 def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
     if statistic == 'pk':
         mask = get_Pk_mask(tag_data, tag_mask=tag_mask, k=k, Pk=y)
+    elif statistic == 'bispec':
+        print(k.shape, y.shape)
+        mask = get_bispec_mask(tag_data, tag_mask=tag_mask, k=k, bispec=y)
     else:
         print("No mask for this statistic, using all data")
         mask = [True]*y.shape[-1]
         mask = np.array(mask)
-    print(f"Masked {np.sum(~np.array(mask))} out of {len(mask)} bins")
+    print(f"Masked {np.sum(~np.array(mask).astype(bool))} out of {len(mask)} bins")
+    mask = mask.astype(bool)
     if k.ndim == 1:
         k_masked = k[mask]
     elif k.ndim == 2:
@@ -224,6 +228,73 @@ def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
         return k_masked, y[:,mask], y_err[:,mask]
     else:
         raise ValueError(f"Unexpected y shape: {y.shape}")
+
+
+# TODO make mask saving more robust
+# used to both remove nonpositive data, and to select certain k_bins
+def get_Pk_mask(tag_data, tag_mask='', k=None, Pk=None):
+    dir_masks = '../data/masks'
+    # if tag_mask is None:
+    #     tag_mask = ''
+    # need tag_data bc we're checking for any negatives and that depends on the data!
+    fn_mask = f'{dir_masks}/mask_pk{tag_data}{tag_mask}.txt'
+    print(f"fn_mask: {fn_mask}")
+    if os.path.exists(fn_mask):
+        print(f"Loading from {fn_mask} (already exists)")
+        return np.loadtxt(fn_mask, dtype=bool)
+    else:
+        assert k is not None, "must pass either Pk or k, if mask doesn't yet exist!"
+        
+        # Start with base mask: keep positive values if Pk provided, otherwise keep all
+        if Pk is not None:
+            mask = np.all(Pk > 0, axis=0)
+        else:
+            print("No Pk provided and no mask exists, using all bins")
+            mask = np.ones(len(k), dtype=bool)
+        # Apply kmax cutoff if specified
+        if 'kmaxpk' in tag_mask:
+            match = re.search(r'kmaxpk([\d.]+)', tag_mask)
+            if match:
+                kmax = float(match.group(1))
+                mask = mask & (k < kmax)
+            else:
+                raise ValueError(f"Could not extract kmax value from tag_mask: {tag_mask}")
+        
+        print(f"Saving mask to {fn_mask}")
+        np.savetxt(fn_mask, mask.astype(int), fmt='%i')
+    print(f"Mask masks out {np.sum(~mask)} Pk bins")
+    return mask
+
+
+def get_bispec_mask(tag_data, tag_mask='', k=None, bispec=None):
+    dir_masks = '../data/masks'
+    #fn_mask = f'{dir_masks}/mask{tag_data}{tag_mask}.txt'
+    fn_mask = f'{dir_masks}/mask_bispec{tag_data}{tag_mask}.txt'
+    if tag_data is None:
+        return np.ones(k.shape[1], dtype=int)
+    print(f"fn_mask: {fn_mask}")
+    if os.path.exists(fn_mask):
+        print(f"Loading from {fn_mask} (already exists)")
+        return np.loadtxt(fn_mask, dtype=bool)
+    else:
+        if 'kmaxbispec' in tag_data:
+            match = re.search(r'kmaxbispec([\d.]+)', tag_data)
+            if match:
+                kmax = float(match.group(1))
+            else:
+                raise ValueError(f"Could not extract kmax value from tag_data: {tag_data}")
+            # print(kmax)
+            # print(np.array(k).T)
+            mask = np.all(np.array(k).T<kmax, axis=1)
+        else:
+            assert k is not None, "must pass k, if mask doesn't yet exist!"
+            print(f"No mask exists for {tag_data} and can't interpret it, using all bins")
+            mask = np.ones(k.shape[1], dtype=int)
+        print(f"Saving mask to {fn_mask}")
+        np.savetxt(fn_mask, mask.astype(int), fmt='%i')
+    print(f"Mask masks out {np.sum(~mask.astype(bool))} bispec bins")
+    return mask
+
 
 def load_params(tag_params=None, tag_biasparams=None,
                 tag_Anoise=None,
@@ -569,27 +640,6 @@ def load_data_emu(statistic, tag_params, tag_biasparams, tag_errG='', tag_datage
 
     return k, Pk, gaussian_error_pk, idxs_params
 
-
-# TODO make mask saving more robust
-# used to both remove nonpositive data, and to select certain k_bins
-def get_Pk_mask(tag_data, tag_mask='', k=None, Pk=None):
-    dir_masks = '../data/masks'
-    fn_mask = f'{dir_masks}/mask{tag_data}{tag_mask}.txt'
-    print(f"fn_mask: {fn_mask}")
-    if os.path.exists(fn_mask):
-        print(f"Loading from {fn_mask} (already exists)")
-        return np.loadtxt(fn_mask, dtype=bool)
-    else:
-        if Pk is not None:
-            mask = np.all(Pk>0, axis=0)
-        else:
-            assert k is not None, "must pass either Pk or k, if mask doesn't yet exist!"
-            print("No Pk provided and no mask exists, using all bins")
-            mask = np.ones(len(k), dtype=int)
-        print(f"Saving mask to {fn_mask}")
-        np.savetxt(fn_mask, mask.astype(int), fmt='%i')
-    print(f"Mask masks out {np.sum(~mask)} Pk bins")
-    return mask
 
 
 # NOT CURRENTLY USED
