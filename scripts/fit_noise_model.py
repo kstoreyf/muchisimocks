@@ -109,7 +109,7 @@ def create_data_config(data_mode_test='shame', tag_mock='_nbar0.00022', idx_mock
     }
 
 
-def load_test_data(data_config: dict):
+def load_fit_data(data_config: dict):
     """Load test data (OOD mock)."""
     statistics = data_config['statistics']
     # Build tag_data for masking: '_' + data_mode + tag_mask + tag_stats + tag_params + tag_biasparams
@@ -119,6 +119,13 @@ def load_test_data(data_config: dict):
     k_mock, y_mock, y_err_mock = data_loader.load_data_ood(
         data_config['data_mode_test'], statistics, data_config['tag_mock'], tag_data=tag_data
     )
+    
+    # Get masks from fit data
+    k_bispec_mock = k_mock[statistics.index('bispec')]
+    y_bispec_mock = y_mock[statistics.index('bispec')]
+    
+    mask_pk = data_loader.get_Pk_mask(tag_data)
+    mask_bispec = data_loader.get_bispec_mask(tag_data, k=k_bispec_mock, bispec=y_bispec_mock)
     
     fn_fields = (f'{data_config["dir_mocks"]}/{data_config["subdir_prefix"]}{data_config["idx_mock"]}/'
                  f'bias_fields_eul_deconvolved_{data_config["idx_mock"]}.npy')
@@ -143,6 +150,8 @@ def load_test_data(data_config: dict):
         'k_mock': k_mock,
         'y_mock': y_mock,
         'y_err_mock': y_err_mock,
+        'mask_pk': mask_pk,
+        'mask_bispec': mask_bispec,
         'bias_terms_eul': bias_terms_eul,
         'cosmo': cosmo,
         'noise_field_unit': noise_field_unit,
@@ -170,13 +179,16 @@ def load_training_data_for_errors(data_config: dict):
         tag_data=tag_data, kwargs=kwargs_data
     )
     
-    mask_pk = data_loader.get_Pk_mask(tag_data, tag_mask=tag_mask)
+    mask_pk = data_loader.get_Pk_mask(tag_data)
     
     # Unpack statistics
     k_pk = k_arr[statistics.index('pk')]
     y_pk = y_arr[statistics.index('pk')]
     k_bispec = k_arr[statistics.index('bispec')]
     y_bispec = y_arr[statistics.index('bispec')]
+    
+    # Get bispectrum mask (needs k and bispec data)
+    mask_bispec = data_loader.get_bispec_mask(tag_data, k=k_bispec, bispec=y_bispec)
     
     # Compute error estimates from percentiles
     pk_mean = np.mean(y_pk, axis=0)
@@ -191,12 +203,13 @@ def load_training_data_for_errors(data_config: dict):
     
     return {
         'mask_pk': mask_pk,
+        'mask_bispec': mask_bispec,
         'pk_err': pk_err,
         'bispec_err': bispec_err,
     }
 
 
-def fit_noise_parameters(pk_obs, bk_obs, pk_err, bk_err, mask_pk, bias_terms_eul, 
+def fit_noise_parameters(pk_obs, bk_obs, pk_err, bk_err, mask_pk, mask_bispec, bias_terms_eul, 
                              tracer_field_noiseless, noise_field_unit, cosmo, box_size, n_grid,
                          n_grid_orig, base_bispec, fit_config: dict):
     """
@@ -214,6 +227,8 @@ def fit_noise_parameters(pk_obs, bk_obs, pk_err, bk_err, mask_pk, bias_terms_eul
         Bispectrum error estimates
     mask_pk : array
         Mask for power spectrum k-bins
+    mask_bispec : array
+        Mask for bispectrum k-bins
     bias_terms_eul : array
         Eulerian bias terms
     tracer_field_noiseless : array
@@ -284,7 +299,7 @@ def fit_noise_parameters(pk_obs, bk_obs, pk_err, bk_err, mask_pk, bias_terms_eul
         
         if fit_config['use_pk'] and pk_obj is not None:
             pk_model = pk_obj['pk']
-            diff = (pk_model[mask_pk] - pk_obs[mask_pk])**2 / pk_err**2
+            diff = (pk_model[mask_pk] - pk_obs)**2 / pk_err**2
             chi2 += np.sum(diff)
         
         if fit_config['use_bk'] and bk_corr is not None:
@@ -292,7 +307,7 @@ def fit_noise_parameters(pk_obs, bk_obs, pk_err, bk_err, mask_pk, bias_terms_eul
             weight = k123.prod(axis=0)
             norm = n_grid**3
             bk_model = norm**3 * weight * bk_corr['b0']
-            diff = (bk_model - bk_obs)**2 / bk_err**2
+            diff = (bk_model[mask_bispec] - bk_obs)**2 / bk_err**2
             chi2 += np.sum(diff)
         
         print(f"params_vary: {params_vary}, chi2: {chi2:.6f}")
@@ -466,7 +481,7 @@ def main(data_config: dict, fit_config: dict, save_output: bool = True):
     dict : Fitting results
     """
     print("Loading test data...")
-    test_data = load_test_data(data_config)
+    test_data = load_fit_data(data_config)
     
     print("Loading training data for error estimates...")
     error_data = load_training_data_for_errors(data_config)
@@ -477,7 +492,8 @@ def main(data_config: dict, fit_config: dict, save_output: bool = True):
             bk_obs=test_data['y_mock'][1],
             pk_err=error_data['pk_err'],
             bk_err=error_data['bispec_err'],
-            mask_pk=error_data['mask_pk'],
+            mask_pk=test_data['mask_pk'],
+            mask_bispec=test_data['mask_bispec'],
             bias_terms_eul=test_data['bias_terms_eul'],
             tracer_field_noiseless=test_data['tracer_field_noiseless'],
             noise_field_unit=test_data['noise_field_unit'],
@@ -534,16 +550,16 @@ if __name__ == '__main__':
         # initial_params=np.array([0.25, 0.25, 0.25, 0.25, 2.5]),
         # idxs_Anoise_vary=[0, 1],
         # initial_params=np.array([0.25, 0.25]),
-        #idxs_Anoise_vary=[0, 1, 5, 6],
-        #initial_params=np.array([0.25, 0.25, 0.25, 0.25]),
+        idxs_Anoise_vary=[0, 1, 5, 6],
+        initial_params=np.array([0.25, 0.25, 0.25, 0.25]),
         #initial_params=np.array([1.28836744, 0.05393767, 0.1, 0.1]),
         # idxs_Anoise_vary=[0, 1, 4, 5, 6, 9],
         # initial_params=np.array([0.25, 0.25, 2.5, 0.25, 0.25, 2.5]),
         # idxs_Anoise_vary=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         # initial_params=np.array([0.25, 0.25, 0.25, 0.25, 2.5, 0.25, 0.25, 0.25, 0.25, 2.5]),
-        idxs_Anoise_vary=[0, 3, 4, 5, 9],
-        initial_params=np.array([1.0, 0.25, 2.5, 0.25, 2.5]),
-        config_name='A_noise_TNC'
+        # idxs_Anoise_vary=[0, 3, 4, 5, 9],
+        # initial_params=np.array([1.0, 0.25, 2.5, 0.25, 2.5]),
+        config_name='A_noise_kmaxbispec0.2_TNC'
     )
     
     # Data configuration

@@ -31,6 +31,7 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
             print("No tag_data provided, so not masking data")
         else:
             k_i, y_i, y_err_i = mask_data(statistic, tag_data, k_i, y_i, y_err_i)
+            print(k_i.shape, y_i.shape, y_err_i.shape)
 
         k.append(k_i)
         y.append(y_i)
@@ -221,7 +222,6 @@ def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
     else:
         raise ValueError(f"Unexpected k shape: {k.shape}")
     
-    print(k_masked.shape, y.shape, y_err.shape, mask.shape)
     if y.ndim == 1:
         return k_masked, y[mask], y_err[mask]
     elif y.ndim == 2:

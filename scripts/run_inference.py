@@ -298,6 +298,7 @@ def test_likefree_inference_ood(config, overwrite=False):
     
     print(statistics, tag_params, tag_biasparams)
                 
+    # tag_data_train goes to mask, NOTE this could be structured more clearly...
     k, y, y_err = data_loader.load_data_ood(data_mode_test, statistics, tag_mock, tag_data=tag_data_train)
 
     param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams, tag_Anoise=tag_Anoise)

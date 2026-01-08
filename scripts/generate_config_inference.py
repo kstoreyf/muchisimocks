@@ -12,7 +12,7 @@ def main():
     overwrite = False
     #overwrite = True
     #generate_train_config(overwrite=overwrite)
-    stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
+    stat_arr = [['bispec'], ['pk', 'bispec']]
     #stat_arr = [['pk']]
     #stat_arr = [['bispec']]
     n_train_arr = [10000]
@@ -49,6 +49,7 @@ def generate_train_config(dir_config='../configs/configs_train',
     #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
     tag_Anoise = '_Anmult_p5_n200000'
     #tag_Anoise = '_Anmult_p5_n10000'
+    tag_mask = '_kmaxbispec0.3'
     
     # emu-specific
     n_rlzs_per_cosmo = 1
@@ -75,7 +76,7 @@ def generate_train_config(dir_config='../configs/configs_train',
 
     tag_stats = f'_{"_".join(statistics)}'    
     tag_paramsall = tag_params + tag_biasparams + tag_noise + tag_Anoise
-    tag_data = '_'+data_mode + tag_stats + tag_paramsall + tag_datagen
+    tag_data = '_'+data_mode + tag_stats + tag_mask + tag_paramsall + tag_datagen
     
     # build tag
     tag_inf = tag_data
@@ -100,6 +101,7 @@ def generate_train_config(dir_config='../configs/configs_train',
         "tag_biasparams": tag_biasparams,
         "tag_noise": tag_noise,
         "tag_Anoise": tag_Anoise,
+        "tag_mask": tag_mask,
         "n_train": n_train,
         "kwargs_data": kwargs_data,
         "run_mode": run_mode,
@@ -149,6 +151,7 @@ def generate_test_config(dir_config='../configs/configs_test',
     tag_Anoise = '_Anmult_p5_n200000'
     #tag_noise = None
     #tag_Anoise = None
+    tag_mask = '_kmaxbispec0.3'
 
     n_rlzs_per_cosmo = 1
     # For loading a model trained with wandb sweep; best of that sweep will be used
@@ -202,15 +205,17 @@ def generate_test_config(dir_config='../configs/configs_test',
     # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
     tag_stats = f'_{"_".join(statistics)}'    
     
+    # NOTE for now just using one tag_mask for train & test bc i think they must be the same
+    # but keep alert in case i need to change this later
     tag_paramsall = tag_params + tag_biasparams
     if tag_noise is not None:
         tag_paramsall += tag_noise + tag_Anoise
-    tag_data_train = '_'+data_mode + tag_stats + tag_paramsall + tag_datagen
+    tag_data_train = '_'+data_mode + tag_stats + tag_mask + tag_paramsall + tag_datagen
     
     tag_paramsall_test = tag_params_test + tag_biasparams_test
     if tag_noise_test is not None:
         tag_paramsall_test += tag_noise_test + tag_Anoise_test
-    tag_data_test = '_'+data_mode + tag_stats + tag_paramsall_test + tag_datagen_test + tag_noiseless
+    tag_data_test = '_'+data_mode + tag_stats + tag_mask + tag_paramsall_test + tag_datagen_test + tag_noiseless
 
     # build tag
     tag_inf_train = tag_data_train
@@ -237,6 +242,7 @@ def generate_test_config(dir_config='../configs/configs_test',
         "tag_biasparams": tag_biasparams,
         "tag_noise": tag_noise,
         "tag_Anoise": tag_Anoise,
+        "tag_mask": tag_mask,
         "tag_params_test": tag_params_test,
         "tag_biasparams_test": tag_biasparams_test,
         "tag_noise_test": tag_noise_test,
@@ -293,6 +299,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     tag_datagen = ''
     #tag_noise = None
     #tag_Anoise = None
+    tag_mask = '_kmaxbispec0.3'
 
     n_rlzs_per_cosmo = 1
     # For loading a model trained with wandb sweep; best of that sweep will be used
@@ -316,7 +323,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     tag_paramsall = tag_params + tag_biasparams
     if tag_noise is not None:
         tag_paramsall += tag_noise + tag_Anoise
-    tag_data_train = '_'+data_mode + tag_stats + tag_paramsall + tag_datagen
+    tag_data_train = '_'+data_mode + tag_stats + tag_mask + tag_paramsall + tag_datagen
 
     # build tag
     tag_inf_train = tag_data_train
@@ -330,7 +337,9 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
         sweep_name = None
     
     ### test tags
-    tag_data_test = '_'+data_mode_test + tag_stats + tag_mock
+    # NOTE for now just using one tag_mask for train & test bc i think they must be the same
+    # but keep alert in case i need to change this later
+    tag_data_test = '_'+data_mode_test + tag_stats + tag_mask + tag_mock
     
     if evaluate_mean:
         tag_mean = '_mean'
@@ -346,6 +355,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
         "tag_biasparams": tag_biasparams,
         "tag_noise": tag_noise,
         "tag_Anoise": tag_Anoise,
+        "tag_mask": tag_mask,
         "n_train": n_train,
         "evaluate_mean": evaluate_mean,
         "idxs_obs": idxs_obs,
