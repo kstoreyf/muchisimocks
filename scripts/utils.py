@@ -22,6 +22,7 @@ param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
                 'An_b2': r'$A_\mathrm{noise}^{b_2}$',
                 'An_bs2': r'$A_\mathrm{noise}^{bs_2}$',
                 'An_bl': r'$A_\mathrm{noise}^{\Delta}$',
+                'sigma8xb1': r'$\sigma_8 \times b_1$',
                 }
 
 color_dict_methods = {'mn': 'blue',

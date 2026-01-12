@@ -143,6 +143,7 @@ def plot_dists_mean_subplots(
             if np.all(np.isnan(fracdiffs[:, pp])):
                 continue
             data = fracdiffs[:, pp][~np.isnan(fracdiffs[:, pp])]
+            
             if not xlim_auto:
                 mean = 0
                 i_good = ~np.isnan(fracdiffs_arr[:, :, pp])
@@ -191,6 +192,8 @@ def plot_dists_mean_subplots(
 
     plt.tight_layout()
     plt.show()
+
+    return fracdiffs_arr
 
 
 
@@ -662,6 +665,219 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     # Don't return the figure to avoid duplicate display in notebooks
     plt.show()
     return None
+
+
+def plot_contours_inf_reparam(param_names, idx_obs, theta_obs_true,
+                      inf_methods, tags_inf, tags_test=None,
+                      colors=None, labels=None,
+                      figsize=(7,7),
+                      extents={}, title=None, reparameterize=False,
+                      params_show_reparameterize=None):
+    if title is None:
+        title = f'test model {idx_obs}'
+    
+    if reparameterize:
+        assert 'sigma8_cold' in param_names, "reparameterize=True requires 'sigma8_cold' in param_names"
+        assert 'b1' in param_names, "reparameterize=True requires 'b1' in param_names"
+        if params_show_reparameterize is not None:
+            assert params_show_reparameterize == ['sigma8xb1', 'sigma8_cold'] or params_show_reparameterize == ['sigma8xb1', 'b1'], \
+                "params_show_reparameterize must be either ['sigma8xb1', 'sigma8_cold'] or ['sigma8xb1', 'b1']"
+            assert params_show_reparameterize[0] == 'sigma8xb1', "sigma8xb1 must be first in params_show_reparameterize"
+    
+    # Get all chains and their available parameters
+    all_chains_data = []
+    all_param_names_per_chain = []
+    
+    for i, inf_method in enumerate(inf_methods):
+        if tags_test is None:
+            tag_test = ''
+        else:
+            tag_test = tags_test[i]
+        samples, param_names_samples = utils.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
+        
+        # Check which requested parameters are available in this chain
+        available_params = [pn for pn in param_names if pn in param_names_samples]
+        
+        if len(available_params) == 0:
+            print(f"Warning: No requested parameters found in chain for method {inf_method}, tag {tags_inf[i]}. Skipping.")
+            continue
+            
+        all_chains_data.append({
+            'samples': samples,
+            'param_names_samples': param_names_samples,
+            'available_params': available_params,
+            'inf_method': inf_method,
+            'label': labels[i] if labels is not None else None,
+            'color': colors[i] if colors is not None else None
+        })
+        all_param_names_per_chain.append(available_params)
+    
+    if len(all_chains_data) == 0:
+        print("Error: No valid chains found.")
+        return
+    
+    # Find which parameters are available in at least one chain
+    param_names_any_available = []
+    for pn in param_names:
+        if any(pn in chain_params for chain_params in all_param_names_per_chain):
+            param_names_any_available.append(pn)
+    
+    if len(param_names_any_available) == 0:
+        print("Error: No requested parameters found in any chains.")
+        return
+        
+    if len(param_names_any_available) < len(param_names):
+        missing_params = [pn for pn in param_names if pn not in param_names_any_available]
+        print(f"Warning: Parameters {missing_params} not found in any chains. Plotting only: {param_names_any_available}")
+    
+    # Handle reparameterization: insert sigma8xb1 at appropriate position, keep all other parameters in original order
+    if reparameterize:
+        # Remove the parameter that's NOT being shown (between sigma8_cold and b1)
+        if params_show_reparameterize is not None:
+            if 'sigma8_cold' in params_show_reparameterize:
+                # Showing sigma8xb1 and sigma8_cold, so remove b1
+                if 'b1' in param_names_any_available:
+                    param_names_any_available.remove('b1')
+            elif 'b1' in params_show_reparameterize:
+                # Showing sigma8xb1 and b1, so remove sigma8_cold
+                if 'sigma8_cold' in param_names_any_available:
+                    param_names_any_available.remove('sigma8_cold')
+        else:
+            # Default: remove b1 (replaced by sigma8xb1)
+            if 'b1' in param_names_any_available:
+                param_names_any_available.remove('b1')
+        
+        # Insert sigma8xb1 at the appropriate position
+        if 'sigma8xb1' not in param_names_any_available:
+            if params_show_reparameterize is not None:
+                if 'sigma8_cold' in params_show_reparameterize and 'sigma8_cold' in param_names_any_available:
+                    # Insert after sigma8_cold
+                    idx = param_names_any_available.index('sigma8_cold')
+                    param_names_any_available.insert(idx + 1, 'sigma8xb1')
+                elif 'b1' in params_show_reparameterize and 'b1' in param_names_any_available:
+                    # Insert before b1
+                    idx = param_names_any_available.index('b1')
+                    param_names_any_available.insert(idx, 'sigma8xb1')
+                else:
+                    # Fallback: insert at the beginning
+                    param_names_any_available.insert(0, 'sigma8xb1')
+            else:
+                # Default: insert before where b1 was (which we just removed)
+                # Since b1 is removed, insert where sigma8_cold is (after it)
+                if 'sigma8_cold' in param_names_any_available:
+                    idx = param_names_any_available.index('sigma8_cold')
+                    param_names_any_available.insert(idx + 1, 'sigma8xb1')
+                else:
+                    param_names_any_available.insert(0, 'sigma8xb1')
+    
+    # Create chains for chainconsumer - only include chains that have at least one parameter
+    import chainconsumer
+    c = chainconsumer.ChainConsumer()
+    
+    for chain_data in all_chains_data:
+        # Build list of parameters to include for this chain
+        available_in_this_chain = []
+        for pn in param_names_any_available:
+            if pn == 'sigma8xb1':
+                # Only include sigma8xb1 if we can compute it (both sigma8_cold and b1 available)
+                if reparameterize and 'sigma8_cold' in chain_data['available_params'] and 'b1' in chain_data['available_params']:
+                    available_in_this_chain.append(pn)
+            else:
+                # Include other parameters if available in the chain
+                if pn in chain_data['available_params']:
+                    available_in_this_chain.append(pn)
+        
+        if len(available_in_this_chain) == 0:
+            continue
+            
+        # Extract samples for available parameters, maintaining original order
+        samples_dict = {}
+        for pn in available_in_this_chain:
+            if reparameterize and pn == 'sigma8xb1':
+                # Compute sigma8xb1 from sigma8_cold and b1
+                i_sigma8 = list(chain_data['param_names_samples']).index('sigma8_cold')
+                i_b1 = list(chain_data['param_names_samples']).index('b1')
+                sigma8_samples = chain_data['samples'][:, i_sigma8]
+                b1_samples = chain_data['samples'][:, i_b1]
+                samples_dict[pn] = sigma8_samples * b1_samples
+            else:
+                # Regular parameter extraction
+                i_pn = list(chain_data['param_names_samples']).index(pn)
+                samples_dict[pn] = chain_data['samples'][:, i_pn]
+        
+        samples_df = pd.DataFrame(samples_dict)
+        
+        # Get color and smoothing settings
+        color = chain_data['color']
+        if color is None:
+            color = utils.color_dict_methods[chain_data['inf_method']]
+        
+        # smooth = smooth_dict[chain_data['inf_method']]
+        # bins = bins_dict[chain_data['inf_method']]
+        smooth = 4
+        bins = 8
+        
+        c.add_chain(chainconsumer.Chain(
+            samples=samples_df,
+            name=chain_data['label'],
+            color=color,
+            smooth=smooth,
+            bins=bins,
+            #plot_cloud=True,
+            plot_cloud=False,
+        ))
+
+    # Set up plot configuration
+    c.set_plot_config(
+        chainconsumer.PlotConfig(
+            flip=True,
+            labels=utils.param_label_dict,
+            #contour_label_font_size=12,
+            summary_font_size=0,
+            extents=extents,
+            legend_kwargs={'bbox_to_anchor': (1.05, 1.0), 
+                           'fontsize':18}
+        )
+    )
+
+    # c.set_override(
+    #     chainconsumer.ChainConfig(
+    #         shade_alpha=1.0,
+    #         sigmas=[0,1,2],
+    #         shade_gradient=1.0,
+    #         plot_cloud=True,
+    #     )
+    # )
+    
+    # Create truth location for available parameters only
+    truth_loc = {}
+    for pn in param_names_any_available:
+        if reparameterize and pn == 'sigma8xb1':
+            # Compute sigma8xb1 from truth values
+            idx_sigma8 = param_names.index('sigma8_cold')
+            idx_b1 = param_names.index('b1')
+            if idx_sigma8 < len(theta_obs_true) and idx_b1 < len(theta_obs_true):
+                truth_loc[pn] = theta_obs_true[idx_sigma8] * theta_obs_true[idx_b1]
+        elif pn in param_names:
+            param_idx = param_names.index(pn)
+            if param_idx < len(theta_obs_true):
+                truth_loc[pn] = theta_obs_true[param_idx]
+            else:
+                print(f"Warning: Parameter {pn} (index {param_idx}) not found in theta_obs_true (length {len(theta_obs_true)}). Skipping truth value.")
+    
+    c.add_truth(chainconsumer.Truth(location=truth_loc))
+
+    # Plot - ChainConsumer will automatically show all parameters that appear in any chain
+    # and leave subplots blank for parameter combinations where data is missing
+    fig = c.plotter.plot(figsize=figsize)
+    if title is not None:
+        fig.suptitle(title, fontsize=16)
+    
+    # Don't return the figure to avoid duplicate display in notebooks
+    plt.show()
+    return None
+     
+    
     
  # for backwards compatibility
 def plot_overdensity_field(tracer_field, normalize=False, vmax=None, 
