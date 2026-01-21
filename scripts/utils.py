@@ -216,6 +216,7 @@ def get_samples(idx_obs, inf_method, tag_inf, tag_test='', tag_obs=None):
 def get_moments_test_sbi(tag_inf, tag_test='', param_names=None):
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
+    print(f"fn_samples_test_pred = {fn_samples_test_pred}")
     samples_arr = np.load(fn_samples_test_pred)
 
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'

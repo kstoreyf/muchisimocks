@@ -196,6 +196,143 @@ def plot_dists_mean_subplots(
     return fracdiffs_arr
 
 
+def plot_comp_mean_subplots(
+    theta_pred_arr, theta_true_arr, covs_pred_arr, param_names, param_names_plot=None, param_label_dict=None,
+    n_rows=None, n_cols=None, label_arr=None,
+    color_arr=['salmon'], alpha=0.5,
+    title=None, N_plot=None,
+):
+    """
+    Plot predicted vs true parameter values for selected parameters in subplots.
+    Includes vertical error bars on predictions and a 1:1 line.
+
+    Args:
+        theta_pred_arr: Predicted parameter values (array).
+        theta_true_arr: True parameter values (array).
+        covs_pred_arr: Covariance matrices for predictions (array).
+        param_names: List of parameter names (for indexing).
+        param_names_plot: List of parameter names to show (subset of param_names).
+        param_label_dict: Dict mapping param_names to labels.
+        n_rows: Number of subplot rows.
+        n_cols: Number of subplot columns.
+        label_arr: List of labels for each set of predictions.
+        color_arr: List of colors for each set of predictions.
+        alpha: Alpha for scatter points.
+        title: Overall figure title.
+        N_plot: If provided, randomly sample this many points to plot (per dataset).
+    """
+    if theta_pred_arr.ndim == 2:
+        theta_pred_arr = np.array([theta_pred_arr])
+        theta_true_arr = np.array([theta_true_arr])
+        covs_pred_arr = np.array([covs_pred_arr])
+    n_params = theta_pred_arr.shape[-1]
+
+    if param_names_plot is None:
+        param_names_plot = param_names
+    idxs_plot = [param_names.index(pn) for pn in param_names_plot]
+    param_labels = [param_label_dict[pn] for pn in param_names_plot]
+
+    if label_arr is None:
+        label_arr = [None] * len(theta_pred_arr)
+    if color_arr is None:
+        color_arr = ['salmon'] * len(theta_pred_arr)
+
+    if n_cols is None and n_rows is None:
+        n_cols = len(param_names_plot)
+        n_rows = 1
+    row_height = 3 if title is None else 3.5
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, row_height*n_rows))
+    axes = np.array(axes).reshape(-1)  # Flatten in case axes is 2D
+
+    # Collect legend handles and labels from the first subplot
+    legend_handles = []
+    legend_labels = []
+
+    for ax_idx, pp in enumerate(idxs_plot):
+        ax = axes[ax_idx]
+        ax.set_title(rf'{param_labels[ax_idx]}', fontsize=22)
+        
+        for i in range(len(theta_pred_arr)):
+            pred_vals = theta_pred_arr[i][:, pp]
+            true_vals = theta_true_arr[i][:, pp]
+            
+            # Extract errors for this parameter
+            errs = []
+            for cc, cov_pred in enumerate(covs_pred_arr[i]):
+                err = np.sqrt(np.diag(cov_pred))
+                errs.append(err[pp])
+            errs = np.array(errs)
+            
+            # Filter out NaN values
+            mask = ~(np.isnan(pred_vals) | np.isnan(true_vals) | np.isnan(errs))
+            pred_vals_clean = pred_vals[mask]
+            true_vals_clean = true_vals[mask]
+            errs_clean = errs[mask]
+            
+            if len(pred_vals_clean) == 0:
+                continue
+            
+            # Randomly sample N_plot points if requested
+            if N_plot is not None and len(pred_vals_clean) > N_plot:
+                indices = np.random.choice(len(pred_vals_clean), size=N_plot, replace=False)
+                pred_vals_clean = pred_vals_clean[indices]
+                true_vals_clean = true_vals_clean[indices]
+                errs_clean = errs_clean[indices]
+            
+            label = label_arr[i] if label_arr is not None else None
+            
+            # Plot with error bars
+            lines = ax.errorbar(true_vals_clean, pred_vals_clean, yerr=errs_clean,
+                       fmt='o', color=color_arr[i], label=label, alpha=alpha,
+                       markersize=3, capsize=2, capthick=1)
+            
+            # Collect legend handles from first subplot only
+            if ax_idx == 0 and label is not None:
+                # errorbar returns (line, caplines, barlinecols), we want the line
+                legend_handles.append(lines[0])
+                legend_labels.append(label)
+        
+        # Add 1:1 line
+        # Determine axis limits from data
+        all_true = []
+        all_pred = []
+        for i in range(len(theta_pred_arr)):
+            pred_vals = theta_pred_arr[i][:, pp]
+            true_vals = theta_true_arr[i][:, pp]
+            mask = ~(np.isnan(pred_vals) | np.isnan(true_vals))
+            all_true.extend(true_vals[mask])
+            all_pred.extend(pred_vals[mask])
+        
+        if len(all_true) > 0 and len(all_pred) > 0:
+            min_val = min(np.min(all_true), np.min(all_pred))
+            max_val = max(np.max(all_true), np.max(all_pred))
+            line_11, = ax.plot([min_val, max_val], [min_val, max_val], 'k--', lw=1.5, alpha=0.7, label='1:1' if ax_idx == 0 else None)
+            if ax_idx == 0:
+                legend_handles.append(line_11)
+                legend_labels.append('1:1')
+        
+        ax.set_xlabel(rf'True {param_labels[ax_idx]}', fontsize=14)
+        ax.set_ylabel(rf'Predicted {param_labels[ax_idx]}', fontsize=14)
+        ax.set_aspect('equal', adjustable='box')
+
+    # Hide unused axes
+    for ax in axes[len(idxs_plot):]:
+        ax.axis('off')
+
+    # Place legend outside the plotting area on the right side
+    if legend_handles and legend_labels:
+        fig.legend(legend_handles, legend_labels, fontsize=10, 
+                  bbox_to_anchor=(1.02, 0.5), loc='center left')
+
+    # Set overall figure title if provided
+    if title is not None:
+        fig.suptitle(title, fontsize=16, y=0.9)
+
+    plt.tight_layout()
+    plt.show()
+
+    return None
+
 
 def plot_hists_var(theta_true_arr, theta_pred_arr, var_pred_arr, param_labels,
                    label_arr=None, color_arr=None, n_bins=20, xlim_auto=True,

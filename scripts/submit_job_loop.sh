@@ -4,11 +4,11 @@
 #n_train_arr=(500 1000 2000 4000 6000 8000 10000)
 n_train_arr=(10000)
 #n_train_arr=(500 1000 2000 4000 6000 8000)
-tag_stats_arr=("_pk" "_bispec" "_pk_bispec") 
+#tag_stats_arr=("_pk" "_bispec" "_pk_bispec") 
 #tag_stats_arr=("_pk" "_bispec") 
 #tag_stats_arr=("_bispec" "_pk_bispec") 
 #tag_stats_arr=("_pk") 
-#tag_stats_arr=("_bispec") 
+tag_stats_arr=("_bispec") 
 #tag_stats_arr=("_pk_bispec")
 
 for n_train in "${n_train_arr[@]}"; do
@@ -19,13 +19,13 @@ for n_train in "${n_train_arr[@]}"; do
         tag_biasparams="_biaszen_p4_n200000"  
         # tag_noise="_noise_unit_p5_n10000"
         # tag_Anoise="_Anmult_p5_n200000"
-        tag_noise="_noise_unit_p5_n10000"
-        tag_Anoise="_Anmult_p5_n200000"
+        #tag_noise="_noise_unit_p5_n10000"
+        #tag_Anoise="_Anmult_p5_n200000"
         #tag_Anoise="_An_p1_n10000" # free Anoise
         #tag_Anoise="_An1_p0_n1" # fix Anoise=1
         ## no noise
-        # tag_noise=""
-        # tag_Anoise=""   
+        tag_noise=""
+        tag_Anoise=""   
         #tag_mask=""
         #tag_mask="_kmaxbispec0.25"
         tag_mask=""
@@ -46,11 +46,11 @@ for n_train in "${n_train_arr[@]}"; do
         tag_params_test="_test_p5_n1000"
         tag_biasparams_test="_biaszen_p4_n1000"
         tag_mean=""
-        tag_noise_test="_noise_unit_test_p5_n1000"
-        tag_Anoise_test="_Anmult_p5_n1000"
+        #tag_noise_test="_noise_unit_test_p5_n1000"
+        #tag_Anoise_test="_Anmult_p5_n1000"
         ### no noise
-        # tag_noise_test=""
-        # tag_Anoise_test=""
+        tag_noise_test=""
+        tag_Anoise_test=""
         ### Muchisimocks test set 
         tag_data_test="muchisimocks${tag_stats}${tag_mask}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_Anoise_test}${tag_mean}"
         config_test_file="../configs/configs_test/config_TRAIN_${tag_data_train}_TEST_${tag_data_test}.yaml"
