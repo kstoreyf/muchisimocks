@@ -93,40 +93,64 @@ def get_idxs_params(tag_params, tag_biasparams, tag_Anoise=None, n_bias_per_cosm
     biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
     
     n_cosmo_params = len(params_df)
-    n_biasparams = len(biasparams_df)
-    factor = n_biasparams // n_cosmo_params
-    if n_biasparams % n_cosmo_params != 0:
-        raise ValueError(f"biasparams_df length ({n_biasparams}) is not an integer multiple of params_df length ({n_cosmo_params})")
+    
+    # Handle case when biasparams_df is None (fixed bias params)
+    if biasparams_df is None:
+        factor = 1  # One bias parameter set per cosmology (fixed)
+    else:
+        n_biasparams = len(biasparams_df)
+        factor = n_biasparams // n_cosmo_params
+        if n_biasparams % n_cosmo_params != 0:
+            raise ValueError(f"biasparams_df length ({n_biasparams}) is not an integer multiple of params_df length ({n_cosmo_params})")
 
     idxs_params = []
     for idx_mock in params_df.index:
         if modecosmo == 'lh':
-            start_idx = idx_mock * factor
-            end_idx = (idx_mock + 1) * factor
-            for idx_bias in range(start_idx, end_idx):
-                # In most cases, noise index follows bias index pattern
+            if biasparams_df is None:
+                # Fixed bias params: use idx_bias = 0 for all cosmologies
+                idx_bias = 0
                 if tag_Anoise is not None and 'p0' not in tag_Anoise:
                     idx_noise = idx_bias
                 else:
                     # For fixed noise or no noise, use mock index
                     idx_noise = idx_mock
                 idxs_params.append((idx_mock, idx_bias, idx_noise))
-        elif modecosmo == 'fisher':
-            if params_df.iloc[idx_mock]['param_shifted'] == 'fiducial':
-                for idx_bias in biasparams_df.index:
-                    if tag_Anoise is not None and 'p0' not in tag_Anoise:
-                        idx_noise = idx_bias
-                    else:
-                        idx_noise = idx_mock
-                    idxs_params.append((idx_mock, idx_bias, idx_noise))
             else:
-                fiducial_bias_idxs = np.where(biasparams_df['param_shifted'] == 'fiducial')[0]
-                for idx_bias in fiducial_bias_idxs:
+                start_idx = idx_mock * factor
+                end_idx = (idx_mock + 1) * factor
+                for idx_bias in range(start_idx, end_idx):
+                    # In most cases, noise index follows bias index pattern
                     if tag_Anoise is not None and 'p0' not in tag_Anoise:
                         idx_noise = idx_bias
                     else:
+                        # For fixed noise or no noise, use mock index
                         idx_noise = idx_mock
                     idxs_params.append((idx_mock, idx_bias, idx_noise))
+        elif modecosmo == 'fisher':
+            if biasparams_df is None:
+                # Fixed bias params: use idx_bias = 0 for all cosmologies
+                idx_bias = 0
+                if tag_Anoise is not None and 'p0' not in tag_Anoise:
+                    idx_noise = idx_bias
+                else:
+                    idx_noise = idx_mock
+                idxs_params.append((idx_mock, idx_bias, idx_noise))
+            else:
+                if params_df.iloc[idx_mock]['param_shifted'] == 'fiducial':
+                    for idx_bias in biasparams_df.index:
+                        if tag_Anoise is not None and 'p0' not in tag_Anoise:
+                            idx_noise = idx_bias
+                        else:
+                            idx_noise = idx_mock
+                        idxs_params.append((idx_mock, idx_bias, idx_noise))
+                else:
+                    fiducial_bias_idxs = np.where(biasparams_df['param_shifted'] == 'fiducial')[0]
+                    for idx_bias in fiducial_bias_idxs:
+                        if tag_Anoise is not None and 'p0' not in tag_Anoise:
+                            idx_noise = idx_bias
+                        else:
+                            idx_noise = idx_mock
+                        idxs_params.append((idx_mock, idx_bias, idx_noise))
         else:
             raise ValueError(f"Unknown modecosmo: {modecosmo}")
     return idxs_params

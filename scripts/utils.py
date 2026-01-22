@@ -23,6 +23,15 @@ param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
                 'An_bs2': r'$A_\mathrm{noise}^{bs_2}$',
                 'An_bl': r'$A_\mathrm{noise}^{\Delta}$',
                 'sigma8xb1': r'$\sigma_8 \times b_1$',
+                # Reparameterized parameters (sigma8_cold_x_*)
+                'sigma8_cold_x_b1': r'$\sigma_8 b_1$',
+                'sigma8_cold_x_An_b1': r'$\sigma_8 A_\mathrm{noise}^{b_1}$',
+                'sigma8_cold_x_b2': r'$\sigma_8^2 b_2$',
+                'sigma8_cold_x_bs2': r'$\sigma_8^2 b_{s^2}$',
+                'sigma8_cold_x_bl': r'$\sigma_8^2 b_{\Delta}$',
+                'sigma8_cold_x_An_b2': r'$\sigma_8^2 A_\mathrm{noise}^{b_2}$',
+                'sigma8_cold_x_An_bs2': r'$\sigma_8^2 A_\mathrm{noise}^{bs_2}$',
+                'sigma8_cold_x_An_bl': r'$\sigma_8^2 A_\mathrm{noise}^{\Delta}$',
                 }
 
 color_dict_methods = {'mn': 'blue',
@@ -336,6 +345,131 @@ def get_samples_fisher(idx_obs, tag_inf, tag_test=''):
 def repeat_arr_rlzs(arr, n_rlzs=1):
     arr_repeat = np.tile(arr, (n_rlzs,1))
     return arr_repeat
+
+
+def reparameterize_theta(theta, param_names):
+    """
+    Reparameterize theta by multiplying bias and noise parameters by sigma_8.
+    
+    For b1 and A_b1 (An_b1): multiply by sigma_8
+    For b2, bs2, bl, A_b2 (An_b2), A_bs2 (An_bs2), A_bl (An_bl): multiply by sigma_8^2
+    
+    Parameters:
+    -----------
+    theta : numpy.ndarray
+        Array of shape (n_samples, n_params) containing parameter values
+    param_names : list
+        List of parameter names corresponding to columns in theta
+        
+    Returns:
+    --------
+    theta_reparam : numpy.ndarray
+        Reparameterized theta array
+    param_names_reparam : list
+        List of reparameterized parameter names
+    """
+    # Check that sigma8_cold is in param_names
+    if 'sigma8_cold' not in param_names:
+        raise ValueError("sigma8_cold must be in param_names for reparameterization")
+    
+    # Find index of sigma8_cold
+    idx_sigma8 = param_names.index('sigma8_cold')
+    
+    # Define parameters to multiply by sigma_8
+    params_sigma8 = ['b1', 'An_b1']
+    
+    # Define parameters to multiply by sigma_8^2
+    params_sigma8_squared = ['b2', 'bs2', 'bl', 'An_b2', 'An_bs2', 'An_bl']
+    
+    # Create a copy of theta and param_names
+    theta_reparam = theta.copy()
+    param_names_reparam = param_names.copy()
+    
+    # Process each parameter
+    for i, param_name in enumerate(param_names):
+        if param_name in params_sigma8:
+            # Multiply by sigma_8
+            sigma8_values = theta[:, idx_sigma8]
+            theta_reparam[:, i] = theta[:, i] * sigma8_values
+            # Rename parameter
+            new_name = f'sigma8_cold_x_{param_name}'
+            param_names_reparam[i] = new_name
+        elif param_name in params_sigma8_squared:
+            # Multiply by sigma_8^2
+            sigma8_values = theta[:, idx_sigma8]
+            theta_reparam[:, i] = theta[:, i] * (sigma8_values ** 2)
+            # Rename parameter
+            new_name = f'sigma8_cold_x_{param_name}'
+            param_names_reparam[i] = new_name
+    
+    return theta_reparam, param_names_reparam
+
+
+def reparameterize_bounds(dict_bounds):
+    """
+    Update parameter bounds when reparameterizing.
+    
+    For parameters multiplied by sigma_8, the new bounds are computed as the product
+    of the bounds of sigma8_cold and the original parameter.
+    For parameters multiplied by sigma_8^2, the new bounds are computed as the product
+    of sigma8_cold^2 and the original parameter.
+    
+    Parameters:
+    -----------
+    dict_bounds : dict
+        Dictionary mapping parameter names to [lower, upper] bounds
+        
+    Returns:
+    --------
+    dict_bounds_reparam : dict
+        Dictionary with updated bounds for reparameterized parameters
+    """
+    if 'sigma8_cold' not in dict_bounds:
+        raise ValueError("sigma8_cold must be in dict_bounds for reparameterization")
+    
+    sigma8_bounds = dict_bounds['sigma8_cold']
+    sigma8_low, sigma8_high = sigma8_bounds[0], sigma8_bounds[1]
+    
+    # Define parameters to multiply by sigma_8
+    params_sigma8 = ['b1', 'An_b1']
+    
+    # Define parameters to multiply by sigma_8^2
+    params_sigma8_squared = ['b2', 'bs2', 'bl', 'An_b2', 'An_bs2', 'An_bl']
+    
+    dict_bounds_reparam = dict_bounds.copy()
+    
+    # Process each parameter
+    for param_name in list(dict_bounds.keys()):
+        if param_name in params_sigma8:
+            # Multiply bounds by sigma_8 bounds
+            param_bounds = dict_bounds[param_name]
+            param_low, param_high = param_bounds[0], param_bounds[1]
+            # Compute all combinations of bounds
+            products = [sigma8_low * param_low, sigma8_low * param_high,
+                       sigma8_high * param_low, sigma8_high * param_high]
+            new_low = min(products)
+            new_high = max(products)
+            # Update with new name
+            new_name = f'sigma8_cold_x_{param_name}'
+            dict_bounds_reparam[new_name] = [new_low, new_high]
+            # Remove old entry
+            del dict_bounds_reparam[param_name]
+        elif param_name in params_sigma8_squared:
+            # Multiply bounds by sigma_8^2 bounds
+            param_bounds = dict_bounds[param_name]
+            param_low, param_high = param_bounds[0], param_bounds[1]
+            # Compute all combinations of bounds
+            products = [sigma8_low**2 * param_low, sigma8_low**2 * param_high,
+                       sigma8_high**2 * param_low, sigma8_high**2 * param_high]
+            new_low = min(products)
+            new_high = max(products)
+            # Update with new name
+            new_name = f'sigma8_cold_x_{param_name}'
+            dict_bounds_reparam[new_name] = [new_low, new_high]
+            # Remove old entry
+            del dict_bounds_reparam[param_name]
+    
+    return dict_bounds_reparam
 
 
 def param_dict_to_bacco_param_dict(param_dict, neutrino_mass=None):

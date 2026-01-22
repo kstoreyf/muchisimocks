@@ -13,10 +13,10 @@ def main():
     #overwrite = True
     #generate_train_config(overwrite=overwrite)
     #stat_arr = [['bispec'], ['pk', 'bispec']]
-    stat_arr = [['pk']]
+    stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
+    #stat_arr = [['pk']]
     #stat_arr = [['bispec']]
     n_train_arr = [10000]
-    #stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
     for statistics in stat_arr:
         for n_train in n_train_arr:
@@ -38,23 +38,27 @@ def generate_train_config(dir_config='../configs/configs_train',
     #n_train = 10
     #n_train = None #if None, uses all (and no ntrain tag in tag_inf)
     tag_params = '_p5_n10000'
-    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_b1000_p0_n1'
     #tag_biasparams = '_b1zen_p1_n10000'
     #tag_biasparams = '_biaszen_p4_n10000' #1-1 cosmo-bias params
     #tag_biasparams = '_biaszen_p4_n50000' #5 bias params per cosmo
     #tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
-    tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
-    tag_noise = '_noise_unit_p5_n10000'
+    #tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
+    #tag_noise = '_noise_unit_p5_n10000'
     #tag_Anoise = '_An_p1_n10000'
     #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
-    tag_Anoise = '_Anmult_p5_n200000'
+    #tag_Anoise = '_Anmult_p5_n200000'
     #tag_Anoise = '_Anmult_p5_n10000'
-    tag_mask = '_kmaxbispec0.25'
+    tag_noise = None
+    tag_Anoise = None
+    #tag_mask = '_kmaxbispec0.25'
+    tag_mask = ''
     
     # emu-specific
     n_rlzs_per_cosmo = 1
     
     # running inferece params
+    reparameterize = False
     run_mode = 'single'
     tag_sweep = None
     n_train_sweep = None
@@ -75,11 +79,15 @@ def generate_train_config(dir_config='../configs/configs_train',
         kwargs_data = {'tag_datagen': tag_datagen}
 
     tag_stats = f'_{"_".join(statistics)}'    
-    tag_paramsall = tag_params + tag_biasparams + tag_noise + tag_Anoise
+    tag_paramsall = tag_params + tag_biasparams
+    if tag_noise is not None:
+        tag_paramsall += tag_noise + tag_Anoise
     tag_data = '_'+data_mode + tag_stats + tag_mask + tag_paramsall + tag_datagen
     
     # build tag
     tag_inf = tag_data
+    if reparameterize:
+        tag_inf += '_rp'
     if n_train is not None:
         tag_inf += f'_ntrain{n_train}'
     if run_mode == 'sweep':
@@ -89,7 +97,10 @@ def generate_train_config(dir_config='../configs/configs_train',
         # if want best, neeed the sweep name to match sweep,
         # but new tag_inf will be best
         # sweep name is tag_inf of sweep; reconstruct cuz is diff than this tag_inf
-        sweep_name = tag_data + f'_ntrain{n_train_sweep}_sweep{tag_sweep}'
+        sweep_name = tag_data
+        if reparameterize:
+            sweep_name += '_rp'
+        sweep_name += f'_ntrain{n_train_sweep}_sweep{tag_sweep}'
         tag_inf += f'_best{tag_sweep}'
     elif run_mode == 'single':
         sweep_name = None
@@ -109,6 +120,7 @@ def generate_train_config(dir_config='../configs/configs_train',
         "tag_data": tag_data,
         "tag_inf": tag_inf,
         "n_rlzs_per_cosmo": n_rlzs_per_cosmo,
+        "reparameterize": reparameterize,
     }
             
     os.makedirs(dir_config, exist_ok=True)
@@ -138,29 +150,30 @@ def generate_test_config(dir_config='../configs/configs_test',
     
     ### train params
     tag_params = '_p5_n10000'
-    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_b1000_p0_n1'
     #tag_biasparams = '_b1zen_p1_n10000'
     #tag_biasparams = '_biaszen_p4_n10000' #1x
     #tag_biasparams = '_biaszen_p4_n50000' #5x
     #tag_biasparams = '_biaszen_p4_n100000' #10x
-    tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
-    tag_noise = '_noise_unit_p5_n10000'
+    #tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
+    #tag_noise = '_noise_unit_p5_n10000'
     #tag_Anoise = '_An_p1_n10000'
     #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
     #tag_Anoise = '_Anmult_p2_n10000'
-    tag_Anoise = '_Anmult_p5_n200000'
-    #tag_noise = None
-    #tag_Anoise = None
+    #tag_Anoise = '_Anmult_p5_n200000'
+    tag_noise = None
+    tag_Anoise = None
     #tag_mask = '_kmaxbispec0.25'
     tag_mask = ''
 
+    reparameterize = False
     n_rlzs_per_cosmo = 1
     # For loading a model trained with wandb sweep; best of that sweep will be used
     #tag_sweep = '-rand10'
     #n_train_sweep = 10000
     tag_sweep = None
     n_train_sweep = None
-    
+        
     ### test params
     data_mode_test = 'muchisimocks'
     idxs_obs = None # if none, all (unless evaluate mean)
@@ -168,16 +181,19 @@ def generate_test_config(dir_config='../configs/configs_test',
     # evaluate_mean = True
     # tag_params_test = '_quijote_p0_n1000'
     # tag_biasparams_test = '_b1000_p0_n1'
-    # # tag_noise_test = None
-    # # tag_Anoise_test = None
-    # tag_noise_test = '_noise_unit_quijote_p0_n1000'
-    # tag_Anoise_test = '_Anmult_p0_n1'
+    # tag_noise_test = None
+    # tag_Anoise_test = None
+    #tag_noise_test = '_noise_unit_quijote_p0_n1000'
+    #tag_Anoise_test = '_Anmult_p0_n1'
     ## settings for coverage test
     evaluate_mean = False
     tag_params_test = '_test_p5_n1000'
-    tag_biasparams_test = '_biaszen_p4_n1000'
-    tag_noise_test = '_noise_unit_test_p5_n1000'
-    tag_Anoise_test = '_Anmult_p5_n1000'
+    tag_biasparams_test = '_b1000_p0_n1'
+    # tag_biasparams_test = '_biaszen_p4_n1000'
+    # tag_noise_test = '_noise_unit_test_p5_n1000'
+    # tag_Anoise_test = '_Anmult_p5_n1000'
+    tag_noise_test = None
+    tag_Anoise_test = None
     
     # this if-else is just so it's easier for me to switch between the two; may not need
     if data_mode_test == 'emu':
@@ -220,12 +236,17 @@ def generate_test_config(dir_config='../configs/configs_test',
 
     # build tag
     tag_inf_train = tag_data_train
+    if reparameterize:
+        tag_inf_train += '_rp'
     if n_train is not None:
         tag_inf_train += f'_ntrain{n_train}'
     # run_mode fixed to load for testing, bc always should be loading already trained model;
     # (best is for training; will read the best hyperparameters from a sweep and retrain and save it)
     if tag_sweep is not None:
-        sweep_name = tag_data_train + f'_ntrain{n_train_sweep}_best{tag_sweep}'
+        sweep_name = tag_data_train
+        if reparameterize:
+            sweep_name += '_rp'
+        sweep_name += f'_ntrain{n_train_sweep}_best{tag_sweep}'
     else:
         sweep_name = None
     
@@ -258,6 +279,7 @@ def generate_test_config(dir_config='../configs/configs_test',
         "tag_data_test": tag_data_test,
         "tag_test": tag_test,
         "n_rlzs_per_cosmo": n_rlzs_per_cosmo,
+        "reparameterize": reparameterize,
     }
     
     os.makedirs(dir_config, exist_ok=True)
@@ -300,8 +322,10 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     tag_datagen = ''
     #tag_noise = None
     #tag_Anoise = None
-    tag_mask = '_kmaxbispec0.25'
+    #tag_mask = '_kmaxbispec0.25'
+    tag_mask = ''
 
+    reparameterize = True
     n_rlzs_per_cosmo = 1
     # For loading a model trained with wandb sweep; best of that sweep will be used
     #tag_sweep = '-rand10'
@@ -328,12 +352,17 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
 
     # build tag
     tag_inf_train = tag_data_train
+    if reparameterize:
+        tag_inf_train += '_rp'
     if n_train is not None:
         tag_inf_train += f'_ntrain{n_train}'
     # run_mode fixed to load for testing, bc always should be loading already trained model;
     # (best is for training; will read the best hyperparameters from a sweep and retrain and save it)
     if tag_sweep is not None:
-        sweep_name = tag_data_train + f'_ntrain{n_train_sweep}_best{tag_sweep}'
+        sweep_name = tag_data_train
+        if reparameterize:
+            sweep_name += '_rp'
+        sweep_name += f'_ntrain{n_train_sweep}_best{tag_sweep}'
     else:
         sweep_name = None
     
@@ -367,6 +396,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
         "tag_test": tag_test,
         "tag_mock": tag_mock,
         "n_rlzs_per_cosmo": n_rlzs_per_cosmo,
+        "reparameterize": reparameterize,
     }
     
     os.makedirs(dir_config, exist_ok=True)

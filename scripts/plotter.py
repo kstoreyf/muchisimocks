@@ -667,7 +667,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       inf_methods, tags_inf, tags_test=None,
                       colors=None, labels=None,
                       figsize=(7,7),
-                      extents={}, title=None):
+                      extents={}, title=None, unreparameterize=False):
     if title is None:
         title = f'test model {idx_obs}'
     
@@ -704,18 +704,54 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         return
     
     # Find which parameters are available in at least one chain
+    # Preserve the order from param_names, but replace original params with reparameterized versions when found
     param_names_any_available = []
+    # Track which original parameters have been replaced by reparameterized versions
+    replaced_params = set()
+    
     for pn in param_names:
-        if any(pn in chain_params for chain_params in all_param_names_per_chain):
-            param_names_any_available.append(pn)
+        # Check if there's a reparameterized version of this parameter in any chain
+        reparam_name = f'sigma8_cold_x_{pn}'
+        has_reparam = any(reparam_name in chain_data['param_names_samples'] 
+                         for chain_data in all_chains_data)
+        has_original = any(pn in chain_params for chain_params in all_param_names_per_chain)
+        
+        if unreparameterize:
+            # Always use original parameter names when unreparameterizing
+            if has_reparam or has_original:
+                param_names_any_available.append(pn)
+        else:
+            # Use reparameterized version if available, otherwise original
+            if has_reparam:
+                # Use reparameterized version if available
+                param_names_any_available.append(reparam_name)
+                replaced_params.add(pn)
+            elif has_original:
+                # Use original version
+                param_names_any_available.append(pn)
     
     if len(param_names_any_available) == 0:
         print("Error: No requested parameters found in any chains.")
         return
         
-    if len(param_names_any_available) < len(param_names):
-        missing_params = [pn for pn in param_names if pn not in param_names_any_available]
-        print(f"Warning: Parameters {missing_params} not found in any chains. Plotting only: {param_names_any_available}")
+    # Check for missing parameters (accounting for reparameterized replacements)
+    missing_params = []
+    for pn in param_names:
+        if unreparameterize:
+            # When unreparameterizing, we only check if the original param is available
+            if pn not in param_names_any_available:
+                missing_params.append(pn)
+        else:
+            # When not unreparameterizing, check both original and reparameterized
+            reparam_name = f'sigma8_cold_x_{pn}'
+            if pn not in param_names_any_available and reparam_name not in param_names_any_available:
+                missing_params.append(pn)
+    
+    if len(missing_params) > 0:
+        if unreparameterize:
+            print(f"Warning: Parameters {missing_params} not found in any chains (neither original nor reparameterized). Plotting only: {param_names_any_available}")
+        else:
+            print(f"Warning: Parameters {missing_params} not found in any chains (neither original nor reparameterized). Plotting only: {param_names_any_available}")
     
     # Create chains for chainconsumer - only include chains that have at least one parameter
     import chainconsumer
@@ -723,19 +759,76 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     
     for chain_data in all_chains_data:
         # Get samples for parameters that this chain has
-        available_in_this_chain = [pn for pn in param_names_any_available if pn in chain_data['available_params']]
+        # If unreparameterize=True, convert reparameterized params back to original
+        available_in_this_chain = []
+        param_mapping = {}  # Maps original param names to their indices/sources in chain
+        
+        for pn in param_names_any_available:
+            # Check if it's in the chain's param_names_samples (could be original or reparameterized)
+            if pn in chain_data['param_names_samples']:
+                available_in_this_chain.append(pn)
+                param_mapping[pn] = pn  # Direct mapping
+            elif unreparameterize:
+                # Check if there's a reparameterized version we can convert back
+                reparam_name = f'sigma8_cold_x_{pn}'
+                if reparam_name in chain_data['param_names_samples']:
+                    available_in_this_chain.append(pn)
+                    param_mapping[pn] = reparam_name  # Map original name to reparameterized name
         
         if len(available_in_this_chain) == 0:
             continue
-            
-        # Extract samples for available parameters only (no NaN padding)
-        i_pn = [list(chain_data['param_names_samples']).index(pn) for pn in available_in_this_chain]
-        chain_samples = chain_data['samples'][:, i_pn]
         
-        # Create DataFrame with only the available parameters for this chain
+        # Check if we need sigma8_cold for unreparameterization
+        need_sigma8 = False
+        if unreparameterize:
+            for pn in available_in_this_chain:
+                if pn in param_mapping and param_mapping[pn].startswith('sigma8_cold_x_'):
+                    need_sigma8 = True
+                    break
+        
+        # Get sigma8_cold if needed
+        sigma8_samples = None
+        if need_sigma8:
+            if 'sigma8_cold' in chain_data['param_names_samples']:
+                idx_sigma8 = list(chain_data['param_names_samples']).index('sigma8_cold')
+                sigma8_samples = chain_data['samples'][:, idx_sigma8]
+            else:
+                print(f"Warning: Need sigma8_cold for unreparameterization but not found in chain. Skipping unreparameterization for this chain.")
+                need_sigma8 = False
+        
+        # Extract samples for available parameters
         samples_dict = {}
-        for i, pn in enumerate(available_in_this_chain):
-            samples_dict[pn] = chain_samples[:, i]
+        for pn in available_in_this_chain:
+            if pn in param_mapping:
+                source_name = param_mapping[pn]
+                if source_name == pn:
+                    # Direct parameter - just extract
+                    idx = list(chain_data['param_names_samples']).index(pn)
+                    samples_dict[pn] = chain_data['samples'][:, idx]
+                elif source_name.startswith('sigma8_cold_x_') and need_sigma8:
+                    # Reparameterized parameter - convert back to original
+                    idx_reparam = list(chain_data['param_names_samples']).index(source_name)
+                    reparam_samples = chain_data['samples'][:, idx_reparam]
+                    
+                    # Extract original parameter name
+                    orig_param_name = source_name.replace('sigma8_cold_x_', '')
+                    
+                    # Determine if we divide by sigma8 or sigma8^2
+                    params_sigma8 = ['b1', 'An_b1']
+                    params_sigma8_squared = ['b2', 'bs2', 'bl', 'An_b2', 'An_bs2', 'An_bl']
+                    
+                    if orig_param_name in params_sigma8:
+                        # Divide by sigma8
+                        samples_dict[pn] = reparam_samples / sigma8_samples
+                    elif orig_param_name in params_sigma8_squared:
+                        # Divide by sigma8^2
+                        samples_dict[pn] = reparam_samples / (sigma8_samples ** 2)
+                    else:
+                        print(f"Warning: Unknown reparameterized parameter {source_name}. Skipping.")
+                else:
+                    # Shouldn't happen, but handle gracefully
+                    idx = list(chain_data['param_names_samples']).index(source_name)
+                    samples_dict[pn] = chain_data['samples'][:, idx]
         
         samples_df = pd.DataFrame(samples_dict)
         
@@ -782,14 +875,50 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     # )
     
     # Create truth location for available parameters only
+    # Note: param_names and theta_obs_true are in original (non-reparameterized) form,
+    # but param_names_any_available may contain reparameterized parameter names from the chains
     truth_loc = {}
     for pn in param_names_any_available:
-        if pn in param_names:
-            param_idx = param_names.index(pn)
-            if param_idx < len(theta_obs_true):
-                truth_loc[pn] = theta_obs_true[param_idx]
+        # Check if this is a reparameterized parameter (from the chains)
+        if pn.startswith('sigma8_cold_x_'):
+            # Extract the original parameter name
+            orig_param_name = pn.replace('sigma8_cold_x_', '')
+            
+            # Check if we have sigma8_cold and the original parameter in param_names (original form)
+            if 'sigma8_cold' in param_names and orig_param_name in param_names:
+                idx_sigma8 = param_names.index('sigma8_cold')
+                idx_orig = param_names.index(orig_param_name)
+                
+                if idx_sigma8 < len(theta_obs_true) and idx_orig < len(theta_obs_true):
+                    sigma8_val = theta_obs_true[idx_sigma8]
+                    orig_val = theta_obs_true[idx_orig]
+                    
+                    # Determine if we multiply by sigma8 or sigma8^2
+                    params_sigma8 = ['b1', 'An_b1']
+                    params_sigma8_squared = ['b2', 'bs2', 'bl', 'An_b2', 'An_bs2', 'An_bl']
+                    
+                    if orig_param_name in params_sigma8:
+                        truth_loc[pn] = orig_val * sigma8_val
+                    elif orig_param_name in params_sigma8_squared:
+                        truth_loc[pn] = orig_val * (sigma8_val ** 2)
+                    else:
+                        print(f"Warning: Unknown reparameterized parameter {pn}. Skipping truth value.")
+                else:
+                    print(f"Warning: Indices out of range for reparameterized parameter {pn}. Skipping truth value.")
             else:
-                print(f"Warning: Parameter {pn} (index {param_idx}) not found in theta_obs_true (length {len(theta_obs_true)}). Skipping truth value.")
+                print(f"Warning: Cannot compute truth for reparameterized parameter {pn}: missing 'sigma8_cold' or '{orig_param_name}' in param_names. Skipping truth value.")
+        else:
+            # Regular parameter - check if it's in the original param_names
+            if pn in param_names:
+                param_idx = param_names.index(pn)
+                if param_idx < len(theta_obs_true):
+                    truth_loc[pn] = theta_obs_true[param_idx]
+                else:
+                    print(f"Warning: Parameter {pn} (index {param_idx}) not found in theta_obs_true (length {len(theta_obs_true)}). Skipping truth value.")
+            else:
+                # Parameter is in chains but not in original param_names - might be a different naming
+                # Try to find it or skip
+                print(f"Warning: Parameter {pn} found in chains but not in original param_names. Skipping truth value.")
     
     c.add_truth(chainconsumer.Truth(location=truth_loc))
 

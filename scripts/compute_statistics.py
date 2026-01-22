@@ -55,7 +55,7 @@ def parse_args():
     n_threads = args.n_threads
     overwrite = args.overwrite
 
-    stats_supported = ['pnn', 'pk', 'pklin', 'bispec']
+    stats_supported = ['pnn', 'pk', 'pklin', 'bispec', 'pgm']
     assert statistic in stats_supported, f"statistic {statistic} not recognized, should be one of {stats_supported}"
     if statistic == 'pnn':
         assert tag_biasparams is None, "you shouldn't be providing tag_biasparams for pnn, it's only computed for the cosmologies! bias param computation is done at dataloading time"
@@ -256,7 +256,7 @@ def run(statistic, idx_mock,
                 
                 bias_terms_eul = get_bias_fields(fn_fields)
                 power_all_terms = compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
-                                                        n_threads=n_threads)
+                                                        n_threads=n_threads, fn_stat=fn_statistic)
                 end = time.time()
                 print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
                 
@@ -276,6 +276,20 @@ def run(statistic, idx_mock,
                 # makes a linear sim w bacco, then computes its pk
                 start = time.time()
                 compute_pk_linear(idx_mock, cosmo, box_size, n_grid_orig,
+                                        n_threads=n_threads, fn_stat=fn_statistic)
+                end = time.time()
+                print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
+
+            elif statistic == 'pgm':
+                start = time.time()
+
+                tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
+                                        biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed,
+                                        n_grid_orig)
+                bias_terms_eul = get_bias_fields(fn_fields)
+                # Get the second bias field (index 1)
+                matter_density_field = bias_terms_eul[1]
+                compute_pgm(tracer_field, matter_density_field, cosmo, box_size, n_grid_orig,
                                         n_threads=n_threads, fn_stat=fn_statistic)
                 end = time.time()
                 print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
@@ -566,6 +580,88 @@ def compute_pk_linear(seed, cosmo, box_size, n_grid_orig,
     pk_obj = compute_pk(field_lin, cosmo, box_size, n_threads=n_threads, fn_stat=fn_stat)
         
     return pk_obj
+
+
+def compute_pgm(tracer_field, matter_density_field, cosmo, box_size, n_grid_orig,
+               log_binning=True,
+               normalise_grid=False, deconvolve_grid=False,
+               interlacing=False, deposit_method='cic',
+               correct_grid=False,
+               n_threads=8, fn_stat=None):
+
+    # fixing these here to ensure binning is same for all stats computed!
+    k_min = 0.01
+    k_max = 0.4
+    n_bins = 30    
+    
+    # Normalize the bias field the same way as in PNN computation
+    norm = n_grid_orig**3
+    matter_density_field_norm = matter_density_field / norm
+
+    # n_grid has to match the tracer field size for this computation!
+    n_grid = tracer_field.shape[-1]
+    print("Computing pgm, using n_grid = ", n_grid, flush=True)
+
+    # defaults from bacco.statistics.compute_crossspectrum_twogrids
+    # unless passed or otherwise denoted
+    args_power_grid = {
+        # "grid1": None,
+        # "grid2": None,
+        "normalise_grid1": normalise_grid, #default: False
+        "normalise_grid2": normalise_grid, #default: False
+        "deconvolve_grid1": deconvolve_grid, #default: False
+        "deconvolve_grid2": deconvolve_grid, #default: False
+        "ngrid": n_grid,
+        "box": box_size,
+        "mass1": None,
+        "mass2": None,
+        "interlacing": interlacing, #default: True
+        "deposit_method": deposit_method, #default: "tsc",
+        "log_binning": log_binning,
+        "pk_lt": None,
+        "kmin": k_min,
+        "kmax": k_max,
+        "nbins": n_bins,
+        "correct_grid": correct_grid,
+        "zspace": False,
+        "cosmology": cosmo,
+        "pmulti_interp": "polyfit",
+        "nthreads": n_threads,
+        "compute_correlation": False, #default: True
+        "compute_power2d": False, #default: True
+        "folds": 1,
+        "totalmass1": None,
+        "totalmass2": None,
+        "jack_error": False,
+        "n_jack": None
+    }
+
+    pknbody_dict = {
+        'ngrid': n_grid,
+        'min_k': k_min,
+        'log_binning': log_binning,
+        'log_binning_kmax': k_max,
+        'log_binning_nbins': n_bins,
+        'interlacing': interlacing,
+        'depmethod': deposit_method,
+        'correct_grid': correct_grid,
+        'folds': 1 #default
+    }
+    bacco.configuration.update({'number_of_threads': n_threads})
+    bacco.configuration.update({'pknbody': pknbody_dict})
+    bacco.configuration.update({'pk' : {'maxk' : k_max}})
+    bacco.configuration.update({'scaling' : {'disp_ngrid' : n_grid}})
+
+    pgm_obj = bacco.statistics.compute_crossspectrum_twogrids(
+                        grid1=tracer_field,
+                        grid2=matter_density_field_norm,
+                        **args_power_grid)
+    
+    if fn_stat is not None:
+        Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
+        np.save(fn_stat, pgm_obj)
+        
+    return pgm_obj
 
 
 def compute_bispectrum(base, tracer_field, fn_stat=None):

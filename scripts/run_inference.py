@@ -116,6 +116,17 @@ def train_likefree_inference(config, overwrite=False):
     print('theta shape:', theta.shape)
     print(param_names)
     
+    # Reparameterize if requested
+    reparameterize = config.get("reparameterize", False)
+    if reparameterize:
+        print("Reparameterizing theta...")
+        theta, param_names = utils.reparameterize_theta(theta, param_names)
+        # Also update bounds for reparameterized parameters
+        dict_bounds = utils.reparameterize_bounds(dict_bounds)
+        print('theta shape after reparameterization:', theta.shape)
+        print('param_names after reparameterization:', param_names)
+        print('Updated bounds:', dict_bounds)
+    
     ### Subsampling (ntrain and train/val)
     # downsample based on n_train    
     if n_train is None:
