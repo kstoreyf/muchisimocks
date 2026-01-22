@@ -98,8 +98,8 @@ for n_train in "${n_train_arr[@]}"; do
 #SBATCH --job-name=${job_name}
 #SBATCH --output=${scripts_dir}/logs/${job_name}.out
 ##SBATCH --time=0:20:00 # quick tests (e.g. shame)
-##SBATCH --time=1:00:00 #1h for testing on cosmic var test set or single OOD
-#SBATCH --time=6:00:00 #2h for training -> 6 in case
+#SBATCH --time=1:30:00 #1h for testing on cosmic var test set or single OOD
+##SBATCH --time=6:00:00 #2h for training -> 6 in case
 ##SBATCH --time=24:00:00 #24h for testing on coverage test set (24h is max time limit; some dont converge)
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1

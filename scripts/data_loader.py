@@ -73,7 +73,7 @@ def load_data_shame(statistic, tag_mock):
     fn_statistics = f'{dir_statistics}/{statistic}.npy'
     if not os.path.exists(fn_statistics):
         raise ValueError(f"File {fn_statistics} does not exist!")
-    if statistic == 'pk':
+    if statistic == 'pk' or statistic == 'pgm':
         k, stat, error, pk_obj = load_pk(fn_statistics)
     elif statistic == 'bispec':
         k, stat, error, bispec_obj = load_bispec(fn_statistics)
@@ -538,18 +538,13 @@ def load_theta_test(tag_params_test, tag_biasparams_test, tag_Anoise_test=None,
         theta_test = [param_dict_fixed_test[pname] for pname in cosmo_param_names_vary]
         theta_test.extend([biasparams_dict_fixed_test[pname] for pname in bias_param_names_vary])
         # Add noise parameters if they exist and are specified
-        print("tag_Anoise_test", tag_Anoise_test)
-        print(noise_param_names_vary)
-        print(Anoise_dict_fixed_test)
         if tag_Anoise_test is not None and 'p0' in tag_Anoise_test and noise_param_names_vary is not None:
-            print("here")
             theta_test.extend([Anoise_dict_fixed_test[pname] for pname in noise_param_names_vary])
     else:
         # for when have a LH of varied bias parameters
         idxs_params = get_idxs_params(tag_params_test, tag_biasparams_test, tag_Anoise=tag_Anoise_test)
         theta_test, param_names = param_dfs_to_theta(idxs_params, params_df_test, biasparams_df_test, Anoise_df_test, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
         
-    print(len(theta_test))
     return np.array(theta_test)
     
 
@@ -914,7 +909,7 @@ def _process_precomputed_cosmology(idx_LH, statistic, dir_statistics,
         idx_noise = idxs_noise[i] if idxs_noise is not None else None
         
         # Load precomputed data
-        if statistic == 'pk':
+        if statistic == 'pk' or statistic == 'pgm':
             k_loaded, stat, error, pk_obj = load_pk(fn_stat)
             if k is None:
                 k = k_loaded
