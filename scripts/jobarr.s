@@ -1,21 +1,42 @@
 #!/bin/bash
 #SBATCH --qos=regular
-#SBATCH --job-name=datagen_p5_n10000_step7_round2
-##SBATCH --job-name=cuda_testgpu
-#SBATCH --time=00:30:00
+##SBATCH --job-name=datagen_test_p5_n1000_vel_step100
+##SBATCH --job-name=datagen_quijote_p0_n1000_vel_step100
+##SBATCH --job-name=datagen_p5_n10000_vel_step100_round2
+##SBATCH --job-name=datagen_fixedcosmo_step10
+##SBATCH --job-name=datagen_fisher_quijote_step3
+##SBATCH --job-name=datagen_test_p5_n1000_step10
+##SBATCH --job-name=bispec_p5_n10000_b1000_p0_n1_step100_round2
+##SBATCH --job-name=pgm_p5_n10000_biaszen_p4_n200000_step100
+##SBATCH --job-name=pgm_p5_n10000_biaszen_p4_n200000_step100_round4
+##SBATCH --job-name=pgm_p5_n10000_biaszen_p4_n200000_step100_round5
+##SBATCH --job-name=pgm_p5_n10000_biaszen_p4_n200000_noise_unit_p5_n10000_Anmult_p5_n200000_step100_round5
+#SBATCH --job-name=pnn_p5_n10000_round2
+##SBATCH --job-name=pgm_quijote_p0_n1000_b1000_p0_n1_noise_unit_quijote_p0_n1000_Anmult_p0_n1_step100
+##SBATCH --job-name=pgm_test_p5_n1000_biaszen_p4_n1000_noise_unit_test_p5_n1000_Anmult_p5_n1000_step100
+##SBATCH --job-name=bispec_test_p5_n1000_b1000_p0_n1_step100
+##SBATCH --job-name=pnn_test_p5_n1000_step100_round2
+#SBATCH --time=0:59:00 # time per task, but doing Nsteps; ~10s for bispec 
+##SBATCH --time=6:00:00 # time per task, but doing Nsteps; for 20000 (most), use 8h to be safe. lower, 1h fine
+##SBATCH --time=24:00:00 #datagen
 #SBATCH --nodes=1              # nodes per instance
-#SBATCH --gres=gpu:1
+##SBATCH --gres=gpu:1  #gpu for datagen; off for bispec
 #SBATCH --cpus-per-task=1
-#SBATCH --ntasks=8             # tasks per instance
+##SBATCH --cpus-per-task=24
+##SBATCH --ntasks=1             # tasks per instance
+# was having issues with jobs failing, maybe due to 
+# too many tasks submitted? with 100 at a time... careful! try 25
 ##x-y%z; start x, end y INCLUSIVE, z tasks at a time max
-#SBATCH --array=3000-3999%5
-#SBATCH --mem=35G 	       # 30 hit OOM error
-##SBATCH --output=logs/%x.out
+##(Y-X)*step_size = total you want to run
+#SBATCH --array=0-99%20 # for 10000 training set
+##SBATCH --array=0-9 # for 1000 test set / quijote
+##SBATCH --array=0-0
+##SBATCH --mem=35G # got OOM for 30 for datagen	     
+#SBATCH --mem=2G # 2G for bispectrum, 1G too low
 #SBATCH --output=logs/%x-%a.out
 
-##SBATCH --output=logs/%x-%j.out
-##SBATCH --error=%x-%j.err
 
+echo "Current date and time: $(date)"
 echo "Slurm job id is ${SLURM_JOB_ID}"
 echo "Running on node ${SLURMD_NODENAME}"
 echo "SLURM_CPUS_ON_NODE = ${SLURM_CPUS_ON_NODE}"
@@ -28,11 +49,71 @@ echo "Instance index is ${SLURM_ARRAY_TASK_ID}."
 #source ~/anaconda3/etc/profile.d/conda.sh
 source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile.d/conda.sh
 conda activate benv
-i=$((SLURM_ARRAY_TASK_ID-SLURM_ARRAY_TASK_MIN))
-step_size=7
+#i=$((SLURM_ARRAY_TASK_ID-SLURM_ARRAY_TASK_MIN))
+# changed this so it won't shift to start at zeri
+i=${SLURM_ARRAY_TASK_ID}
+step_size=100
 echo "i=${i}"
-idx_LH_start=$((SLURM_ARRAY_TASK_MIN + i*step_size))
-idx_LH_end=$((idx_LH_start + step_size))
-echo "idx_LH_start=${idx_LH_start}, idx_LH_end=${idx_LH_end}"
-python data_creation_pipeline.py ${idx_LH_start} ${idx_LH_end}
+#idx_mock_start=$((SLURM_ARRAY_TASK_MIN + i*step_size))
+idx_mock_start=$((i*step_size))
+idx_mock_end=$((idx_mock_start + step_size))
+echo "idx_mock_start=${idx_mock_start}, idx_mock_end=${idx_mock_end}"
+
+### DATA_CREATION_PIPELINE.PY
+
+#python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --tag_params '_p5_n10000'
+#python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --tag_params '_test_p5_n1000'
+#python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fixed --tag_params '_quijote_p0_n1000'
+#python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fixed
+#python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fisher --tag_params='_fisher_quijote'
 #python cuda_minimal.py
+
+
+### COMPUTE_STATISTICS.PY
+
+### noiseless
+# train
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n200000 
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _b1000_p0_n1
+python compute_statistics.py --statistic pnn --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000
+#python compute_statistics.py --statistic pgm --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n200000
+# test
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _test_p5_n1000 --tag_biasparams _biaszen_p4_n1000 
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _test_p5_n1000 --tag_biasparams _b1000_p0_n1 
+#python compute_statistics.py --statistic pnn --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _test_p5_n1000
+#python compute_statistics.py --statistic pgm --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _test_p5_n1000 --tag_biasparams _biaszen_p4_n1000 
+# CV quijote
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1
+#python compute_statistics.py --statistic pgm --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1
+
+### noise-only
+#python compute_statistics.py --statistic pk --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_noise _noise_p5_n10000
+#python compute_statistics.py --statistic pk --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_noise _noise_quijote_p0_n1000
+#python compute_statistics.py --statistic pk --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_noise _noise_test_p5_n1000
+
+### noisy
+# training
+# span noise range
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n200000 --tag_noise _noise_p5_n10000 --tag_Anoise _An_p1_n10000
+# noise An=1
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n200000 --tag_noise _noise_p5_n10000 --tag_Anoise _An1_p0_n1
+# testing
+# CV quijote
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1 --tag_noise _noise_quijote_p0_n1000 --tag_Anoise _An1_p0_n1
+# coverage
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _test_p5_n1000 --tag_biasparams _biaszen_p4_n1000 --tag_noise _noise_test_p5_n1000 --tag_Anoise _An_p1_n1000
+
+### noisy - mult
+# training
+# 1x bias per cosmo
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n10000 --tag_noise _noise_unit_p5_n10000 --tag_Anoise _Anmult_p2_n10000
+# 20x bias per cosmo
+#python compute_statistics.py --statistic pk --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n200000 --tag_noise _noise_unit_p5_n10000 --tag_Anoise _Anmult_p2_n200000
+#python compute_statistics.py --statistic pgm --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n200000 --tag_noise _noise_unit_p5_n10000 --tag_Anoise _Anmult_p5_n200000
+# testing
+# CV quijote
+#python compute_statistics.py --statistic pk --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1 --tag_noise _noise_unit_quijote_p0_n1000 --tag_Anoise _Anmult_p0_n1
+#python compute_statistics.py --statistic pgm --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1 --tag_noise _noise_unit_quijote_p0_n1000 --tag_Anoise _Anmult_p0_n1
+# coverage
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _test_p5_n1000 --tag_biasparams _biaszen_p4_n1000 --tag_noise _noise_unit_test_p5_n1000 --tag_Anoise _Anmult_p5_n1000
+#python compute_statistics.py --statistic pgm --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _test_p5_n1000 --tag_biasparams _biaszen_p4_n1000 --tag_noise _noise_unit_test_p5_n1000 --tag_Anoise _Anmult_p5_n1000

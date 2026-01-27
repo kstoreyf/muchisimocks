@@ -9,6 +9,7 @@ import time
 
 import bacco
 
+import data_loader
 import utils
 
 
@@ -20,35 +21,41 @@ def main():
 
 def compute_pks_muchisimocks():
     
-    #tag_mocks = '_HR'
-    #tag_mocks = '_FixedPk'
+    print("Starting muchisimocks pk computation")
+    n_threads = 24
     
-    #tag_params = '_p3_n10'
-    #dir_mocks = f'../data/cosmolib{tag_mocks}'
-    #dir_mocks = f'/cosmos_storage/cosmosims/muchisimocks_lib{tag_mocks}'
-    
-    # p5_n50 is in data, bc contains full fields as checks so needs more space
-    #tag_params = '_p5_n50'
-    #tag_mocks = tag_params
-    #dir_mocks = f'/data/kstoreyf/muchisimocks/muchisimocks_lib{tag_mocks}'
+    # tag_params = '_p5_n10000'
+    # tag_biasparams = '_biaszen_p4_n1000'
+    #tag_params = '_test_p5_n1000'
+    tag_params = '_quijote_p0_n1000'
+    #tag_biasparams = '_b1000_p0_n1'
+    tag_biasparams = '_biaszen_p4_n1000'
+    tag_mocks = tag_params + tag_biasparams
 
-    tag_params = '_p5_n10000'
-    tag_mocks = tag_params
-    dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_mocks}'
+    dir_mocks = f'/scratch/kstoreyf/muchisimocks/muchisimocks_lib{tag_params}'
     
-    # tag_pk = '_b0000'
-    # tag_fields = '_deconvolved'
-    # tag_pk = '_b0000_zspace'
-    # tag_fields = '_zspace_deconvolved'
+    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = \
+        data_loader.load_params(tag_params, tag_biasparams)
     
-    bias_vector = [1., 0., 0., 0.]    
-    tags_pk = ['_b1000', '_b1000_zspace']
-    tags_fields = ['_deconvolved', '_zspace_deconvolved']
+    biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl']
+        
+    tags_pk = ['']
+    tags_fields = ['_deconvolved']
+    # for running zspace
+    # tags_pk = ['', '_zspace']
+    # tags_fields = ['_deconvolved', '_deconvolved_zspace']
+        
         
     #idxs_LH = [0]
-    idxs_LH = np.sort([int(re.search(r'^LH(\d+)$', dir_mocks).group(1)) \
+    if 'p0' in tag_params:
+        subdir_prefix='mock'
+    else:
+        subdir_prefix='LH'
+
+    idxs_LH = np.sort([int(re.search(rf'^{subdir_prefix}(\d+)$', dir_mocks).group(1)) \
         for dir_mocks in os.listdir(dir_mocks) \
-        if re.search(r'^LH\d+$', dir_mocks)])
+        if re.search(rf'^{subdir_prefix}\d+$', dir_mocks)])
+    #idxs_LH = idxs_LH[:1000] # for now!
     #idxs_LH = [43]
     
     #tag_fields = '_hr'
@@ -62,7 +69,6 @@ def compute_pks_muchisimocks():
     correct_grid = False
     k_min, k_max, n_bins = 0.01, 0.4, 30
 
-
     #n_grid = 128
     #n_grid_orig = None #compute from fields, if we don't know that it's different
     n_grid_orig = 512
@@ -71,28 +77,19 @@ def compute_pks_muchisimocks():
     else:
         box_size = 1000.0
     
-    fn_params = f'{dir_mocks}/params_lh{tag_params}.txt'
-    fn_params_fixed = f'{dir_mocks}/params_fixed{tag_params}.txt'
-    params_df = pd.read_csv(fn_params, index_col=0)
-    param_dict_fixed = pd.read_csv(fn_params_fixed).loc[0].to_dict()
-    # order of saved cosmo param files
-    #param_names = ['omega_cold', 'sigma_8', 'h', 'omega_baryon', 'n_s', 'seed']
-    
     for tag_pk, tag_fields in zip(tags_pk, tags_fields):
-        dir_pks = f'../data/pks_mlib/pks{tag_mocks}{tag_pk}'
+        dir_pks = f'/scratch/kstoreyf/muchisimocks/data/pks_mlib/pks{tag_mocks}{tag_pk}'
         Path.mkdir(Path(dir_pks), parents=True, exist_ok=True)
-        fn_bias_vector = f'{dir_pks}/bias_params.txt'
-        np.savetxt(fn_bias_vector, bias_vector)
     
-        print("tag_pk:", tag_pk)
+        print("tag_pk:", tag_pk, flush=True)
         for idx_LH in idxs_LH:
             #if idx_LH%10==0:
-            print(f"Comping Pk for LH{idx_LH} ({tag_pk})")
-            fn_fields = f'{dir_mocks}/LH{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
-            #fn_params = f'{dir_mocks}/LH{idx_LH}/cosmo_{idx_LH}.txt'
+            print(f"Computing Pk for LH{idx_LH} (tag_pk='{tag_pk}')", flush=True)
+            fn_fields = f'{dir_mocks}/{subdir_prefix}{idx_LH}/bias_fields_eul{tag_fields}_{idx_LH}{tag_fields_extra}.npy'
+            #fn_params = f'{dir_mocks}/{subdir_prefix}{idx_LH}/cosmo_{idx_LH}.txt'
             fn_pk = f'{dir_pks}/pk_{idx_LH}{tag_fields_extra}.npy'
             if os.path.exists(fn_pk) and not overwrite:
-                print(f"P(k) for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing")
+                print(f"P(k) for idx_LH={idx_LH} exists and overwrite={overwrite}, continuing", flush=True)
                 continue
             
             start = time.time()
@@ -104,26 +101,39 @@ def compute_pks_muchisimocks():
                 continue
             if n_grid_orig is None:
                 n_grid_orig = bias_terms_eul.shape[-1]
-            print(f"n_grid_orig = {n_grid_orig}")
-            tracer_field = get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
+            print(f"n_grid_orig = {n_grid_orig}", flush=True)
+            
+            biasparam_dict = biasparams_dict_fixed.copy()
+            if biasparams_df is not None:
+                biasparam_dict.update(biasparams_df.loc[idx_LH].to_dict())
+            bias_vector = [biasparam_dict[name] for name in biasparam_names_ordered]
+
+            print("bias_vector:", bias_vector, flush=True)
+            tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
             
             #param_vals = np.loadtxt(fn_params)
             #param_dict = dict(zip(param_names, param_vals))
-            param_dict = params_df.loc[idx_LH].to_dict()
-            param_dict.update(param_dict_fixed)
-            print(param_dict)
+            
+            param_dict = param_dict_fixed.copy()
+            if params_df is not None:
+                param_dict.update(params_df.loc[idx_LH].to_dict())
+            print(param_dict, flush=True)
             cosmo = utils.get_cosmo(param_dict)
             
             compute_pk(tracer_field, cosmo, box_size,
                         k_min=k_min, k_max=k_max, n_bins=n_bins,
                         deconvolve_grid=deconvolve_grid,
                         interlacing=interlacing, correct_grid=correct_grid,
-                        fn_pk=fn_pk)
+                        fn_pk=fn_pk,
+                        n_threads=n_threads)
             end = time.time()
-            print(f"Computed P(k) for idx_LH={idx_LH} ({tag_pk}) in time {end-start} s")
+            print(f"Computed P(k) for idx_LH={idx_LH} ({tag_mocks+tag_pk}) in time {end-start} s", flush=True)
     
 
 def compute_pks_quijote_LH():
+    
+    n_threads = 8
+    
     dir_mocks = '/cosmos_storage/home/mpelle/Yin_data/Quijote'
     tag_fields = '_interlacingfalse_fixdamp'
     dir_fields = f'/cosmos_storage/home/kstoreyf/data_muchisimocks/quijote_LH{tag_fields}'
@@ -188,25 +198,25 @@ def compute_pks_quijote_LH():
             idx_LH_str = f'{idx_LH:04}'
          
             # get params
-            fn_params = f'{dir_mocks}/LH{idx_LH_str}/param_{idx_LH_str}.txt'
+            fn_params = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/param_{idx_LH_str}.txt'
             param_vals = np.loadtxt(fn_params)
             param_dict = dict(zip(param_names, param_vals))
             cosmo = utils.get_cosmo(param_dict)
                   
             # check fields existence
-            fn_fields = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields{tag}_{idx_LH_str}.npy'
-            fn_fields_zspace = f'{dir_fields}/LH{idx_LH_str}/Eulerian_fields_zspace{tag}_{idx_LH_str}.npy'
+            fn_fields = f'{dir_fields}/{subdir_prefix}{idx_LH_str}/Eulerian_fields{tag}_{idx_LH_str}.npy'
+            fn_fields_zspace = f'{dir_fields}/{subdir_prefix}{idx_LH_str}/Eulerian_fields_zspace{tag}_{idx_LH_str}.npy'
             
-            Path.mkdir(Path(f'{dir_fields}/LH{idx_LH_str}'), parents=True, exist_ok=True)
+            Path.mkdir(Path(f'{dir_fields}/{subdir_prefix}{idx_LH_str}'), parents=True, exist_ok=True)
 
-            fn_dens_lin = f'{dir_mocks}/LH{idx_LH_str}/lin_den_{idx_LH_str}.npy'
+            fn_dens_lin = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/lin_den_{idx_LH_str}.npy'
             dens_lin = np.load(fn_dens_lin)
             
             # get fields sim
             if 'sim' in tag:
-                fn_disp = f'{dir_mocks}/LH{idx_LH_str}/dis_{idx_LH_str}.npy'
+                fn_disp = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/dis_{idx_LH_str}.npy'
             elif 'pred' in tag:
-                fn_disp = f'{dir_mocks}/LH{idx_LH_str}/pred_pos_{idx_LH_str}.npy'
+                fn_disp = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/pred_pos_{idx_LH_str}.npy'
             else:
                 raise ValueError("tag must be 'sim' or 'pred'")
             disp = np.load(fn_disp)
@@ -215,7 +225,8 @@ def compute_pks_quijote_LH():
                 start = time.time()
                 print(f"Computing fields for orig sim for idx_LH={idx_LH}")
                 bias_terms_eul = displacements_to_bias_fields(dens_lin, disp, n_grid, 
-                                            box_size, damping_scale=damping_scale, interlacing=interlacing, fn_fields=fn_fields)
+                                            box_size, damping_scale=damping_scale, interlacing=interlacing, fn_fields=fn_fields,
+                                            n_threads=n_threads)
                 end = time.time()
                 print(f"Generated bias fields for orig sim for idx_LH={idx_LH} in time {end-start} s")
             else:
@@ -225,16 +236,17 @@ def compute_pks_quijote_LH():
             if run_zspace and (not os.path.exists(fn_fields_zspace) or overwrite_fields):
                 start = time.time()
                 if 'sim' in tag:
-                    fn_vel = f'{dir_mocks}/LH{idx_LH_str}/nlvel_{idx_LH_str}.npy'
+                    fn_vel = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/nlvel_{idx_LH_str}.npy'
                 elif 'pred' in tag:
-                    fn_vel = f'{dir_mocks}/LH{idx_LH_str}/pred_vel_{idx_LH_str}.npy'
+                    fn_vel = f'{dir_mocks}/{subdir_prefix}{idx_LH_str}/pred_vel_{idx_LH_str}.npy'
                 else:
                     raise ValueError("tag must be 'sim' or 'pred'")
                 vel = np.load(fn_vel)
                 velocities = fv2bro(vel.copy(order='C'))
                 bias_terms_eul_zspace = displacements_to_bias_fields(dens_lin, disp, n_grid, 
                                             box_size, velocities=velocities, cosmo=cosmo, damping_scale=damping_scale, 
-                                            interlacing=interlacing, fn_fields=fn_fields_zspace)
+                                            interlacing=interlacing, fn_fields=fn_fields_zspace,
+                                            n_threads=n_threads)
                 end = time.time()
                 print(f"Generated zspace bias fields for orig sim for idx_LH={idx_LH} in time {end-start} s")
             else:
@@ -247,7 +259,7 @@ def compute_pks_quijote_LH():
                 print(f"P(k) for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite_pks}, continuing")
             else:
                 start = time.time()
-                tracer_field = get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
+                tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
                 compute_pk(tracer_field, cosmo, box_size,
                         k_min=k_min, k_max=k_max, n_bins=n_bins,
                         deconvolve_grid=deconvolve_grid,
@@ -261,7 +273,7 @@ def compute_pks_quijote_LH():
                 print(f"P(k) zspace for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite_pks}, continuing")
             else:
                 start = time.time()
-                tracer_field_zspace = get_tracer_field(bias_terms_eul_zspace, bias_vector, n_grid_norm=n_grid_orig)
+                tracer_field_zspace = utils.get_tracer_field(bias_terms_eul_zspace, bias_vector, n_grid_norm=n_grid_orig)
                 compute_pk(tracer_field_zspace, cosmo, box_size,
                         k_min=k_min, k_max=k_max, n_bins=n_bins,
                         deconvolve_grid=deconvolve_grid,
@@ -326,18 +338,6 @@ def displacements_to_bias_fields(dens_lin, disp, n_grid, box_size,
         np.save(fn_fields, bias_terms_eul)
         
     return bias_terms_eul
-    
-
-def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm=512):
-
-    def _sum_bias_fields(fields, bias_vector):
-        bias_vector_extended = np.concatenate(([1.0], bias_vector))
-        return np.sum([fields[ii]*bias_vector_extended[ii] for ii in range(len(bias_vector))], axis=0)
-    
-    tracer_field_eul = _sum_bias_fields(bias_fields_eul, bias_vector)
-    tracer_field_eul_norm = tracer_field_eul/n_grid_norm**3
-    
-    return tracer_field_eul_norm
 
 
 def compute_pk(tracer_field, cosmo, box_size,
@@ -351,7 +351,7 @@ def compute_pk(tracer_field, cosmo, box_size,
 
     # n_grid has to match the tracer field size for this compuation!
     n_grid = tracer_field.shape[-1]
-    print("Computing pk, using n_grid = ", n_grid)
+    print("Computing pk, using n_grid = ", n_grid, flush=True)
 
     # defaults from bacco.statistics.compute_crossspectrum_twogrids
     # unless passed or otherwise denoted
@@ -410,6 +410,37 @@ def compute_pk(tracer_field, cosmo, box_size,
     if fn_pk is not None:
         np.save(fn_pk, pk)
     return pk
+
+
+def compute_pnn(bias_terms_eul, cosmo, box_size,
+               k_min=0.01, k_max=1.0, n_bins=50, log_binning=True,
+               normalise_grid=False, deconvolve_grid=False,
+               interlacing=False, deposit_method='cic',
+               correct_grid=False,
+               n_threads=8, fn_pk=None):
+
+    pass 
+    # #Compute a dummy variable with the 15 combinations of 5 distinct objects
+    # import itertools
+    # prod = np.array(list(itertools.combinations_with_replacement(np.arange(bias_terms_eul_pred.shape[0]),r=2)))
+
+    # #Compute the P(k) of the 15 terms
+    # power_all_terms_pred = []
+    # for ii in range(0,len(prod)):
+    #     pk_lt = {'k':lt_k, 'pk':pk_lpt[0][ii], 'pk_nlin':pk_lpt[0][ii], 'pk_lt_log': True}
+    #     if ii in [2,3,4,7,8,11,13]:
+    #         pk_lt['pk_lt_log'] = False
+    #     args_power['correct_grid'] = False if ii == 11 else True
+    #     print(ii, prod[ii])
+    #     power_term_pred = bacco.statistics.compute_crossspectrum_twogrids(grid1=bias_terms_eul_norm_pred[prod[ii,0]],
+    #                                                     grid2=bias_terms_eul_norm_pred[prod[ii,1]],
+    #                                                     normalise_grid1=False,
+    #                                                     normalise_grid2=False,
+    #                                                     deconvolve_grid1=True,
+    #                                                     deconvolve_grid2=True,
+    #                                                     **args_power)
+    #     power_all_terms_pred.append(power_term_pred)
+
 
 
 def fv2bro(t_fv_field) :

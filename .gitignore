@@ -6,9 +6,14 @@ logs/
 *nohup*
 
 plots/
+configs/
 
 data/
 data/emuPks/
 data/cosmolib/
 
+results/
+
 .vscode/
+
+wandb/

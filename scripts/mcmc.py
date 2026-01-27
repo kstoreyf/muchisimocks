@@ -1,28 +1,43 @@
 import os
 os.environ["OMP_NUM_THREADS"] = str(1)
 
-import emcee
-import dynesty
 import multiprocessing as mp
 import numpy as np
 import pathlib
 import time
 
+import utils
+
 
 
 ### Emcee
 def log_prior(theta):
-    for pp in range(len(_param_names)):
-       if (theta[pp] < _dict_bounds[_param_names[pp]][0]) or (theta[pp] >= _dict_bounds[_param_names[pp]][1]):
+    for pp in range(len(_param_names_vary)):
+       if (theta[pp] < _dict_bounds[_param_names_vary[pp]][0]) or (theta[pp] >= _dict_bounds[_param_names_vary[pp]][1]):
            return -np.inf
     return 0.0
 
 
 def log_likelihood(theta):
-    for pp in range(len(_param_names)):
-        _cosmo_params[_emu_param_names[pp]] = theta[pp]
-    _, pk_model_unscaled, _ = _emu.get_galaxy_real_pk(bias=_bias_params, k=_k, 
-                                                **_cosmo_params)
+    # theta combines cosmo and bias params sampling over, and names are _param_names
+    #for pp in range(len(_cosmo_param_names)):
+    cosmo_params = _cosmo_param_dict_fixed.copy()
+    for cosmo_param_name in _cosmo_param_names_vary:
+        i_param = _param_names_vary.index(cosmo_param_name)
+        cosmo_param_name_emu = utils.param_name_to_param_name_emu(cosmo_param_name)
+        cosmo_params[cosmo_param_name_emu] = theta[i_param]
+                
+    expfactor = 1.0 # careful, may need to change at some point!
+    cosmo_params['expfactor'] = expfactor
+    
+    bias_params = _bias_param_dict_fixed.copy()
+    for bias_param_name in _bias_param_names_vary:
+        i_param = _param_names_vary.index(bias_param_name)
+        bias_params[bias_param_name] = theta[i_param]
+    bias_vector = [bias_params[bname] for bname in _bias_param_names_ordered]
+
+    _, pk_model_unscaled, _ = _emu.get_galaxy_real_pk(bias=bias_vector, k=_k, 
+                                                **cosmo_params)
     pk_model = _scaler.scale(pk_model_unscaled)
     diff = _pk_data-pk_model
 
@@ -39,9 +54,9 @@ def log_posterior(theta):
 def prior_transform(u):
 
     u_transformed = []
-    for pp in range(len(_param_names)):
-        width = _dict_bounds[_param_names[pp]][1] - _dict_bounds[_param_names[pp]][0]
-        min_bound = _dict_bounds[_param_names[pp]][0]
+    for pp in range(len(_param_names_vary)):
+        width = _dict_bounds[_param_names_vary[pp]][1] - _dict_bounds[_param_names_vary[pp]][0]
+        min_bound = _dict_bounds[_param_names_vary[pp]][0]
         
         u_t = width*u[pp] + min_bound
         u_transformed.append(u_t)           
@@ -49,29 +64,52 @@ def prior_transform(u):
     return np.array(u_transformed)
 
 
-def evaluate_dynesty(idx_test, pk_data, cov_inv, scaler,
-                     emu, cosmo_params, bias_params, k,
-                     dict_bounds, param_names, emu_param_names,
-                     tag_inf='', n_threads=10):
+def evaluate_mcmc(idx_obs, pk_data, cov_inv, scaler, 
+                   emu, k, 
+                   cosmo_param_dict_fixed, bias_param_dict_fixed, 
+                   cosmo_param_names_vary, bias_param_names_vary,
+                   dict_bounds_cosmo, dict_bounds_bias,
+                   tag_inf='', tag_obs=None, n_threads=8, mcmc_framework='dynesty'):
+
+    global _pk_data, _cov_inv, _scaler
+    global _emu, _k
+    global _cosmo_param_dict_fixed, _bias_param_dict_fixed
+    global _cosmo_param_names_vary, _bias_param_names_vary, _param_names_vary
+    global _dict_bounds
+    global _bias_param_names_ordered
+
+    # for some reason using "update" does not work, at least if one dict is empty
+    dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
+    _bias_param_names_ordered = utils.biasparam_names_ordered
+    _pk_data, _cov_inv, _scaler = pk_data, cov_inv, scaler
+    _emu, _k, _dict_bounds, = emu, k, dict_bounds
+    _cosmo_param_dict_fixed, _bias_param_dict_fixed = cosmo_param_dict_fixed, bias_param_dict_fixed
+    _cosmo_param_names_vary, _bias_param_names_vary = cosmo_param_names_vary, bias_param_names_vary    
+    _param_names_vary = _cosmo_param_names_vary + _bias_param_names_vary
+
+    if mcmc_framework == 'dynesty':
+        evaluate_dynesty(idx_obs, tag_inf=tag_inf, tag_obs=tag_obs, n_threads=n_threads)
+    elif mcmc_framework == 'emcee':
+        evaluate_emcee(idx_obs, tag_inf=tag_inf, tag_obs=tag_obs, n_threads=n_threads)
     
-    dir_dynesty =  f'../data/results_dynesty/samplers{tag_inf}'
+    
+def evaluate_dynesty(idx_obs, tag_inf='', tag_obs=None, n_threads=8):
+    
+    # import here so if only have emcee, that still works
+    import dynesty
+
+    dir_dynesty =  f'../results/results_dynesty/samplers{tag_inf}'
     p = pathlib.Path(dir_dynesty)
     p.mkdir(parents=True, exist_ok=True)
-    fn_dynesty = f'{dir_dynesty}/sampler_results_idxtest{idx_test}.npy'
+    if tag_obs is None:
+        tag_obs = f'_idx{idx_obs}'
+    fn_dynesty = f'{dir_dynesty}/sampler_results{tag_obs}.npy'
     if os.path.exists(fn_dynesty):
-        print("File exists, skipping")
+        print(f"Sampler results file {fn_dynesty} already exists, skipping")
         return
     
-    global _pk_data, _cov_inv, _scaler
-    global _emu, _cosmo_params, _bias_params, _k
-    global _dict_bounds, _param_names, _emu_param_names
-    
-    _pk_data, _cov_inv, _scaler = pk_data, cov_inv, scaler
-    _emu, _cosmo_params, _bias_params, _k =  emu, cosmo_params, bias_params, k
-    _dict_bounds, _param_names, _emu_param_names = dict_bounds, param_names, emu_param_names
-    
     start = time.time()
-    n_params = len(param_names)
+    n_params = len(_cosmo_param_names_vary) + len(_bias_param_names_vary)
     with dynesty.pool.Pool(n_threads, log_likelihood, prior_transform) as pool:
         sampler = dynesty.NestedSampler(pool.loglike, pool.prior_transform, n_params, 
                                              nlive=50, bound='single')
@@ -83,42 +121,40 @@ def evaluate_dynesty(idx_test, pk_data, cov_inv, scaler,
     #samples_dynesty = results_dynesty.samples_equal()
     #print(samples_dynesty.shape)
     
+    print(f"Saving parameters to {_param_names_vary}")
     np.save(fn_dynesty, results_dynesty)
 
+    print(f"Saving parameters to {_param_names_vary}")
+    np.savetxt(f'{dir_dynesty}/param_names.txt', _param_names_vary, fmt='%s')
+    
+    
+def evaluate_emcee(idx_obs, tag_inf='', tag_obs=None, n_threads=8):
+    
+    # import here so if only want emcee (not dynesty), still runs
+    import emcee
 
-def evaluate_emcee(idx_test, pk_data, cov_inv, scaler,
-                     emu, cosmo_params, bias_params, k,
-                     dict_bounds, param_names, emu_param_names,
-                     tag_inf='', n_threads=8):
-    
-    global _pk_data, _cov_inv, _scaler
-    global _emu, _cosmo_params, _bias_params, _k
-    global _dict_bounds, _param_names, _emu_param_names
-    
-    _pk_data, _cov_inv, _scaler = pk_data, cov_inv, scaler
-    _emu, _cosmo_params, _bias_params, _k =  emu, cosmo_params, bias_params, k
-    _dict_bounds, _param_names, _emu_param_names = dict_bounds, param_names, emu_param_names
-    
-    n_params = len(param_names)
-    
+    n_params = len(_cosmo_param_names_vary) + len(_bias_param_names_vary)
+
     # n_burn = 100
     n_steps = 4000 # 50000
     n_walkers = 4 * n_params
 
-    dir_emcee =  f'../data/results_emcee/samplers{tag_inf}'
+    dir_emcee =  f'../results/results_emcee/samplers{tag_inf}'
     p = pathlib.Path(dir_emcee)
     p.mkdir(parents=True, exist_ok=True)
-    fn_emcee = f'{dir_emcee}/sampler_idxtest{idx_test}.npy'
+    if tag_obs is None:
+        tag_obs = f'_idx{idx_obs}'
+    fn_emcee = f'{dir_emcee}/sampler{tag_obs}.npy'
     if os.path.exists(fn_emcee):
-        print("File exists, skipping")
+        print(f"Sampler results file {fn_emcee} already exists, skipping")
         return
     
     backend = emcee.backends.HDFBackend(fn_emcee)
     backend.reset(n_walkers, n_params)
 
     rng = np.random.default_rng(seed=42)
-    theta_0 = np.array([[rng.uniform(low=dict_bounds[param_name][0],high=dict_bounds[param_name][1]) 
-                        for param_name in param_names] for _ in range(n_walkers)])
+    theta_0 = np.array([[rng.uniform(low=_dict_bounds[param_name][0],high=_dict_bounds[param_name][1]) 
+                        for param_name in _param_names_vary] for _ in range(n_walkers)])
 
     start = time.time()
     if n_threads>1:
@@ -131,6 +167,9 @@ def evaluate_emcee(idx_test, pk_data, cov_inv, scaler,
                                               backend=backend)
         _ = sampler_emcee.run_mcmc(theta_0, n_steps, progress=True) 
     end = time.time()
+
+    print(f"Saving parameters to {_param_names_vary}")
+    np.savetxt(f'{dir_emcee}/param_names.txt', _param_names_vary, fmt='%s')
 
     print(f"Time: {end-start} s ({(end-start)/60} min)")
 

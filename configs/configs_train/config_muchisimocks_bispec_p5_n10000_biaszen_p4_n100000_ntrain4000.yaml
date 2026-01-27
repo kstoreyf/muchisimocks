@@ -1,0 +1,13 @@
+data_mode: muchisimocks
+kwargs_data:
+  tag_datagen: ''
+n_rlzs_per_cosmo: 1
+n_train: 4000
+run_mode: single
+statistics:
+- bispec
+sweep_name: null
+tag_biasparams: _biaszen_p4_n100000
+tag_data: _muchisimocks_bispec_p5_n10000_biaszen_p4_n100000
+tag_inf: _muchisimocks_bispec_p5_n10000_biaszen_p4_n100000_ntrain4000
+tag_params: _p5_n10000
