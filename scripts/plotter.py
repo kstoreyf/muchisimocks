@@ -709,11 +709,23 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     # Track which original parameters have been replaced by reparameterized versions
     replaced_params = set()
     
+    # Define parameters to multiply by sigma_8 vs sigma_8^2
+    params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
+    params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
+    
     for pn in param_names:
-        # Check if there's a reparameterized version of this parameter in any chain
-        reparam_name = f'sigma8_cold_x_{pn}'
-        has_reparam = any(reparam_name in chain_data['param_names_samples'] 
-                         for chain_data in all_chains_data)
+        # Determine the reparameterized name based on parameter type
+        if pn in params_sigma8_squared:
+            reparam_name = f'sigma8_cold_sq_x_{pn}'
+        elif pn in params_sigma8:
+            reparam_name = f'sigma8_cold_x_{pn}'
+        else:
+            reparam_name = None
+        
+        has_reparam = False
+        if reparam_name:
+            has_reparam = any(reparam_name in chain_data['param_names_samples'] 
+                             for chain_data in all_chains_data)
         has_original = any(pn in chain_params for chain_params in all_param_names_per_chain)
         
         if unreparameterize:
@@ -743,9 +755,18 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                 missing_params.append(pn)
         else:
             # When not unreparameterizing, check both original and reparameterized
-            reparam_name = f'sigma8_cold_x_{pn}'
-            if pn not in param_names_any_available and reparam_name not in param_names_any_available:
-                missing_params.append(pn)
+            if pn in params_sigma8_squared:
+                reparam_name = f'sigma8_cold_sq_x_{pn}'
+            elif pn in params_sigma8:
+                reparam_name = f'sigma8_cold_x_{pn}'
+            else:
+                reparam_name = None
+            
+            if pn not in param_names_any_available:
+                if reparam_name and reparam_name not in param_names_any_available:
+                    missing_params.append(pn)
+                elif not reparam_name:
+                    missing_params.append(pn)
     
     if len(missing_params) > 0:
         if unreparameterize:
@@ -770,8 +791,14 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                 param_mapping[pn] = pn  # Direct mapping
             elif unreparameterize:
                 # Check if there's a reparameterized version we can convert back
-                reparam_name = f'sigma8_cold_x_{pn}'
-                if reparam_name in chain_data['param_names_samples']:
+                if pn in params_sigma8_squared:
+                    reparam_name = f'sigma8_cold_sq_x_{pn}'
+                elif pn in params_sigma8:
+                    reparam_name = f'sigma8_cold_x_{pn}'
+                else:
+                    reparam_name = None
+                
+                if reparam_name and reparam_name in chain_data['param_names_samples']:
                     available_in_this_chain.append(pn)
                     param_mapping[pn] = reparam_name  # Map original name to reparameterized name
         
@@ -782,7 +809,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         need_sigma8 = False
         if unreparameterize:
             for pn in available_in_this_chain:
-                if pn in param_mapping and param_mapping[pn].startswith('sigma8_cold_x_'):
+                if pn in param_mapping and (param_mapping[pn].startswith('sigma8_cold_x_') or param_mapping[pn].startswith('sigma8_cold_sq_x_')):
                     need_sigma8 = True
                     break
         
@@ -805,17 +832,20 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                     # Direct parameter - just extract
                     idx = list(chain_data['param_names_samples']).index(pn)
                     samples_dict[pn] = chain_data['samples'][:, idx]
-                elif source_name.startswith('sigma8_cold_x_') and need_sigma8:
+                elif (source_name.startswith('sigma8_cold_x_') or source_name.startswith('sigma8_cold_sq_x_')) and need_sigma8:
                     # Reparameterized parameter - convert back to original
                     idx_reparam = list(chain_data['param_names_samples']).index(source_name)
                     reparam_samples = chain_data['samples'][:, idx_reparam]
                     
                     # Extract original parameter name
-                    orig_param_name = source_name.replace('sigma8_cold_x_', '')
+                    if source_name.startswith('sigma8_cold_sq_x_'):
+                        orig_param_name = source_name.replace('sigma8_cold_sq_x_', '')
+                    else:
+                        orig_param_name = source_name.replace('sigma8_cold_x_', '')
                     
                     # Determine if we divide by sigma8 or sigma8^2
-                    params_sigma8 = ['b1', 'An_b1']
-                    params_sigma8_squared = ['b2', 'bs2', 'bl', 'An_b2', 'An_bs2', 'An_bl']
+                    params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
+                    params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
                     
                     if orig_param_name in params_sigma8:
                         # Divide by sigma8
@@ -880,9 +910,12 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     truth_loc = {}
     for pn in param_names_any_available:
         # Check if this is a reparameterized parameter (from the chains)
-        if pn.startswith('sigma8_cold_x_'):
+        if pn.startswith('sigma8_cold_x_') or pn.startswith('sigma8_cold_sq_x_'):
             # Extract the original parameter name
-            orig_param_name = pn.replace('sigma8_cold_x_', '')
+            if pn.startswith('sigma8_cold_sq_x_'):
+                orig_param_name = pn.replace('sigma8_cold_sq_x_', '')
+            else:
+                orig_param_name = pn.replace('sigma8_cold_x_', '')
             
             # Check if we have sigma8_cold and the original parameter in param_names (original form)
             if 'sigma8_cold' in param_names and orig_param_name in param_names:
@@ -894,8 +927,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                     orig_val = theta_obs_true[idx_orig]
                     
                     # Determine if we multiply by sigma8 or sigma8^2
-                    params_sigma8 = ['b1', 'An_b1']
-                    params_sigma8_squared = ['b2', 'bs2', 'bl', 'An_b2', 'An_bs2', 'An_bl']
+                    params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
+                    params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
                     
                     if orig_param_name in params_sigma8:
                         truth_loc[pn] = orig_val * sigma8_val

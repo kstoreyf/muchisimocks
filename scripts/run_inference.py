@@ -118,6 +118,11 @@ def train_likefree_inference(config, overwrite=False):
     
     # Reparameterize if requested
     reparameterize = config.get("reparameterize", False)
+    plite = config.get("plite", False)
+    if reparameterize:
+        print("For now setting plite=True whenever reparameterize is true")
+        plite = True
+
     if reparameterize:
         print("Reparameterizing theta...")
         theta, param_names = utils.reparameterize_theta(theta, param_names)
@@ -126,6 +131,27 @@ def train_likefree_inference(config, overwrite=False):
         print('theta shape after reparameterization:', theta.shape)
         print('param_names after reparameterization:', param_names)
         print('Updated bounds:', dict_bounds)
+    
+    # If plite is true, exclude hubble, omega_baryon, ns from training
+    if plite:
+        print("plite=True: Excluding hubble, omega_baryon, ns from training")
+        params_to_exclude = ['hubble', 'omega_baryon', 'ns']
+        
+        # Find indices of parameters to exclude
+        idxs_to_exclude = [i for i, pn in enumerate(param_names) if pn in params_to_exclude]
+        
+        if idxs_to_exclude:
+            print(f"Excluding parameters: {[param_names[i] for i in idxs_to_exclude]}")
+            # Filter theta
+            idxs_to_keep = [i for i in range(len(param_names)) if i not in idxs_to_exclude]
+            theta = theta[:, idxs_to_keep]
+            # Filter param_names
+            param_names = [param_names[i] for i in idxs_to_keep]
+            # Filter dict_bounds
+            dict_bounds = {pn: bounds for pn, bounds in dict_bounds.items() if pn not in params_to_exclude}
+            print('theta shape after plite filtering:', theta.shape)
+            print('param_names after plite filtering:', param_names)
+            print('Updated bounds after plite filtering:', dict_bounds)
     
     ### Subsampling (ntrain and train/val)
     # downsample based on n_train    
@@ -210,13 +236,26 @@ def test_likefree_inference(config, overwrite=False):
     tag_data_test = config["tag_data_test"]
     tag_inf_train = config["tag_inf_train"]
     sweep_name = config["sweep_name"]
+    #n_test_eval = config.get("n_test_eval", None)
+    print("BEWARNED: manually setting n_test_eval to 100")
+    n_test_eval = 100
     
     if evaluate_mean:
         tag_test = f'{tag_data_test}_mean'
     else:
         tag_test = tag_data_test
+    
+    # Construct tag_test_eval with _N{n_test_eval} suffix if n_test_eval is specified
+    if n_test_eval is not None:
+        tag_n_eval = f"_neval{n_test_eval}"
+        tag_test_eval = f"{tag_test}{tag_n_eval}"
+    else:
+        tag_test_eval = tag_test
+    
     dir_sbi = f'{dir_results}/results_sbi/sbi{tag_inf_train}'
-    fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
+    
+    # Check if file already exists (using tag_test_eval if provided, otherwise tag_test)
+    fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test_eval}_pred.npy'
     if not overwrite and os.path.exists(fn_samples_test_pred):
         print(f"Oh look, samples {fn_samples_test_pred} already exists, and overwrite={overwrite}! Skipping testing.")
         return
@@ -262,11 +301,11 @@ def test_likefree_inference(config, overwrite=False):
         for i_stat in range(len(statistics)):
             y_mean_i = np.mean(y[i_stat], axis=0)
             y_mean.append(y_mean_i)
-        sbi_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test=tag_test)
+        sbi_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test_eval=tag_test_eval, n_test_eval=n_test_eval)
     else:
         # run on full test set
         print(f"y_obs shape: {len(y_obs)}, {len(y_obs[0])}, {len(y_obs[0][0])}")
-        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_test)
+        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test_eval=tag_test_eval, n_test_eval=n_test_eval)
 
 
 def test_likefree_inference_ood(config, overwrite=False):
@@ -296,13 +335,24 @@ def test_likefree_inference_ood(config, overwrite=False):
     idxs_obs = config["idxs_obs"]
     tag_mock = config['tag_mock']
     tag_data_test = config["tag_data_test"]
+    n_test_eval = config.get("n_test_eval", None)
     
     if evaluate_mean:
         tag_test = f'{tag_data_test}_mean'
     else:
         tag_test = tag_data_test
+    
+    # Construct tag_test_eval with _N{n_test_eval} suffix if n_test_eval is specified
+    if n_test_eval is not None:
+        tag_n_eval = f"_N{n_test_eval}"
+        tag_test_eval = f"{tag_test}{tag_n_eval}"
+    else:
+        tag_test_eval = tag_test
+    
     dir_sbi = f'{dir_results}/results_sbi/sbi{tag_inf_train}'
-    fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
+    
+    # Check if file already exists (using tag_test_eval)
+    fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test_eval}_pred.npy'
     if not overwrite and os.path.exists(fn_samples_test_pred):
         print(f"Oh look, samples {fn_samples_test_pred} already exists, and overwrite={overwrite}! Skipping testing.")
         return
@@ -338,11 +388,11 @@ def test_likefree_inference_ood(config, overwrite=False):
         for i_stat in range(len(statistics)):
             y_mean_i = np.mean(y[i_stat], axis=0)
             y_mean.append(y_mean_i)
-        sbi_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test=tag_test)
+        sbi_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test_eval=tag_test_eval, n_test_eval=n_test_eval)
     else:
         # run on full test set
         #print(f"y_obs shape: {len(y_obs)}, {len(y_obs[0])}, {len(y_obs[0][0])}")
-        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test=tag_test)
+        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test_eval=tag_test_eval, n_test_eval=n_test_eval)
 
 
 def run_likelihood_inference(config):

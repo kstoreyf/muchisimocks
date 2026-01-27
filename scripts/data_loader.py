@@ -230,6 +230,8 @@ def check_df_lengths(params_df, biasparams_df):
 def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
     if statistic == 'pk':
         mask = get_Pk_mask(tag_data, tag_mask=tag_mask, k=k, Pk=y)
+    elif statistic == 'pgm':
+        mask = get_Pgm_mask(tag_data, tag_mask=tag_mask, k=k, Pgm=y)
     elif statistic == 'bispec':
         print(k.shape, y.shape)
         mask = get_bispec_mask(tag_data, tag_mask=tag_mask, k=k, bispec=y)
@@ -288,6 +290,43 @@ def get_Pk_mask(tag_data, tag_mask='', k=None, Pk=None):
         np.savetxt(fn_mask, mask.astype(int), fmt='%i')
     print(f"Mask masks out {np.sum(~mask)} Pk bins")
     return mask
+
+
+def get_Pgm_mask(tag_data, tag_mask='', k=None, Pgm=None):
+    dir_masks = '../data/masks'
+    # if tag_mask is None:
+    #     tag_mask = ''
+    # need tag_data bc we're checking for any negatives and that depends on the data!
+    fn_mask = f'{dir_masks}/mask_pgm{tag_data}{tag_mask}.txt'
+    print(f"fn_mask: {fn_mask}")
+    if os.path.exists(fn_mask):
+        print(f"Loading from {fn_mask} (already exists)")
+        return np.loadtxt(fn_mask, dtype=bool)
+    else:
+        assert k is not None, "must pass either Pk or k, if mask doesn't yet exist!"
+        
+        # Start with base mask: remove zero values if Pgm provided (can be neg), otherwise keep all
+        if Pgm is not None:
+            # remove zero values
+            tol = 1e-6
+            mask = np.all(np.abs(Pgm)>tol, axis=0)
+        else:
+            print("No Pgm provided and no mask exists, using all bins")
+            mask = np.ones(len(k), dtype=bool)
+        # Apply kmax cutoff if specified
+        if 'kmaxpgm' in tag_mask:
+            match = re.search(r'kmaxpgm([\d.]+)', tag_mask)
+            if match:
+                kmax = float(match.group(1))
+                mask = mask & (k < kmax)
+            else:
+                raise ValueError(f"Could not extract kmax value from tag_mask: {tag_mask}")
+        
+        print(f"Saving mask to {fn_mask}")
+        np.savetxt(fn_mask, mask.astype(int), fmt='%i')
+    print(f"Mask masks out {np.sum(~mask)} Pgm bins")
+    return mask
+
 
 
 def get_bispec_mask(tag_data, tag_mask='', k=None, bispec=None):
@@ -367,13 +406,17 @@ def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
                 kname = 'sigma8_cold'
             param_dict[kname] = v
 
-        # dividing b2 by 2 bc marcos said there is a mismatch in the definition of b2 bw prob bias and hybrid bias
+        # MULTIPYLING b2 by 2 bc marcos said there is a mismatch in the definition of b2 and bs2 bw prob bias and hybrid bias
+        # "with the Probabilistic Bias approach one gets:
+        # b2_pb = b2_measured/2
+        # bs2_pb = b_s2_measured/2
+        # Here measured means the one you get in your posterior"
         if tag_mock == '_nbar0.00011':
-            param_dict.update({'b1': 0.52922445, 'b2': 0.13816352/2, 'bs2': -0.21806094, 'bl': -1.0702721})
+            param_dict.update({'b1': 0.52922445, 'b2': 0.13816352*2, 'bs2': -0.21806094*2, 'bl': -1.0702721})
         elif tag_mock == '_nbar0.00022':
-            param_dict.update({'b1': 0.47410742, 'b2': 0.06350746/2, 'bs2': -0.16940883, 'bl': -0.82443643})
+            param_dict.update({'b1': 0.47410742, 'b2': 0.06350746*2, 'bs2': -0.16940883*2, 'bl': -0.82443643})
         elif tag_mock == '_nbar0.00054':
-            param_dict.update({'b1': 0.40209658, 'b2': -0.00958755/2, 'bs2': -0.09669132, 'bl': -0.79150708})
+            param_dict.update({'b1': 0.40209658, 'b2': -0.00958755*2, 'bs2': -0.09669132*2, 'bl': -0.79150708})
         else:
             raise ValueError(f"tag_mock {tag_mock} not recognized for shame OOD data!")
         #

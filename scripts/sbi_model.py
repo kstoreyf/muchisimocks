@@ -315,7 +315,7 @@ class SBIModel():
                 y_test_i = scaler_y.scale(self.y_test_unscaled[i])
                 self.y_test = np.concatenate((self.y_test, y_test_i), axis=1)
             
-            print(f"min and max after scaling: {np.min(scaler_y.scale(self.y_train_unscaled[i])):3f}, {np.max(scaler_y.scale(self.y_train_unscaled[i])):3f}")
+            print(f"min and max after scaling (func={func_scaler_y}): {np.min(scaler_y.scale(self.y_train_unscaled[i])):3f}, {np.max(scaler_y.scale(self.y_train_unscaled[i])):3f}")
             
             # save scaler - need pickle for custom object!!
             fn_scaler_y = f'{self.dir_sbi}/scaler_y_{statistic}.p'
@@ -363,10 +363,10 @@ class SBIModel():
     
     
     
-    def evaluate_test_set(self, y_test_unscaled=None, tag_test='', 
+    def evaluate_test_set(self, y_test_unscaled=None, tag_test_eval='', 
                           n_samples=10000, checkpoint_every=100, 
                           #n_samples=200, checkpoint_every=10, 
-                          resume=True):
+                          resume=True, n_test_eval=100):
         
         ### NOTE: this went orders of mag faster when i added checkpointing every 100 and doing 
         # samples_batched of that size! before sometimes would only finish a 20-50% in a day;
@@ -374,14 +374,22 @@ class SBIModel():
         
         # y_test_unscaled is an array of length n_statistics, each with shape (n_test, n_dim);
         # concatenate inside evaluate bc we need to scale based on each stat
-        print(f"Evaluating test set with tag {tag_test}")
+        print(f"Evaluating test set with tag {tag_test_eval}")
         if y_test_unscaled is None:
             y_test_unscaled = self.y_test_unscaled
         
+        # Limit to subset of test samples if n_test_eval is specified
+        if n_test_eval is not None and y_test_unscaled[0].ndim > 1:
+            n_available = len(y_test_unscaled[0])
+            n_to_use = min(n_test_eval, n_available)
+            if n_to_use < n_available:
+                print(f"Limiting test set from {n_available} to {n_to_use} samples")
+                y_test_unscaled = [y_stat[:n_to_use] for y_stat in y_test_unscaled]
+        
         # Set up file paths
-        fn_samples_test_pred = f'{self.dir_sbi}/samples_test{tag_test}_pred.npy'
-        fn_samples_test_pred_inprogress = f'{self.dir_sbi}/samples_test{tag_test}_pred_inprogress.npy'
-        checkpoint_file = f"{self.dir_sbi}/checkpoint_samples_test{tag_test}.txt"
+        fn_samples_test_pred = f'{self.dir_sbi}/samples_test{tag_test_eval}_pred.npy'
+        fn_samples_test_pred_inprogress = f'{self.dir_sbi}/samples_test{tag_test_eval}_pred_inprogress.npy'
+        checkpoint_file = f"{self.dir_sbi}/checkpoint_samples_test{tag_test_eval}.txt"
         
         # Check for existing samples and checkpoint
         #samples_total = len(y_test_unscaled[0])

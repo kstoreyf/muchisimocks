@@ -9,13 +9,14 @@
 ##SBATCH --job-name=bispec_p5_n10000_b1000_p0_n1_step100_round2
 ##SBATCH --job-name=pgm_p5_n10000_biaszen_p4_n200000_step100
 ##SBATCH --job-name=pgm_p5_n10000_biaszen_p4_n200000_step100_round4
-#SBATCH --job-name=bispec_p5_n10000_b1000_p0_n1_step100_round5
+##SBATCH --job-name=pgm_p5_n10000_biaszen_p4_n200000_step100_round5
 ##SBATCH --job-name=pgm_p5_n10000_biaszen_p4_n200000_noise_unit_p5_n10000_Anmult_p5_n200000_step100_round5
+#SBATCH --job-name=pnn_p5_n10000_round2
 ##SBATCH --job-name=pgm_quijote_p0_n1000_b1000_p0_n1_noise_unit_quijote_p0_n1000_Anmult_p0_n1_step100
 ##SBATCH --job-name=pgm_test_p5_n1000_biaszen_p4_n1000_noise_unit_test_p5_n1000_Anmult_p5_n1000_step100
 ##SBATCH --job-name=bispec_test_p5_n1000_b1000_p0_n1_step100
 ##SBATCH --job-name=pnn_test_p5_n1000_step100_round2
-#SBATCH --time=0:05:00 # time per task, but doing Nsteps; ~10s for bispec 
+#SBATCH --time=0:59:00 # time per task, but doing Nsteps; ~10s for bispec 
 ##SBATCH --time=6:00:00 # time per task, but doing Nsteps; for 20000 (most), use 8h to be safe. lower, 1h fine
 ##SBATCH --time=24:00:00 #datagen
 #SBATCH --nodes=1              # nodes per instance
@@ -73,8 +74,8 @@ echo "idx_mock_start=${idx_mock_start}, idx_mock_end=${idx_mock_end}"
 ### noiseless
 # train
 #python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n200000 
-python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _b1000_p0_n1
-#python compute_statistics.py --statistic pnn --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000
+#python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _b1000_p0_n1
+python compute_statistics.py --statistic pnn --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000
 #python compute_statistics.py --statistic pgm --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _p5_n10000 --tag_biasparams _biaszen_p4_n200000
 # test
 #python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _test_p5_n1000 --tag_biasparams _biaszen_p4_n1000 

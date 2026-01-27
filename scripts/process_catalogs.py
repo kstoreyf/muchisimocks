@@ -166,6 +166,7 @@ def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None,
         return tracer_field, n_grid_mock
 
     # Load catalog
+    # arrays: ['gal_central', 'gal_ids', 'gal_mbid', 'gal_mstar', 'gal_pos', 'gal_vel', 'parent_index', 'parent_m200']
     with h5py.File(fn_cat, 'r') as cat:
         positions = cat['gal_pos'][:]
         n_galaxies = len(positions)
@@ -211,6 +212,19 @@ def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None,
         np.save(fn_cat_mesh, cat_overdensity)
 
     return cat_overdensity, n_grid_mock
+
+
+def compute_matter_density_field():
+    print("BEWARE need to run on atlas, where bacco sim is!")
+    basedir = "/cosmos_storage/cosmosims/BaccoSims/Rings/N3072_L1024/Planck_N3072_L1024.0_output/0.00"
+    # /groups_049/fof_subhalo_history_tab_orph_wweight_049
+    snapnum = 49 #z=0, i believe
+    halo_file = f"groups_{snapnum:03}/fof_subhalo_history_tab_orph_wweight_{snapnum:03}"
+    sim = bacco.Simulation(basedir=basedir, 
+                        halo_file=halo_file,
+                        )
+    print(sim.sdm['pos'].shape)
+    return
 
 
 def compute_pk(tracer_field, box_size_mock, cosmo=None, fn_stat=None,):

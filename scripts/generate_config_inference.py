@@ -13,14 +13,17 @@ def main():
     #overwrite = True
     #generate_train_config(overwrite=overwrite)
     #stat_arr = [['bispec'], ['pk', 'bispec']]
-    stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
+    #stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
+    #stat_arr = [['pgm']]
+    #stat_arr = [['pgm'], ['pk', 'pgm']]
+    stat_arr = [['pk', 'bispec', 'pgm']]
     #stat_arr = [['pk']]
     #stat_arr = [['bispec']]
     n_train_arr = [10000]
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
     for statistics in stat_arr:
         for n_train in n_train_arr:
-            #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
             generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
             #generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
     #generate_runlike_config(overwrite=overwrite)
@@ -38,12 +41,12 @@ def generate_train_config(dir_config='../configs/configs_train',
     #n_train = 10
     #n_train = None #if None, uses all (and no ntrain tag in tag_inf)
     tag_params = '_p5_n10000'
-    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_b1000_p0_n1'
     #tag_biasparams = '_b1zen_p1_n10000'
     #tag_biasparams = '_biaszen_p4_n10000' #1-1 cosmo-bias params
     #tag_biasparams = '_biaszen_p4_n50000' #5 bias params per cosmo
     #tag_biasparams = '_biaszen_p4_n100000' #10 bias params per cosmo
-    #tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
+    tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
     #tag_noise = '_noise_unit_p5_n10000'
     #tag_Anoise = '_An_p1_n10000'
     #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
@@ -58,7 +61,7 @@ def generate_train_config(dir_config='../configs/configs_train',
     n_rlzs_per_cosmo = 1
     
     # running inferece params
-    reparameterize = False
+    reparameterize = True
     run_mode = 'single'
     tag_sweep = None
     n_train_sweep = None
@@ -150,12 +153,12 @@ def generate_test_config(dir_config='../configs/configs_test',
     
     ### train params
     tag_params = '_p5_n10000'
-    tag_biasparams = '_b1000_p0_n1'
+    #tag_biasparams = '_b1000_p0_n1'
     #tag_biasparams = '_b1zen_p1_n10000'
     #tag_biasparams = '_biaszen_p4_n10000' #1x
     #tag_biasparams = '_biaszen_p4_n50000' #5x
     #tag_biasparams = '_biaszen_p4_n100000' #10x
-    #tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
+    tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
     #tag_noise = '_noise_unit_p5_n10000'
     #tag_Anoise = '_An_p1_n10000'
     #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
@@ -166,7 +169,7 @@ def generate_test_config(dir_config='../configs/configs_test',
     #tag_mask = '_kmaxbispec0.25'
     tag_mask = ''
 
-    reparameterize = False
+    reparameterize = True
     n_rlzs_per_cosmo = 1
     # For loading a model trained with wandb sweep; best of that sweep will be used
     #tag_sweep = '-rand10'
@@ -188,8 +191,8 @@ def generate_test_config(dir_config='../configs/configs_test',
     ## settings for coverage test
     evaluate_mean = False
     tag_params_test = '_test_p5_n1000'
-    tag_biasparams_test = '_b1000_p0_n1'
-    # tag_biasparams_test = '_biaszen_p4_n1000'
+    #tag_biasparams_test = '_b1000_p0_n1'
+    tag_biasparams_test = '_biaszen_p4_n1000'
     # tag_noise_test = '_noise_unit_test_p5_n1000'
     # tag_Anoise_test = '_Anmult_p5_n1000'
     tag_noise_test = None

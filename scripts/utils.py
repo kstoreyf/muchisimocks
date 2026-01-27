@@ -26,12 +26,12 @@ param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
                 # Reparameterized parameters (sigma8_cold_x_*)
                 'sigma8_cold_x_b1': r'$\sigma_8 b_1$',
                 'sigma8_cold_x_An_b1': r'$\sigma_8 A_\mathrm{noise}^{b_1}$',
-                'sigma8_cold_x_b2': r'$\sigma_8^2 b_2$',
-                'sigma8_cold_x_bs2': r'$\sigma_8^2 b_{s^2}$',
-                'sigma8_cold_x_bl': r'$\sigma_8^2 b_{\Delta}$',
-                'sigma8_cold_x_An_b2': r'$\sigma_8^2 A_\mathrm{noise}^{b_2}$',
-                'sigma8_cold_x_An_bs2': r'$\sigma_8^2 A_\mathrm{noise}^{bs_2}$',
-                'sigma8_cold_x_An_bl': r'$\sigma_8^2 A_\mathrm{noise}^{\Delta}$',
+                'sigma8_cold_x_bl': r'$\sigma_8 b_{\Delta}$',
+                'sigma8_cold_x_An_bl': r'$\sigma_8 A_\mathrm{noise}^{\Delta}$',
+                'sigma8_cold_sq_x_b2': r'$\sigma_8^2 b_2$',
+                'sigma8_cold_sq_x_bs2': r'$\sigma_8^2 b_{s^2}$',
+                'sigma8_cold_sq_x_An_b2': r'$\sigma_8^2 A_\mathrm{noise}^{b_2}$',
+                'sigma8_cold_sq_x_An_bs2': r'$\sigma_8^2 A_\mathrm{noise}^{bs_2}$',
                 }
 
 color_dict_methods = {'mn': 'blue',
@@ -63,8 +63,9 @@ labels_pnn = ['$1 1$',
             ]
 
 labels_statistics = {
-    'pk': '$P(k)$',
+    'pk': '$P_\mathrm{gg}(k)$',
     'bispec': '$B(k_1,k_2,k_3)$',
+    'pgm': '$P_\mathrm{gm}(k)$',
 }
 
 labels_biasparams = {
@@ -113,6 +114,7 @@ noiseparam_names_ordered = ['An_homog', 'An_b1', 'An_b2', 'An_bs2', 'An_bl']
 
 statistics_scaler_funcs = {'pk': 'log_minmax',
                            'bispec': 'minmax',
+                           'pgm': 'log_minmax_const',
                           }
 
 
@@ -351,8 +353,8 @@ def reparameterize_theta(theta, param_names):
     """
     Reparameterize theta by multiplying bias and noise parameters by sigma_8.
     
-    For b1 and A_b1 (An_b1): multiply by sigma_8
-    For b2, bs2, bl, A_b2 (An_b2), A_bs2 (An_bs2), A_bl (An_bl): multiply by sigma_8^2
+    For b1, bl, A_b1 (An_b1), and A_bl (An_bl): multiply by sigma_8
+    For b2, bs2, A_b2 (An_b2), and A_bs2 (An_bs2): multiply by sigma_8^2
     
     Parameters:
     -----------
@@ -376,10 +378,10 @@ def reparameterize_theta(theta, param_names):
     idx_sigma8 = param_names.index('sigma8_cold')
     
     # Define parameters to multiply by sigma_8
-    params_sigma8 = ['b1', 'An_b1']
+    params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
     
     # Define parameters to multiply by sigma_8^2
-    params_sigma8_squared = ['b2', 'bs2', 'bl', 'An_b2', 'An_bs2', 'An_bl']
+    params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
     
     # Create a copy of theta and param_names
     theta_reparam = theta.copy()
@@ -399,7 +401,7 @@ def reparameterize_theta(theta, param_names):
             sigma8_values = theta[:, idx_sigma8]
             theta_reparam[:, i] = theta[:, i] * (sigma8_values ** 2)
             # Rename parameter
-            new_name = f'sigma8_cold_x_{param_name}'
+            new_name = f'sigma8_cold_sq_x_{param_name}'
             param_names_reparam[i] = new_name
     
     return theta_reparam, param_names_reparam
@@ -431,10 +433,10 @@ def reparameterize_bounds(dict_bounds):
     sigma8_low, sigma8_high = sigma8_bounds[0], sigma8_bounds[1]
     
     # Define parameters to multiply by sigma_8
-    params_sigma8 = ['b1', 'An_b1']
+    params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
     
     # Define parameters to multiply by sigma_8^2
-    params_sigma8_squared = ['b2', 'bs2', 'bl', 'An_b2', 'An_bs2', 'An_bl']
+    params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
     
     dict_bounds_reparam = dict_bounds.copy()
     
@@ -464,7 +466,7 @@ def reparameterize_bounds(dict_bounds):
             new_low = min(products)
             new_high = max(products)
             # Update with new name
-            new_name = f'sigma8_cold_x_{param_name}'
+            new_name = f'sigma8_cold_sq_x_{param_name}'
             dict_bounds_reparam[new_name] = [new_low, new_high]
             # Remove old entry
             del dict_bounds_reparam[param_name]
