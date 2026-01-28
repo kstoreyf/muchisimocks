@@ -8,8 +8,8 @@ n_train_arr=(10000)
 #tag_stats_arr=("_pk" "_bispec") 
 #tag_stats_arr=("_bispec" "_pk_bispec") 
 #tag_stats_arr=("_pk" "_pk_bispec")
-tag_stats_arr=("_bispec") 
-#tag_stats_arr=("_pk_bispec")
+#tag_stats_arr=("_bispec") 
+tag_stats_arr=("_pk_bispec")
 #tag_stats_arr=("_pk_pgm")
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_stats_arr=("_pgm")
@@ -24,18 +24,18 @@ for n_train in "${n_train_arr[@]}"; do
         ### TRAINING ###
         tag_params="_p5_n10000"
         #tag_biasparams="_biaszen_p4_n10000"  
-        tag_biasparams="_biaszen_p4_n200000"  
-        #tag_biasparams="_b1000_p0_n1"  
-        tag_noise="_noise_unit_p5_n10000"
-        tag_Anoise="_Anmult_p5_n200000"
+        #tag_biasparams="_biaszen_p4_n200000"  
+        tag_biasparams="_b1000_p0_n1"  
+        #tag_noise="_noise_unit_p5_n10000"
+        #tag_Anoise="_Anmult_p5_n200000"
         ## no noise
-        # tag_noise=""
-        # tag_Anoise=""   
+        tag_noise=""
+        tag_Anoise=""   
         tag_mask=""
         #tag_mask="_kmaxbispec0.25"
         tag_data_train="_muchisimocks${tag_stats}${tag_mask}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}"
-        tag_rp="_rp"
-        #tag_rp=""
+        #tag_rp="_rp"
+        tag_rp=""
         tag_inf="${tag_data_train}${tag_rp}_ntrain${n_train}"
         #config_train_file="../configs/configs_train/config${tag_inf}.yaml"
         # if only want to train on a pre-trained model, set config_train_file to "none";
@@ -44,21 +44,21 @@ for n_train in "${n_train_arr[@]}"; do
 
         ### TESTING ###
         ### cosmic variance (quijote)
-        # tag_params_test="_quijote_p0_n1000"
-        # tag_biasparams_test="_b1000_p0_n1"
-        # tag_mean="_mean"
+        tag_params_test="_quijote_p0_n1000"
+        tag_biasparams_test="_b1000_p0_n1"
+        tag_mean="_mean"
         #tag_noise_test="_noise_unit_quijote_p0_n1000"
         #tag_Anoise_test="_Anmult_p0_n1"
         ### coverage
-        tag_params_test="_test_p5_n1000"
+        #tag_params_test="_test_p5_n1000"
         #tag_biasparams_test="_b1000_p0_n1"
-        tag_biasparams_test="_biaszen_p4_n1000"
+        #tag_biasparams_test="_biaszen_p4_n1000"
         #tag_mean=""
-        tag_noise_test="_noise_unit_test_p5_n1000"
-        tag_Anoise_test="_Anmult_p5_n1000"
+        #tag_noise_test="_noise_unit_test_p5_n1000"
+        #tag_Anoise_test="_Anmult_p5_n1000"
         ### no noise
-        # tag_noise_test=""
-        # tag_Anoise_test=""
+        tag_noise_test=""
+        tag_Anoise_test=""
         ### Muchisimocks test set 
         tag_data_test="_muchisimocks${tag_stats}${tag_mask}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_Anoise_test}${tag_mean}"
 
