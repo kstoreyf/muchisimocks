@@ -21,12 +21,32 @@ import compute_statistics as cs
 
 
 def main():
+    run_sdm()
+    #run_tracer()
+
+
+def run_sdm():
+    data_mode = 'shame'
+    box_size_mock = 1024.0
+    cosmo = utils.get_cosmo(utils.cosmo_dict_shame)
+
+    dir_sim0 = '/cosmos_storage/simulations/BaccoSims/Rings/N3072_L1024/Planck_N3072_L1024.0_output/0.00'
+    fn_dens0_mesh = f'../data/data_{data_mode}/dens_mesh_phase0.npy'
+    process_sim_to_mesh(dir_sim0, box_size_mock, n_grid_target=128, n_grid_orig=512, box_size_muchisimocks=1000.0, 
+                        cosmo=cosmo, fn_dens_mesh=fn_dens0_mesh, overwrite=True)
+
+    dir_simpi = '/cosmos_storage/simulations/BaccoSims/Rings/N3072_L1024/Planck_N3072_L1024.0_output/3.14'
+    fn_denspi_mesh = f'../data/data_{data_mode}/dens_mesh_phasepi.npy'
+    process_sim_to_mesh(dir_simpi, box_size_mock, n_grid_target=128, n_grid_orig=512, box_size_muchisimocks=1000.0, 
+                        cosmo=cosmo, fn_dens_mesh=fn_denspi_mesh, overwrite=True)
+
+def run_tracer():  
     """
     Main function to process SHAMe catalog and compare with muchisimocks data.
     """
     # Configuration
-    tag_mock = '_nbar0.00011'  
-    #tag_mock = '_nbar0.00022'  
+    #tag_mock = '_nbar0.00011'  
+    tag_mock = '_nbar0.00022'  
     #tag_mock = '_nbar0.00054'  
     #tag_mock = '_An1_deconvolve'
     #tag_mock = '_An1_orig'
@@ -40,15 +60,17 @@ def main():
         fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14.h5'
     elif tag_mock.startswith('_nbar'):
         nbar = tag_mock.split('nbar')[-1]
-        dir_cat = '../data/shame_catalogues_to_share/kate'
+        #dir_cat = '../data/shame_catalogues_to_share/kate' #hyperion
+        dir_cat = '/cosmos_storage/data_sharing/shame_catalogues_to_share/kate' #atlas
         fn_cat0 = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_0.00_{nbar}.h5'
         fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14_{nbar}.h5'
     else:
         raise ValueError(f"tag_mock {tag_mock} not recognized!")
     
     data_mode = 'shame'
-    statistics = ['pk', 'bispec']
-    overwrite = True
+    #statistics = ['pk', 'bispec']
+    statistics = []
+    overwrite = False
     
     save_indiv_phases = True  # Whether to save individual phase statistics
     
@@ -156,8 +178,10 @@ def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None,
         
     Returns:
     --------
-    tracer_field : ndarray
-        tracer_field field normalized for comparison
+    overdensity : ndarray
+        overdensity field normalized for comparison
+    n_grid_mock : int
+        Grid size of the overdensity field
     """
     if not overwrite and fn_cat_mesh is not None and Path(fn_cat_mesh).exists():
         tracer_field = np.load(fn_cat_mesh, allow_pickle=True)
@@ -214,17 +238,52 @@ def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None,
     return cat_overdensity, n_grid_mock
 
 
-def compute_matter_density_field():
+def process_sim_to_mesh(dir_sim, box_size_mock, fn_dens_mesh=None, 
+                        n_grid_target=128, n_grid_orig=512, box_size_muchisimocks=1000.0, 
+                        cosmo=None, overwrite=False):
+    """
+    Process a matter density field to create density mesh and tracer_field field.
+    
+    Parameters:
+    -----------
+    box_size_mock : float, optional
+        Box size of the mock catalog in Mpc/h (default: 1024.0)
+    n_grid_orig : int, optional
+        Original grid size for the matter density field (default: 512)
+    n_grid_target : int, optional
+        Target grid size for the final mesh (default: 128)
+    box_size_muchisimocks : float, optional
+        Box size used in muchisimocks in Mpc/h (default: 1000.0)
+    """
     print("BEWARE need to run on atlas, where bacco sim is!")
-    basedir = "/cosmos_storage/cosmosims/BaccoSims/Rings/N3072_L1024/Planck_N3072_L1024.0_output/0.00"
-    # /groups_049/fof_subhalo_history_tab_orph_wweight_049
     snapnum = 49 #z=0, i believe
     halo_file = f"groups_{snapnum:03}/fof_subhalo_history_tab_orph_wweight_{snapnum:03}"
-    sim = bacco.Simulation(basedir=basedir, 
+    sim = bacco.Simulation(basedir=dir_sim, 
                         halo_file=halo_file,
                         )
-    print(sim.sdm['pos'].shape)
-    return
+    
+    # Calculate grid sizes
+    n_grid_orig_mock = round_to_nearest_even(box_size_mock / (box_size_muchisimocks/n_grid_orig))
+    n_grid_mock = round_to_nearest_even(box_size_mock / (box_size_muchisimocks/n_grid_target))
+    
+    print(f"Resampling to {n_grid_orig_mock}^3 / {n_grid_mock}^3 grid (from {n_grid_orig}^3/{n_grid_target}^3 original grid)")
+    
+    dens_field_ngorig = sim.get_linear_field(ngrid=n_grid_orig_mock, quantity='delta')
+    
+    # Remove high-k modes to downsample
+    dens_field_kcut = utils.remove_highk_modes(dens_field_ngorig, box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
+    
+    # tested in data_creation_pipeline that doing kcut then deconvolve is basically equivalent to deconvolve then kcut,
+    # and much faster
+    dens_field_kcut_deconvolved = pb.convolve_linear_interpolation_kernel(dens_field_kcut, 
+                                                                        npix=n_grid_orig_mock, mode="deconvolve")
+    
+    if fn_dens_mesh is not None:
+        Path.absolute(Path(fn_dens_mesh).parent).mkdir(parents=True, exist_ok=True)
+        print(f"Saving mesh to {fn_dens_mesh}")
+        np.save(fn_dens_mesh, dens_field_kcut_deconvolved)
+
+    return dens_field_kcut_deconvolved, n_grid_mock
 
 
 def compute_pk(tracer_field, box_size_mock, cosmo=None, fn_stat=None,):

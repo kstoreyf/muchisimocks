@@ -6,7 +6,7 @@ import argparse
 from pathlib import Path
 
 import bacco
-import PolyBin3D as pb
+#import PolyBin3D as pb
 
 import data_loader
 import utils
@@ -148,6 +148,7 @@ def run_loop():
 
 def setup_bispsec(box_size, n_grid, n_threads):
     # Load the PolyBin3D class 
+    import PolyBin3D as pb
     start = time.time()
     base = pb.PolyBin3D([box_size, box_size, box_size], n_grid, 
                     #boxcenter=[0,0,0], # center of the simulation volume
@@ -676,6 +677,7 @@ def compute_bispectrum(base, tracer_field, fn_stat=None):
     lmax = 1
     
     # Load the bispectrum class
+    import PolyBin3D as pb
     bspec = pb.BSpec(base, 
                     k_edges, # one-dimensional bin edges
                     applySinv = None, # weighting function [only needed for unwindowed estimators]
