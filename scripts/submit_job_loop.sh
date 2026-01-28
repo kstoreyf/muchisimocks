@@ -9,14 +9,15 @@ n_train_arr=(10000)
 #tag_stats_arr=("_bispec" "_pk_bispec") 
 #tag_stats_arr=("_pk" "_pk_bispec")
 #tag_stats_arr=("_bispec") 
-tag_stats_arr=("_pk_bispec")
+#tag_stats_arr=("_pk_bispec")
 #tag_stats_arr=("_pk_pgm")
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_stats_arr=("_pgm")
 #tag_stats_arr=("_pk_pgm" "_pgm_pk_bispec") 
 #tag_stats_arr=("_pgm" "_pk_pgm") 
 #tag_stats_arr=("_pk_bispec_pgm")
-#tag_stats_arr=("_pk" "_pgm" "_pk_pgm" "_pk_bispec_pgm")
+#tag_stats_arr=("_pk" "_pgm" "_bispec" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
+tag_stats_arr=("_bispec" "_pk_bispec" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk_bispec")
 
 for n_train in "${n_train_arr[@]}"; do
@@ -24,41 +25,42 @@ for n_train in "${n_train_arr[@]}"; do
         ### TRAINING ###
         tag_params="_p5_n10000"
         #tag_biasparams="_biaszen_p4_n10000"  
-        #tag_biasparams="_biaszen_p4_n200000"  
-        tag_biasparams="_b1000_p0_n1"  
-        #tag_noise="_noise_unit_p5_n10000"
-        #tag_Anoise="_Anmult_p5_n200000"
+        tag_biasparams="_biaszen_p4_n200000"  
+        #tag_biasparams="_b1000_p0_n1"  
+        tag_noise="_noise_unit_p5_n10000"
+        tag_Anoise="_Anmult_p5_n200000"
         ## no noise
-        tag_noise=""
-        tag_Anoise=""   
-        tag_mask=""
-        #tag_mask="_kmaxbispec0.25"
+        #tag_noise=""
+        #tag_Anoise=""   
+        #tag_mask=""
+        tag_mask="_kb0.25"
         tag_data_train="_muchisimocks${tag_stats}${tag_mask}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}"
-        #tag_rp="_rp"
-        tag_rp=""
+        tag_rp="_rp"
+        #tag_rp=""
         tag_inf="${tag_data_train}${tag_rp}_ntrain${n_train}"
-        #config_train_file="../configs/configs_train/config${tag_inf}.yaml"
+        config_train_file="../configs/configs_train/config${tag_inf}.yaml"
         # if only want to train on a pre-trained model, set config_train_file to "none";
         # but if you accidentally leave config_train_file not blank, the default is not to overwrite, so it shouldn't matter!
-        config_train_file="none"
+        #config_train_file="none"
 
         ### TESTING ###
         ### cosmic variance (quijote)
-        tag_params_test="_quijote_p0_n1000"
-        tag_biasparams_test="_b1000_p0_n1"
-        tag_mean="_mean"
-        #tag_noise_test="_noise_unit_quijote_p0_n1000"
-        #tag_Anoise_test="_Anmult_p0_n1"
+        # tag_params_test="_quijote_p0_n1000"
+        # tag_biasparams_test="_b1000_p0_n1"
+        # # tag_mean="_mean"
+        # tag_mean=""
+        # tag_noise_test="_noise_unit_quijote_p0_n1000"
+        # tag_Anoise_test="_Anmult_p0_n1"
         ### coverage
-        #tag_params_test="_test_p5_n1000"
+        tag_params_test="_test_p5_n1000"
         #tag_biasparams_test="_b1000_p0_n1"
-        #tag_biasparams_test="_biaszen_p4_n1000"
-        #tag_mean=""
-        #tag_noise_test="_noise_unit_test_p5_n1000"
-        #tag_Anoise_test="_Anmult_p5_n1000"
-        ### no noise
-        tag_noise_test=""
-        tag_Anoise_test=""
+        tag_biasparams_test="_biaszen_p4_n1000"
+        tag_mean=""
+        tag_noise_test="_noise_unit_test_p5_n1000"
+        tag_Anoise_test="_Anmult_p5_n1000"
+        ## no noise
+        # tag_noise_test=""
+        # tag_Anoise_test=""
         ### Muchisimocks test set 
         tag_data_test="_muchisimocks${tag_stats}${tag_mask}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_Anoise_test}${tag_mean}"
 
@@ -68,9 +70,9 @@ for n_train in "${n_train_arr[@]}"; do
         # tag_data_test="_shame${tag_stats}${tag_mask}${tag_mock}"
 
         # test
-        config_test_file="../configs/configs_test/config_TRAIN${tag_inf}_TEST${tag_data_test}.yaml"
+        #config_test_file="../configs/configs_test/config_TRAIN${tag_inf}_TEST${tag_data_test}.yaml"
         # no test
-        #config_test_file="none"
+        config_test_file="none"
 
         # Determine job name logic
         if [[ "$config_train_file" == "none" && "$config_test_file" == "none" ]]; then
@@ -105,7 +107,7 @@ for n_train in "${n_train_arr[@]}"; do
 #SBATCH --output=${scripts_dir}/logs/${job_name}.out
 ##SBATCH --time=0:20:00 # quick tests (e.g. shame)
 ##SBATCH --time=1:30:00 #1h for testing on cosmic var test set or single OOD
-#SBATCH --time=3:00:00 #0.5-2h for training -> 3 in case
+#SBATCH --time=4:00:00 #0.5-2h for training -> 4 in case
 ##SBATCH --time=24:00:00 #24h for testing on coverage test set (24h is max time limit; some dont converge)
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1

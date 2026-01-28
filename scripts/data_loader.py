@@ -77,6 +77,8 @@ def load_data_shame(statistic, tag_mock):
         k, stat, error, pk_obj = load_pk(fn_statistics)
     elif statistic == 'bispec':
         k, stat, error, bispec_obj = load_bispec(fn_statistics)
+    elif statistic == 'pgm':
+        k, stat, error, pgm_obj = load_pgm(fn_statistics)
     else:
         raise ValueError(f"Statistic {statistic} not recognized / computed for this dataset (shame, {tag_mock})!")
     print(f"Loaded {statistic} with shape {stat.shape}")
@@ -278,8 +280,8 @@ def get_Pk_mask(tag_data, tag_mask='', k=None, Pk=None):
             print("No Pk provided and no mask exists, using all bins")
             mask = np.ones(len(k), dtype=bool)
         # Apply kmax cutoff if specified
-        if 'kmaxpk' in tag_mask:
-            match = re.search(r'kmaxpk([\d.]+)', tag_mask)
+        if 'kmaxpk' in tag_mask or 'kp' in tag_mask:
+            match = re.search(r'(?:kmaxpk|kp)([\d.]+)', tag_mask)
             if match:
                 kmax = float(match.group(1))
                 mask = mask & (k < kmax)
@@ -314,8 +316,8 @@ def get_Pgm_mask(tag_data, tag_mask='', k=None, Pgm=None):
             print("No Pgm provided and no mask exists, using all bins")
             mask = np.ones(len(k), dtype=bool)
         # Apply kmax cutoff if specified
-        if 'kmaxpgm' in tag_mask:
-            match = re.search(r'kmaxpgm([\d.]+)', tag_mask)
+        if 'kmaxpgm' in tag_mask or 'kpgm' in tag_mask:
+            match = re.search(r'(?:kmaxpgm|kpgm)([\d.]+)', tag_mask)
             if match:
                 kmax = float(match.group(1))
                 mask = mask & (k < kmax)
@@ -340,8 +342,8 @@ def get_bispec_mask(tag_data, tag_mask='', k=None, bispec=None):
         print(f"Loading from {fn_mask} (already exists)")
         return np.loadtxt(fn_mask, dtype=bool)
     else:
-        if 'kmaxbispec' in tag_data:
-            match = re.search(r'kmaxbispec([\d.]+)', tag_data)
+        if 'kmaxbispec' in tag_data or 'kb' in tag_data:
+            match = re.search(r'(?:kmaxbispec|kb)([\d.]+)', tag_data)
             if match:
                 kmax = float(match.group(1))
             else:
@@ -419,9 +421,6 @@ def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
             param_dict.update({'b1': 0.40209658, 'b2': -0.00958755*2, 'bs2': -0.09669132*2, 'bl': -0.79150708})
         else:
             raise ValueError(f"tag_mock {tag_mock} not recognized for shame OOD data!")
-        #
-        # param_dict.update({'b1': 0.47409821, 'b2': 0.06306578, 'bs2': -0.17022439, 'bl': -0.83432633}) #(via marcos)
-
         return param_dict
     else:
         raise ValueError(f"Data mode {data_mode} not recognized!")
@@ -995,6 +994,12 @@ def load_bispec(fn_stat, n_grid=None):
     stat = norm**3 * bispec_obj['weight'] * bispec_obj['bispectrum']['b0']
     error = np.zeros_like(stat)
     return k, stat, error, bispec_obj
+
+
+def load_pgm(fn_stat):
+    pgm_obj = np.load(fn_stat, allow_pickle=True).item()
+    k, stat, error = pgm_obj['k'], pgm_obj['pgm'], pgm_obj['pgm_gaussian_error']
+    return k, stat, error, pgm_obj
 
 
 def _process_pnn_cosmology(idx_LH, statistic, stat_name, dir_statistics,

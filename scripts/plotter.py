@@ -845,7 +845,7 @@ bins_dict = {'mn': None, 'sbi': 4, 'emcee': 10, 'dynesty': 7, 'fisher': 4}
 def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       inf_methods, tags_inf, tags_test=None,
                       colors=None, labels=None,
-                      figsize=(7,7),
+                      figsize=(7,7), fontsize_legend=18,
                       extents={}, title=None, unreparameterize=False):
     if title is None:
         title = f'test model {idx_obs}'
@@ -1070,7 +1070,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             summary_font_size=0,
             extents=extents,
             legend_kwargs={'bbox_to_anchor': (1.05, 1.0), 
-                           'fontsize':18}
+                           'fontsize':fontsize_legend}
         )
     )
 

@@ -236,9 +236,9 @@ def test_likefree_inference(config, overwrite=False):
     tag_data_test = config["tag_data_test"]
     tag_inf_train = config["tag_inf_train"]
     sweep_name = config["sweep_name"]
-    n_test_eval = config.get("n_test_eval", None)
-    #print("BEWARNED: manually setting n_test_eval to 100")
-    #n_test_eval = 100
+    #n_test_eval = config.get("n_test_eval", None)
+    print("BEWARNED: manually setting n_test_eval to 100")
+    n_test_eval = 100
     
     if evaluate_mean:
         tag_test = f'{tag_data_test}_mean'
