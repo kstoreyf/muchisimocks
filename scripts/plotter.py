@@ -91,10 +91,10 @@ def plot_dists_mean_subplots(
     n_rows=None, n_cols=None, label_arr=None,
     color_arr=['salmon'], n_bins=20, xlim_auto=True,
     alpha=0.5, histtype='bar', plot_cdf=False,
-    title=None, unreparameterize=False,
+    title=None, unreparameterize=False, use_abs_diff=False,
 ):
     """
-    Plot histograms or CDFs of fractional differences for selected parameters in subplots.
+    Plot histograms or CDFs of fractional or absolute differences for selected parameters in subplots.
 
     Args:
         theta_pred_arr: Predicted parameter values (array).
@@ -112,6 +112,7 @@ def plot_dists_mean_subplots(
         histtype: Histogram type.
         plot_cdf: If True, plot CDF instead of histogram.
         unreparameterize: If True, convert reparameterized parameters back to original form.
+        use_abs_diff: If True, use absolute differences instead of fractional differences.
     """
     # Handle unreparameterization if requested
     if unreparameterize:
@@ -177,10 +178,13 @@ def plot_dists_mean_subplots(
                 theta_pred_arr = theta_pred_arr[0]
                 theta_true_arr = theta_true_arr[0]
     
-    fracdiffs_arr = theta_pred_arr / theta_true_arr - 1
-    if fracdiffs_arr.ndim == 2:
-        fracdiffs_arr = np.array([fracdiffs_arr])
-    n_params = fracdiffs_arr.shape[-1]
+    if use_abs_diff:
+        diffs_arr = theta_pred_arr - theta_true_arr
+    else:
+        diffs_arr = theta_pred_arr / theta_true_arr - 1
+    if diffs_arr.ndim == 2:
+        diffs_arr = np.array([diffs_arr])
+    n_params = diffs_arr.shape[-1]
 
     if param_names_plot is None:
         param_names_plot = param_names
@@ -201,19 +205,19 @@ def plot_dists_mean_subplots(
     for ax_idx, pp in enumerate(idxs_plot):
         ax = axes[ax_idx]
         ax.set_title(rf'{param_labels[ax_idx]}', fontsize=22)
-        for i, fracdiffs in enumerate(fracdiffs_arr):
+        for i, diffs in enumerate(diffs_arr):
             label = None
             if label_arr is not None:
                 label = label_arr[i]
-            if np.all(np.isnan(fracdiffs[:, pp])):
+            if np.all(np.isnan(diffs[:, pp])):
                 continue
-            data = fracdiffs[:, pp][~np.isnan(fracdiffs[:, pp])]
+            data = diffs[:, pp][~np.isnan(diffs[:, pp])]
             
             if not xlim_auto:
                 mean = 0
-                i_good = ~np.isnan(fracdiffs_arr[:, :, pp])
-                p16 = np.percentile(fracdiffs_arr[i_good, pp], 16)
-                p84 = np.percentile(fracdiffs_arr[i_good, pp], 84)
+                i_good = ~np.isnan(diffs_arr[:, :, pp])
+                p16 = np.percentile(diffs_arr[i_good, pp], 16)
+                p84 = np.percentile(diffs_arr[i_good, pp], 84)
                 psym = 0.5 * (np.abs(p16) + np.abs(p84))
                 n_std = 3
                 xmin = mean - n_std * psym
@@ -240,7 +244,10 @@ def plot_dists_mean_subplots(
                     if len(patches) > 0:
                         legend_handles.append(patches[0])
                         legend_labels.append(label)
-        ax.set_xlabel(rf'$\Delta${param_labels[ax_idx]}/{param_labels[ax_idx]}', fontsize=14)
+        if use_abs_diff:
+            ax.set_xlabel(rf'$\Delta${param_labels[ax_idx]}', fontsize=14)
+        else:
+            ax.set_xlabel(rf'$\Delta${param_labels[ax_idx]}/{param_labels[ax_idx]}', fontsize=14)
         if plot_cdf:
             ax.set_ylabel('CDF', fontsize=14)
         else:
@@ -263,7 +270,7 @@ def plot_dists_mean_subplots(
     plt.tight_layout()
     plt.show()
 
-    return fracdiffs_arr
+    return diffs_arr
 
 
 def plot_comp_mean_subplots(
@@ -583,7 +590,7 @@ def plot_dists_cov_subplots(
 
     if param_names_plot is None:
         param_names_plot = param_names
-    idxs_plot = [param_names.index(pn) for pn in param_names_plot]
+    idxs_plot = np.array([param_names.index(pn) for pn in param_names_plot])
     param_labels = [param_label_dict[pn] for pn in param_names_plot]
 
     if label_arr is None:
@@ -599,11 +606,14 @@ def plot_dists_cov_subplots(
         sigmas_from_truth = []
         chi2s = []
         for cc, cov_pred in enumerate(covs_pred):
-            err = np.sqrt(np.diag(cov_pred))
-            diffs = diffs_arr[i]
-            sigmas_from_truth.append(diffs[cc] / err)
-            cov_pred_inv = np.linalg.inv(cov_pred)
-            chi2s.append(diffs[cc].T @ cov_pred_inv @ diffs[cc])
+            # Extract only the parameters we're plotting from covariance matrix
+            cov_pred_plot = cov_pred[np.ix_(idxs_plot, idxs_plot)]
+            err = np.sqrt(np.diag(cov_pred_plot))
+            # Extract only the parameters we're plotting from diffs
+            diffs = np.array(diffs_arr[i][cc])[idxs_plot]  # Get diffs for this sample, only plotted params
+            sigmas_from_truth.append(diffs / err)
+            cov_pred_inv = np.linalg.inv(cov_pred_plot)
+            chi2s.append(diffs.T @ cov_pred_inv @ diffs)
         sigmas_from_truth_arr.append(sigmas_from_truth)
         chi2s_arr.append(chi2s)
     sigmas_from_truth_arr = np.array(sigmas_from_truth_arr)
@@ -630,7 +640,7 @@ def plot_dists_cov_subplots(
         ax = axes[ax_idx]
         ax.set_title(rf'{param_labels[ax_idx]}', fontsize=22)
         for i in range(sigmas_from_truth_arr.shape[0]):
-            data = sigmas_from_truth_arr[i][:, pp]
+            data = sigmas_from_truth_arr[i][:, ax_idx]
             if plot_cdf:
                 sorted_data = np.sort(data)
                 yvals = np.arange(1, len(sorted_data)+1) / float(len(sorted_data))

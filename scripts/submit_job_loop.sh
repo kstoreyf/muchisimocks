@@ -38,10 +38,10 @@ for n_train in "${n_train_arr[@]}"; do
         tag_rp="_rp"
         #tag_rp=""
         tag_inf="${tag_data_train}${tag_rp}_ntrain${n_train}"
-        config_train_file="../configs/configs_train/config${tag_inf}.yaml"
+        #config_train_file="../configs/configs_train/config${tag_inf}.yaml"
         # if only want to train on a pre-trained model, set config_train_file to "none";
         # but if you accidentally leave config_train_file not blank, the default is not to overwrite, so it shouldn't matter!
-        #config_train_file="none"
+        config_train_file="none"
 
         ### TESTING ###
         ### cosmic variance (quijote)
@@ -52,27 +52,27 @@ for n_train in "${n_train_arr[@]}"; do
         # tag_noise_test="_noise_unit_quijote_p0_n1000"
         # tag_Anoise_test="_Anmult_p0_n1"
         ### coverage
-        tag_params_test="_test_p5_n1000"
-        #tag_biasparams_test="_b1000_p0_n1"
-        tag_biasparams_test="_biaszen_p4_n1000"
-        tag_mean=""
-        tag_noise_test="_noise_unit_test_p5_n1000"
-        tag_Anoise_test="_Anmult_p5_n1000"
+        # tag_params_test="_test_p5_n1000"
+        # #tag_biasparams_test="_b1000_p0_n1"
+        # tag_biasparams_test="_biaszen_p4_n1000"
+        # tag_mean=""
+        # tag_noise_test="_noise_unit_test_p5_n1000"
+        # tag_Anoise_test="_Anmult_p5_n1000"
         ## no noise
         # tag_noise_test=""
         # tag_Anoise_test=""
         ### Muchisimocks test set 
-        tag_data_test="_muchisimocks${tag_stats}${tag_mask}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_Anoise_test}${tag_mean}"
+        #tag_data_test="_muchisimocks${tag_stats}${tag_mask}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_Anoise_test}${tag_mean}"
 
         ### OOD test set
-        # data_mode="shame" 
-        # tag_mock="_nbar0.00022"
-        # tag_data_test="_shame${tag_stats}${tag_mask}${tag_mock}"
+        data_mode="shame" 
+        tag_mock="_nbar0.00022"
+        tag_data_test="_shame${tag_stats}${tag_mask}${tag_mock}"
 
         # test
-        #config_test_file="../configs/configs_test/config_TRAIN${tag_inf}_TEST${tag_data_test}.yaml"
+        config_test_file="../configs/configs_test/config_TRAIN${tag_inf}_TEST${tag_data_test}.yaml"
         # no test
-        config_test_file="none"
+        #config_test_file="none"
 
         # Determine job name logic
         if [[ "$config_train_file" == "none" && "$config_test_file" == "none" ]]; then

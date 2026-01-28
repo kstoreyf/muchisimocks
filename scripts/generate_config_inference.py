@@ -19,16 +19,16 @@ def main():
     #stat_arr = [['pk', 'bispec', 'pgm']]
     #stat_arr = [['pk']]
     #stat_arr = [['bispec']]
-    #stat_arr = [['bispec'], ['pk', 'bispec']]
+    stat_arr = [['bispec'], ['pk', 'bispec'], ['pk', 'bispec', 'pgm']]
     #stat_arr = [['pk', 'bispec']]
-    stat_arr = [['pk'], ['pgm'], ['bispec'], ['pk', 'pgm'], ['pk', 'bispec'], ['pk', 'bispec', 'pgm']]
+    #stat_arr = [['pk'], ['pgm'], ['bispec'], ['pk', 'pgm'], ['pk', 'bispec'], ['pk', 'bispec', 'pgm']]
     n_train_arr = [10000]
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
     for statistics in stat_arr:
         for n_train in n_train_arr:
             #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            #generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
     #generate_runlike_config(overwrite=overwrite)
     
     
