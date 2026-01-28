@@ -233,8 +233,13 @@ def plot_dists_mean_subplots(
                     ax.set_xlim(xmin, xmax)
             else:
                 # Plot histogram
-                ax.hist(data, bins=bins, alpha=alpha,
+                n, bins_hist, patches = ax.hist(data, bins=bins, alpha=alpha,
                         color=color_arr[i], label=label, histtype=histtype, lw=2)
+                if ax_idx == 0 and label is not None:  # Only collect from first subplot to avoid duplicates
+                    # Use the first patch as the legend handle
+                    if len(patches) > 0:
+                        legend_handles.append(patches[0])
+                        legend_labels.append(label)
         ax.set_xlabel(rf'$\Delta${param_labels[ax_idx]}/{param_labels[ax_idx]}', fontsize=14)
         if plot_cdf:
             ax.set_ylabel('CDF', fontsize=14)
