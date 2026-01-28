@@ -91,7 +91,7 @@ def plot_dists_mean_subplots(
     n_rows=None, n_cols=None, label_arr=None,
     color_arr=['salmon'], n_bins=20, xlim_auto=True,
     alpha=0.5, histtype='bar', plot_cdf=False,
-    title=None,
+    title=None, unreparameterize=False,
 ):
     """
     Plot histograms or CDFs of fractional differences for selected parameters in subplots.
@@ -111,7 +111,72 @@ def plot_dists_mean_subplots(
         alpha: Alpha for histogram bars.
         histtype: Histogram type.
         plot_cdf: If True, plot CDF instead of histogram.
+        unreparameterize: If True, convert reparameterized parameters back to original form.
     """
+    # Handle unreparameterization if requested
+    if unreparameterize:
+        # Define parameters that are reparameterized
+        params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
+        params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
+        
+        # Check if we have sigma8_cold
+        if 'sigma8_cold' not in param_names:
+            print("Warning: unreparameterize=True but 'sigma8_cold' not in param_names. Skipping unreparameterization.")
+            unreparameterize = False
+        
+        if unreparameterize:
+            # Make copies to avoid modifying original arrays
+            theta_pred_arr = theta_pred_arr.copy()
+            theta_true_arr = theta_true_arr.copy()
+            
+            # Get sigma8_cold index
+            idx_sigma8 = param_names.index('sigma8_cold')
+            
+            # Create mapping from reparameterized names to original names and indices
+            param_names_new = param_names.copy()
+            reparam_to_orig = {}
+            
+            for i, pn in enumerate(param_names):
+                if pn.startswith('sigma8_cold_x_') or pn.startswith('sigma8_cold_sq_x_'):
+                    # Extract original parameter name
+                    if pn.startswith('sigma8_cold_sq_x_'):
+                        orig_param_name = pn.replace('sigma8_cold_sq_x_', '')
+                    else:
+                        orig_param_name = pn.replace('sigma8_cold_x_', '')
+                    
+                    # Check if this is a known reparameterized parameter
+                    if orig_param_name in params_sigma8 or orig_param_name in params_sigma8_squared:
+                        reparam_to_orig[i] = orig_param_name
+                        # Update param_names to use original name
+                        param_names_new[i] = orig_param_name
+            
+            # Convert reparameterized parameters back to original
+            if theta_pred_arr.ndim == 2:
+                theta_pred_arr = np.array([theta_pred_arr])
+                theta_true_arr = np.array([theta_true_arr])
+            
+            for i in range(len(theta_pred_arr)):
+                sigma8_vals = theta_pred_arr[i][:, idx_sigma8]
+                sigma8_true_vals = theta_true_arr[i][:, idx_sigma8]
+                
+                for reparam_idx, orig_param_name in reparam_to_orig.items():
+                    if orig_param_name in params_sigma8:
+                        # Divide by sigma8
+                        theta_pred_arr[i][:, reparam_idx] = theta_pred_arr[i][:, reparam_idx] / sigma8_vals
+                        theta_true_arr[i][:, reparam_idx] = theta_true_arr[i][:, reparam_idx] / sigma8_true_vals
+                    elif orig_param_name in params_sigma8_squared:
+                        # Divide by sigma8^2
+                        theta_pred_arr[i][:, reparam_idx] = theta_pred_arr[i][:, reparam_idx] / (sigma8_vals ** 2)
+                        theta_true_arr[i][:, reparam_idx] = theta_true_arr[i][:, reparam_idx] / (sigma8_true_vals ** 2)
+            
+            # Update param_names
+            param_names = param_names_new
+            
+            # Reshape back if needed
+            if len(theta_pred_arr) == 1:
+                theta_pred_arr = theta_pred_arr[0]
+                theta_true_arr = theta_true_arr[0]
+    
     fracdiffs_arr = theta_pred_arr / theta_true_arr - 1
     if fracdiffs_arr.ndim == 2:
         fracdiffs_arr = np.array([fracdiffs_arr])
@@ -200,7 +265,7 @@ def plot_comp_mean_subplots(
     theta_pred_arr, theta_true_arr, covs_pred_arr, param_names, param_names_plot=None, param_label_dict=None,
     n_rows=None, n_cols=None, label_arr=None,
     color_arr=['salmon'], alpha=0.5,
-    title=None, N_plot=None,
+    title=None, N_plot=None, unreparameterize=False,
 ):
     """
     Plot predicted vs true parameter values for selected parameters in subplots.
@@ -220,7 +285,116 @@ def plot_comp_mean_subplots(
         alpha: Alpha for scatter points.
         title: Overall figure title.
         N_plot: If provided, randomly sample this many points to plot (per dataset).
+        unreparameterize: If True, convert reparameterized parameters back to original form.
     """
+    # Handle unreparameterization if requested
+    if unreparameterize:
+        # Define parameters that are reparameterized
+        params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
+        params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
+        
+        # Check if we have sigma8_cold
+        if 'sigma8_cold' not in param_names:
+            print("Warning: unreparameterize=True but 'sigma8_cold' not in param_names. Skipping unreparameterization.")
+            unreparameterize = False
+        
+        if unreparameterize:
+            # Make copies to avoid modifying original arrays
+            theta_pred_arr = theta_pred_arr.copy()
+            theta_true_arr = theta_true_arr.copy()
+            covs_pred_arr = covs_pred_arr.copy()
+            
+            # Get sigma8_cold index
+            idx_sigma8 = param_names.index('sigma8_cold')
+            
+            # Create mapping from reparameterized names to original names and indices
+            param_names_new = param_names.copy()
+            reparam_to_orig = {}
+            
+            for i, pn in enumerate(param_names):
+                if pn.startswith('sigma8_cold_x_') or pn.startswith('sigma8_cold_sq_x_'):
+                    # Extract original parameter name
+                    if pn.startswith('sigma8_cold_sq_x_'):
+                        orig_param_name = pn.replace('sigma8_cold_sq_x_', '')
+                    else:
+                        orig_param_name = pn.replace('sigma8_cold_x_', '')
+                    
+                    # Check if this is a known reparameterized parameter
+                    if orig_param_name in params_sigma8 or orig_param_name in params_sigma8_squared:
+                        reparam_to_orig[i] = orig_param_name
+                        # Update param_names to use original name
+                        param_names_new[i] = orig_param_name
+            
+            # Convert reparameterized parameters back to original
+            if theta_pred_arr.ndim == 2:
+                theta_pred_arr = np.array([theta_pred_arr])
+                theta_true_arr = np.array([theta_true_arr])
+                covs_pred_arr = np.array([covs_pred_arr])
+            
+            for i in range(len(theta_pred_arr)):
+                sigma8_vals = theta_pred_arr[i][:, idx_sigma8]
+                sigma8_true_vals = theta_true_arr[i][:, idx_sigma8]
+                
+                for reparam_idx, orig_param_name in reparam_to_orig.items():
+                    if orig_param_name in params_sigma8:
+                        # Divide by sigma8
+                        theta_pred_arr[i][:, reparam_idx] = theta_pred_arr[i][:, reparam_idx] / sigma8_vals
+                        theta_true_arr[i][:, reparam_idx] = theta_true_arr[i][:, reparam_idx] / sigma8_true_vals
+                    elif orig_param_name in params_sigma8_squared:
+                        # Divide by sigma8^2
+                        theta_pred_arr[i][:, reparam_idx] = theta_pred_arr[i][:, reparam_idx] / (sigma8_vals ** 2)
+                        theta_true_arr[i][:, reparam_idx] = theta_true_arr[i][:, reparam_idx] / (sigma8_true_vals ** 2)
+                
+                # Also need to update covariance matrices for reparameterized parameters
+                # This is more complex - for now, we'll just update the diagonal elements
+                # A full transformation would require Jacobian, but for error bars we mainly need diagonal
+                for j in range(len(covs_pred_arr[i])):
+                    cov = covs_pred_arr[i][j].copy()
+                    sigma8_val = sigma8_vals[j]
+                    
+                    for reparam_idx, orig_param_name in reparam_to_orig.items():
+                        if orig_param_name in params_sigma8:
+                            # Variance scales as (1/sigma8)^2
+                            cov[reparam_idx, reparam_idx] = cov[reparam_idx, reparam_idx] / (sigma8_val ** 2)
+                            # Update off-diagonal elements involving this parameter
+                            for k in range(len(param_names)):
+                                if k != reparam_idx:
+                                    if k == idx_sigma8:
+                                        # Covariance with sigma8 needs special handling
+                                        # For now, set to 0 (approximation)
+                                        cov[reparam_idx, k] = 0
+                                        cov[k, reparam_idx] = 0
+                                    else:
+                                        # Covariance scales as 1/sigma8
+                                        cov[reparam_idx, k] = cov[reparam_idx, k] / sigma8_val
+                                        cov[k, reparam_idx] = cov[k, reparam_idx] / sigma8_val
+                        elif orig_param_name in params_sigma8_squared:
+                            # Variance scales as (1/sigma8^2)^2 = 1/sigma8^4
+                            cov[reparam_idx, reparam_idx] = cov[reparam_idx, reparam_idx] / (sigma8_val ** 4)
+                            # Update off-diagonal elements involving this parameter
+                            for k in range(len(param_names)):
+                                if k != reparam_idx:
+                                    if k == idx_sigma8:
+                                        # Covariance with sigma8 needs special handling
+                                        # For now, set to 0 (approximation)
+                                        cov[reparam_idx, k] = 0
+                                        cov[k, reparam_idx] = 0
+                                    else:
+                                        # Covariance scales as 1/sigma8^2
+                                        cov[reparam_idx, k] = cov[reparam_idx, k] / (sigma8_val ** 2)
+                                        cov[k, reparam_idx] = cov[k, reparam_idx] / (sigma8_val ** 2)
+                    
+                    covs_pred_arr[i][j] = cov
+            
+            # Update param_names
+            param_names = param_names_new
+            
+            # Reshape back if needed
+            if len(theta_pred_arr) == 1:
+                theta_pred_arr = theta_pred_arr[0]
+                theta_true_arr = theta_true_arr[0]
+                covs_pred_arr = covs_pred_arr[0]
+    
     if theta_pred_arr.ndim == 2:
         theta_pred_arr = np.array([theta_pred_arr])
         theta_true_arr = np.array([theta_true_arr])
