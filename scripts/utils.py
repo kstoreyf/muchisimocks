@@ -68,6 +68,15 @@ labels_statistics = {
     'pgm': '$P_\mathrm{gm}(k)$',
 }
 
+color_dict_statistics = {
+    ('pk',): '#54afd6',
+    ('bispec',): '#e14e4e',
+    ('pgm',): '#d18b13',
+    ('pk', 'bispec'): '#b0198f',
+    ('pk', 'pgm'): '#327a3c',
+    ('pk', 'bispec', 'pgm'): '#5e2e1f',
+}
+
 labels_biasparams = {
     '_biaszen_p4_n10000': r'1x $\{b\}$ per cosmo',
     '_biaszen_p4_n50000': r'5x $\{b\}$ per cosmo',
@@ -125,6 +134,18 @@ def get_stat_label(statistics):
     #label = ', '.join(labels)
     label = ' + '.join(labels)
     return label
+
+def get_stat_colors(statistics_arr):
+    """Get colors for each statistics combination in statistics_arr."""
+    colors = []
+    for statistics in statistics_arr:
+        key = tuple(statistics)
+        if key in color_dict_statistics:
+            colors.append(color_dict_statistics[key])
+        else:
+            # Default color if combination not found
+            colors.append('#808080')
+    return colors
 
 def idxs_train_val_test(random_ints, frac_train=0.8, frac_val=0.1, frac_test=0.1,
                         N_tot=None):

@@ -21,11 +21,11 @@ import compute_statistics as cs
 
 
 def main():
-    run_sdm()
-    #run_tracer()
+    #run_dens()
+    run_tracer()
 
 
-def run_sdm():
+def run_dens():
     data_mode = 'shame'
     box_size_mock = 1024.0
     cosmo = utils.get_cosmo(utils.cosmo_dict_shame)
@@ -60,8 +60,8 @@ def run_tracer():
         fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14.h5'
     elif tag_mock.startswith('_nbar'):
         nbar = tag_mock.split('nbar')[-1]
-        #dir_cat = '../data/shame_catalogues_to_share/kate' #hyperion
-        dir_cat = '/cosmos_storage/data_sharing/shame_catalogues_to_share/kate' #atlas
+        dir_cat = '../data/shame_catalogues_to_share/kate' #hyperion
+        #dir_cat = '/cosmos_storage/data_sharing/shame_catalogues_to_share/kate' #atlas
         fn_cat0 = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_0.00_{nbar}.h5'
         fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14_{nbar}.h5'
     else:
@@ -69,14 +69,16 @@ def run_tracer():
     
     data_mode = 'shame'
     #statistics = ['pk', 'bispec']
-    statistics = []
-    overwrite = False
+    statistics = ['pgm']
+    overwrite = True
     
     save_indiv_phases = True  # Whether to save individual phase statistics
     
     # Grid and box parameters
     box_size_mock = 1024.0
-    
+    box_size_muchisimocks = 1000.0
+    n_grid_orig = 512
+
     print("=== Processing SHAMe Catalog ===")
     
     # Process catalog to tracer_field field
@@ -145,6 +147,29 @@ def run_tracer():
             cs.save_bispectrum(fn_stat, bspec_mean, bk_corr_mean, n_grid=n_grid_mock_0)
             print(f"Bispectrum saved to {fn_stat}")
 
+        elif statistic=='pgm':
+            print("\n=== Computing P_gm ===")
+            dens_field_0 = np.load(f'../data/data_{data_mode}/dens_mesh_phase0.npy')
+            dens_field_pi = np.load(f'../data/data_{data_mode}/dens_mesh_phasepi.npy')
+            n_grid_mock_orig = round_to_nearest_even(box_size_mock / (box_size_muchisimocks/n_grid_orig))
+            pgm_0 = compute_pgm(tracer_field_0, dens_field_0, box_size_mock, n_grid_mock_orig, cosmo=cosmo)
+            pgm_pi = compute_pgm(tracer_field_pi, dens_field_pi, box_size_mock, n_grid_mock_orig, cosmo=cosmo)
+            if save_indiv_phases:
+                fn_stat_0 = f'{dir_statistics_phase0}/{statistic}.npy'
+                fn_stat_pi = f'{dir_statistics_phasepi}/{statistic}.npy'
+                Path.absolute(Path(fn_stat_0).parent).mkdir(parents=True, exist_ok=True)
+                np.save(fn_stat_0, pgm_0)
+                print(f"PGM for phase 0 saved to {fn_stat_0}")
+                Path.absolute(Path(fn_stat_pi).parent).mkdir(parents=True, exist_ok=True)
+                np.save(fn_stat_pi, pgm_pi)
+                print(f"PGM for phase pi saved to {fn_stat_pi}")
+            pgm_mean = {} #for now ignoring any other entries in the dict, haven't been using
+            pgm_mean['k'] = pgm_0['k']
+            pgm_mean['pk'] = 0.5 * (pgm_0['pk'] + pgm_pi['pk'])
+            pgm_mean['pk_gaussian_error'] = 0.5 * (pgm_0['pk_gaussian_error'] + pgm_pi['pk_gaussian_error']) #??
+            Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
+            np.save(fn_stat, pgm_mean)
+            print(f"P_gm saved to {fn_stat}")
         else:
             raise ValueError(f"Statistic {statistic} not recognized!")
         
@@ -299,6 +324,16 @@ def compute_bispectrum(tracer_field, box_size_mock, n_grid, fn_stat=None, n_thre
     base = cs.setup_bispsec(box_size_mock, n_grid, n_threads=n_threads)
     bspec, bk_corr = cs.compute_bispectrum(base, tracer_field, fn_stat=fn_stat)
     return bspec, bk_corr
+
+
+
+def compute_pgm(tracer_field, matter_density_field, box_size_mock, n_grid_mock_orig, cosmo=None, fn_stat=None,):
+    if cosmo is None:
+        print("No cosmology provided, using Quijote cosmology for p(k) calc")
+        cosmo = utils.get_cosmo(utils.cosmo_dict_quijote)
+        print(f"Using cosmology: {cosmo}")
+    pgm_obj = cs.compute_pgm(tracer_field, matter_density_field, cosmo, box_size_mock, n_grid_mock_orig, fn_stat=fn_stat)
+    return pgm_obj
 
 
 if __name__ == "__main__":
