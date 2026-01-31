@@ -13,11 +13,11 @@ n_train_arr=(10000)
 #tag_stats_arr=("_pk_pgm")
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_stats_arr=("_pgm")
-#tag_stats_arr=("_pk_pgm" "_pgm_pk_bispec") 
+#tag_stats_arr=("_pgm" "_pk_pgm" "_pk_bispec_pgm") 
 #tag_stats_arr=("_pgm" "_pk_pgm") 
-#tag_stats_arr=("_pk_bispec_pgm")
+tag_stats_arr=("_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pgm" "_bispec" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
-tag_stats_arr=("_bispec" "_pk_bispec" "_pk_bispec_pgm")
+#ag_stats_arr=("_bispec" "_pk_bispec" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk_bispec")
 
 for n_train in "${n_train_arr[@]}"; do
@@ -105,9 +105,9 @@ for n_train in "${n_train_arr[@]}"; do
 #SBATCH --qos=regular
 #SBATCH --job-name=${job_name}
 #SBATCH --output=${scripts_dir}/logs/${job_name}.out
-##SBATCH --time=0:20:00 # quick tests (e.g. shame)
+#SBATCH --time=0:20:00 # quick tests (e.g. shame)
 ##SBATCH --time=1:30:00 #1h for testing on cosmic var test set or single OOD
-#SBATCH --time=4:00:00 #0.5-2h for training -> 4 in case
+##SBATCH --time=4:00:00 #0.5-2h for training -> 4 in case
 ##SBATCH --time=24:00:00 #24h for testing on coverage test set (24h is max time limit; some dont converge)
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1

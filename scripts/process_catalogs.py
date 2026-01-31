@@ -60,8 +60,8 @@ def run_tracer():
         fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14.h5'
     elif tag_mock.startswith('_nbar'):
         nbar = tag_mock.split('nbar')[-1]
-        #dir_cat = '../data/shame_catalogues_to_share/kate' #hyperion
-        dir_cat = '/cosmos_storage/data_sharing/shame_catalogues_to_share/kate' #atlas
+        dir_cat = '../data/shame_catalogues_to_share/kate' #hyperion
+        #dir_cat = '/cosmos_storage/data_sharing/shame_catalogues_to_share/kate' #atlas
         fn_cat0 = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_0.00_{nbar}.h5'
         fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14_{nbar}.h5'
     else:
@@ -69,8 +69,8 @@ def run_tracer():
     
     data_mode = 'shame'
     #statistics = ['pk', 'bispec']
-    #statistics = ['pgm']
-    statistics = ['pk']
+    statistics = ['pgm']
+    #statistics = ['pk']
     overwrite = True
     
     save_indiv_phases = True  # Whether to save individual phase statistics
