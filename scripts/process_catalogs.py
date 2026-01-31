@@ -60,8 +60,8 @@ def run_tracer():
         fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14.h5'
     elif tag_mock.startswith('_nbar'):
         nbar = tag_mock.split('nbar')[-1]
-        dir_cat = '../data/shame_catalogues_to_share/kate' #hyperion
-        #dir_cat = '/cosmos_storage/data_sharing/shame_catalogues_to_share/kate' #atlas
+        #dir_cat = '../data/shame_catalogues_to_share/kate' #hyperion
+        dir_cat = '/cosmos_storage/data_sharing/shame_catalogues_to_share/kate' #atlas
         fn_cat0 = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_0.00_{nbar}.h5'
         fn_catpi = f'{dir_cat}/kate_sham_catalogue_a1.0_par_b_Planck_N3072_L1024_3.14_{nbar}.h5'
     else:
@@ -69,7 +69,8 @@ def run_tracer():
     
     data_mode = 'shame'
     #statistics = ['pk', 'bispec']
-    statistics = ['pgm']
+    #statistics = ['pgm']
+    statistics = ['pk']
     overwrite = True
     
     save_indiv_phases = True  # Whether to save individual phase statistics
@@ -286,6 +287,7 @@ def process_sim_to_mesh(dir_sim, box_size_mock, fn_dens_mesh=None,
     sim = bacco.Simulation(basedir=dir_sim, 
                         halo_file=halo_file,
                         )
+    assert sim.header['BoxSize'] == box_size_mock, f"Box size mismatch: {sim.BoxSize} != {box_size_mock}"
     
     # Calculate grid sizes
     n_grid_orig_mock = round_to_nearest_even(box_size_mock / (box_size_muchisimocks/n_grid_orig))
@@ -293,10 +295,15 @@ def process_sim_to_mesh(dir_sim, box_size_mock, fn_dens_mesh=None,
     
     print(f"Resampling to {n_grid_orig_mock}^3 / {n_grid_mock}^3 grid (from {n_grid_orig}^3/{n_grid_target}^3 original grid)")
     
-    dens_field_ngorig = sim.get_linear_field(ngrid=n_grid_orig_mock, quantity='delta')
+    dens_field_ngorig = bacco.statistics.compute_mesh(ngrid=n_grid_orig_mock, box=box_size_mock, 
+                                    pos=sim.sdm['pos'], 
+                                    deposit_method='cic', 
+                                    interlacing=False,
+                                    cosmology=sim.Cosmology
+                                    )
     
     # Remove high-k modes to downsample
-    dens_field_kcut = utils.remove_highk_modes(dens_field_ngorig, box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
+    dens_field_kcut = utils.remove_highk_modes(dens_field_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
     
     # tested in data_creation_pipeline that doing kcut then deconvolve is basically equivalent to deconvolve then kcut,
     # and much faster
@@ -327,12 +334,13 @@ def compute_bispectrum(tracer_field, box_size_mock, n_grid, fn_stat=None, n_thre
 
 
 
-def compute_pgm(tracer_field, matter_density_field, box_size_mock, n_grid_mock_orig, cosmo=None, fn_stat=None,):
+def compute_pgm(tracer_field, matter_density_field, box_size_mock, n_grid_mock_orig, cosmo=None, fn_stat=None):
     if cosmo is None:
         print("No cosmology provided, using Quijote cosmology for p(k) calc")
         cosmo = utils.get_cosmo(utils.cosmo_dict_quijote)
         print(f"Using cosmology: {cosmo}")
-    pgm_obj = cs.compute_pgm(tracer_field, matter_density_field, cosmo, box_size_mock, n_grid_mock_orig, fn_stat=fn_stat)
+    matter_density_field_norm = matter_density_field/np.sum(matter_density_field)
+    pgm_obj = cs.compute_pgm(tracer_field, matter_density_field_norm, cosmo, box_size_mock, fn_stat=fn_stat)
     return pgm_obj
 
 

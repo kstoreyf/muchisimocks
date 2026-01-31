@@ -290,7 +290,9 @@ def run(statistic, idx_mock,
                 bias_terms_eul = get_bias_fields(fn_fields)
                 # Get the second bias field (index 1)
                 matter_density_field = bias_terms_eul[1]
-                compute_pgm(tracer_field, matter_density_field, cosmo, box_size, n_grid_orig,
+                # normalize the matter density field by n_grid_orig**3 for muchisimocks
+                matter_density_field_norm = matter_density_field/n_grid_orig**3
+                compute_pgm(tracer_field, matter_density_field_norm, cosmo, box_size,
                                         n_threads=n_threads, fn_stat=fn_statistic)
                 end = time.time()
                 print(f"Computed {statistic} for idx_mock={idx_mock} ({fn_statistic}) in time {end-start:.2f} s", flush=True)
@@ -583,7 +585,7 @@ def compute_pk_linear(seed, cosmo, box_size, n_grid_orig,
     return pk_obj
 
 
-def compute_pgm(tracer_field, matter_density_field, cosmo, box_size, n_grid_orig,
+def compute_pgm(tracer_field, matter_density_field, cosmo, box_size,
                log_binning=True,
                normalise_grid=False, deconvolve_grid=False,
                interlacing=False, deposit_method='cic',
@@ -595,9 +597,8 @@ def compute_pgm(tracer_field, matter_density_field, cosmo, box_size, n_grid_orig
     k_max = 0.4
     n_bins = 30    
     
-    # Normalize the bias field the same way as in PNN computation
-    norm = n_grid_orig**3
-    matter_density_field_norm = matter_density_field / norm
+    # make sure to pre-normalize the matter density field!
+    # for muchisimocks, divide by n_grid_orig**3; for SHAMe, divide by np.sum(matter_density_field) (??)
 
     # n_grid has to match the tracer field size for this computation!
     n_grid = tracer_field.shape[-1]
@@ -655,7 +656,7 @@ def compute_pgm(tracer_field, matter_density_field, cosmo, box_size, n_grid_orig
 
     pgm_obj = bacco.statistics.compute_crossspectrum_twogrids(
                         grid1=tracer_field,
-                        grid2=matter_density_field_norm,
+                        grid2=matter_density_field,
                         **args_power_grid)
     
     if fn_stat is not None:
