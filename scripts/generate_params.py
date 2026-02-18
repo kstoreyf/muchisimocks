@@ -23,18 +23,19 @@ def generate_params_LH():
 
     # Run this by uncommenting the part you want; not pretty, I know
 
-    n_samples = 1
+    n_samples = 1000
     #n_samples = 10000
     #n_samples = 1000000 #100x
     #n_samples = 50000 #5x
     #n_samples = 200000 #20x
     
     ### cosmo
-    #bounds_type = 'cosmo' 
-    #n_params_vary = 0
+    bounds_type = 'cosmo' 
+    n_params_vary = 0
     #tag_bounds = '' #NOTE params are automatically tagged below; this is for '_test' or '_quijote' so far
     #tag_bounds = '_test'
     #tag_bounds = '_quijote'
+    tag_bounds = '_shame'
     
     ### bias
     # NOTE havent yet used 'test' to restrict bounds for bias params, only cosmo; TODO should i be?
@@ -47,11 +48,11 @@ def generate_params_LH():
     #tag_bounds = '_b0000'
     
     ### noise
-    bounds_type = 'Anoise'
+    #bounds_type = 'Anoise'
     #n_params_vary = 1
     #tag_bounds = '_An'
-    tag_bounds = '_Anmult'
-    n_params_vary = 0
+    #tag_bounds = '_Anmult'
+    #n_params_vary = 0
     # tag_bounds = '_An1'    
     
     if bounds_type == 'cosmo':
@@ -195,6 +196,33 @@ def generate_params_fisher():
         save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
 
 
+def define_LH_cosmo(tag_bounds=''):
+    
+    param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns', 'neutrino_mass', 'w0', 'wa']
+
+    # bounds from baccoemu for biased tracers (private version)
+    # https://baccoemu.readthedocs.io/en/latest/#parameter-space
+    bounds_dict = {'omega_cold'     :  [0.23, 0.4],
+                    'omega_baryon'  :  [0.04, 0.06],
+                    'sigma8_cold'   :  [0.65, 0.9], # public emulator only goes down to 0.73, but private down to 0.65
+                    'ns'            :  [0.92, 1.01],
+                    'hubble'        :  [0.6, 0.8],
+                    'neutrino_mass' :  [0.0, 0.4],
+                    'w0'            :  [-1.15, -0.85],
+                    'wa'            :  [-0.3, 0.3],
+                    }
+    
+    if 'test' in tag_bounds:
+        bounds_dict = restrict_bounds(bounds_dict, factor=0.05)
+    
+    if tag_bounds == '_quijote':
+        fiducial_dict = utils.cosmo_dict_quijote
+    elif tag_bounds == '_shame':
+        fiducial_dict = utils.cosmo_dict_shame
+    else:
+        raise ValueError(f'Unknown tag_bounds {tag_bounds}')
+
+    return param_names_ordered, bounds_dict, fiducial_dict
 
 
 def define_LH_bias(tag_bounds='biaszen'):
@@ -206,13 +234,13 @@ def define_LH_bias(tag_bounds='biaszen'):
                         'bl'   :  [-20.0, 30.0],
                     }
     elif 'biaszen' in tag_bounds:
-        bounds_dict = {'b1'     :  [-1.0, 2.0],
+        bounds_dict = {'b1'     :  [-1.0, 3.0], #upped b1 max from 2 to 3
                         'b2'    :  [-2.0, 2.0],
                         'bs2'   :  [-2.0, 2.0],
                         'bl'   :  [-10.0, 10.0],
                     }
     elif 'b1zen' in tag_bounds:
-        bounds_dict = {'b1'     :  [-1.0, 2.0],
+        bounds_dict = {'b1'     :  [-1.0, 3.0], #upped b1 max from 2 to 3
                     }
     else:
         bounds_dict = {}
@@ -237,34 +265,6 @@ def define_LH_bias(tag_bounds='biaszen'):
         
     return utils.biasparam_names_ordered, bounds_dict, fiducial_dict
     
-    
-def define_LH_cosmo(tag_bounds=''):
-    
-    param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns', 'neutrino_mass', 'w0', 'wa']
-
-    # bounds from baccoemu for biased tracers (private version)
-    # https://baccoemu.readthedocs.io/en/latest/#parameter-space
-    bounds_dict = {'omega_cold'     :  [0.23, 0.4],
-                    'omega_baryon'  :  [0.04, 0.06],
-                    'sigma8_cold'   :  [0.65, 0.9], # public only goes down to 0.73, but w private down to 0.65
-                    'ns'            :  [0.92, 1.01],
-                    'hubble'        :  [0.6, 0.8],
-                    'neutrino_mass' :  [0.0, 0.4],
-                    'w0'            :  [-1.15, -0.85],
-                    'wa'            :  [-0.3, 0.3],
-                    }
-    
-    if 'test' in tag_bounds:
-        bounds_dict = restrict_bounds(bounds_dict, factor=0.05)
-    
-    fiducial_dict = utils.cosmo_dict_quijote
-    # not checking for bounds bc now these are the only two options (these bounds and quijote fid)
-    # if tag_bounds == '_quijote':
-    #     fiducial_dict = utils.cosmo_dict_quijote
-    # else:
-    #     raise ValueError(f'Unknown tag_bounds {tag_bounds}')
-
-    return param_names_ordered, bounds_dict, fiducial_dict
 
 
 def define_LH_Anoise(tag_bounds=''):
@@ -280,11 +280,11 @@ def define_LH_Anoise(tag_bounds=''):
         fiducial_dict = {'A_noise': 1.0}
     elif '_Anmult' in tag_bounds:
         # same as b1
-        bounds_dict = {'An_homog':  [0.0, 2.0],
-                       'An_b1'   :  [0.0, 2.0],
-                       'An_b2'   :  [0.0, 2.0],
-                       'An_bs2'  :  [0.0, 2.0],
-                       'An_bl'   :  [0.0, 2.0],
+        bounds_dict = {'An_homog':  [-3.0, -3.0],
+                       'An_b1'   :  [-3.0, 3.0],
+                       'An_b2'   :  [-2.0, 2.0],
+                       'An_bs2'  :  [-2.0, 2.0],
+                       'An_bl'   :  [-10.0, 10.0],
                       }
         fiducial_dict = {'An_homog':  1.0,
                          'An_b1'   :  0.0,
@@ -320,8 +320,10 @@ def generate_LH(param_names_vary, bounds_dict,
     print(param_names_vary)
 
     n_params = len(param_names_vary)
-    sampler = qmc.LatinHypercube(d=n_params, seed=seed)
+    rng = np.random.default_rng(seed)
+    sampler = qmc.LatinHypercube(d=n_params, rng=rng)
     sample = sampler.random(n=n_samples)
+    rng.shuffle(sample) # to ensure a random order (output is semi-random but not guaranteed)
 
     l_bounds = [bounds_dict[pn][0] for pn in param_names_vary]
     u_bounds = [bounds_dict[pn][1] for pn in param_names_vary]
