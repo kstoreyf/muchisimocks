@@ -7,9 +7,9 @@
 ##SBATCH --job-name=datagen_fixedcosmo_step10
 ##SBATCH --job-name=datagen_fisher_quijote_step3
 ##SBATCH --job-name=datagen_test_p5_n1000_step10
-#SBATCH --time=0:30:00  
+##SBATCH --time=0:30:00  
 ##SBATCH --time=6:00:00 # time per task, but doing Nsteps; for 20000 (most), use 8h to be safe. lower, 1h fine
-##SBATCH --time=24:00:00 #datagen
+#SBATCH --time=24:00:00 #datagen
 #SBATCH --nodes=1              # nodes per instance
 #SBATCH --gres=gpu:1  #gpu for datagen
 ##SBATCH --cpus-per-task=24
@@ -19,8 +19,8 @@
 ##x-y%z; start x, end y INCLUSIVE, z tasks at a time max
 ##(Y-X)*step_size = total you want to run
 ##SBATCH --array=0-99%20 # for 10000 training set
-##SBATCH --array=0-9 # for 1000 test set / quijote
-#SBATCH --array=0-0
+#SBATCH --array=0-9 # for 1000 test set / quijote
+##SBATCH --array=0-0
 #SBATCH --mem=35G # got OOM for 30 for datagen	     
 #SBATCH --output=logs/%x-%a.out
 
