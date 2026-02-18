@@ -379,8 +379,8 @@ def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, 
             biasparam_dict.update(biasparams_df.loc[idx_bias].to_dict())
         bias_vector = [biasparam_dict[name] for name in utils.biasparam_names_ordered]
         # make tracer field
-        tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector,
-                                                noise_field=noise_field, A_noise=A_noise, n_grid_norm=n_grid_orig)
+        tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_orig,
+                                                noise_field=noise_field, A_noise=A_noise)
     else:
         # noise-only
         tracer_field = noise_field

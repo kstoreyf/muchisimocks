@@ -599,12 +599,12 @@ def param_name_to_param_name_emu(param_name):
     return param_name_emu
 
 
-def get_tracer_field(bias_fields_eul, bias_vector, 
-                     noise_field=None, A_noise=None, n_grid_norm=None):
+def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm,
+                     noise_field=None, A_noise=None, noise_model='multiplicative'):
     assert len(bias_vector)==bias_fields_eul.shape[0]-1, "bias_vector must have length one less than number of bias fields"
-    if n_grid_norm is None:
-        n_grid_norm = bias_fields_eul.shape[-1]
-        
+    # Note n_grid_norm should be the *original* n_grid used to generate the bias fields
+    # In our case, n_grid_orig!
+
     def _sum_bias_fields(fields, bias_vector):
         bias_vector_extended = np.concatenate(([1.0], bias_vector))
         return np.sum([fields[ii]*bias_vector_extended[ii] for ii in range(len(fields))], axis=0)
@@ -616,16 +616,18 @@ def get_tracer_field(bias_fields_eul, bias_vector,
         assert A_noise is not None, "Must provide A_noise if noise_field is provided"
         if noise_field.shape != tracer_field_eul.shape:
             raise ValueError(f"Noise field shape {noise_field.shape} does not match tracer field shape {tracer_field_eul.shape}")
-        # noise field should already be normalized 
-        # additive noise
-        #tracer_field_eul_norm += A_noise * noise_field
-        # multiplicative noise, as in Rubira & Schmidt 2025
-        # for now assuming A_noise is a single number
-        assert len(A_noise)==len(bias_fields_eul), "A_noise must have same length as bias fields (5)"
-        tracer_field_noise = np.sum([bias_fields_eul[ii] * A_noise[ii] * noise_field
-                                    for ii in range(len(bias_fields_eul))], axis=0) 
-        tracer_field_noise /= n_grid_norm**3 
-        #tracer_field_noise = bias_fields_eul[0] * A_noise * noise_field / n_grid_norm**3
+        if noise_model=='multiplicative':
+             # multiplicative noise, as in Rubira & Schmidt 2025 https://arxiv.org/abs/2511.05484
+            assert len(A_noise)==len(bias_fields_eul), "A_noise must have same length as bias fields (5)"
+            tracer_field_noise = np.sum([bias_fields_eul[ii] * A_noise[ii] * noise_field
+                                        for ii in range(len(bias_fields_eul))], axis=0) 
+            tracer_field_noise /= n_grid_norm**3 
+        elif noise_model=='additive':
+            assert type(A_noise) in [float, int], "A_noise must be a single number for additive noise"
+            # in this case noise field is not unit but rather already generated with the right variance, so no need to normalize
+            tracer_field_noise = A_noise * noise_field
+        else:
+            raise ValueError(f"Noise type {noise_model} not recognized!")
         tracer_field_eul_norm += tracer_field_noise 
     
     return tracer_field_eul_norm

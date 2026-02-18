@@ -109,7 +109,7 @@ def compute_pks_muchisimocks():
             bias_vector = [biasparam_dict[name] for name in biasparam_names_ordered]
 
             print("bias_vector:", bias_vector, flush=True)
-            tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
+            tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_orig)
             
             #param_vals = np.loadtxt(fn_params)
             #param_dict = dict(zip(param_names, param_vals))
@@ -259,7 +259,7 @@ def compute_pks_quijote_LH():
                 print(f"P(k) for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite_pks}, continuing")
             else:
                 start = time.time()
-                tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_norm=n_grid_orig)
+                tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_orig)
                 compute_pk(tracer_field, cosmo, box_size,
                         k_min=k_min, k_max=k_max, n_bins=n_bins,
                         deconvolve_grid=deconvolve_grid,
@@ -273,7 +273,7 @@ def compute_pks_quijote_LH():
                 print(f"P(k) zspace for orig sim for idx_LH={idx_LH} exists and overwrite={overwrite_pks}, continuing")
             else:
                 start = time.time()
-                tracer_field_zspace = utils.get_tracer_field(bias_terms_eul_zspace, bias_vector, n_grid_norm=n_grid_orig)
+                tracer_field_zspace = utils.get_tracer_field(bias_terms_eul_zspace, bias_vector, n_grid_orig)
                 compute_pk(tracer_field_zspace, cosmo, box_size,
                         k_min=k_min, k_max=k_max, n_bins=n_bins,
                         deconvolve_grid=deconvolve_grid,
