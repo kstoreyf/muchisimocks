@@ -490,16 +490,12 @@ def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
 
 
 def compute_pk(tracer_field, cosmo, box_size,
+               k_min=0.01, k_max=0.4, n_bins=30,
                log_binning=True,
                normalise_grid=False, deconvolve_grid=False,
                interlacing=False, deposit_method='cic',
                correct_grid=False,
                n_threads=8, fn_stat=None):
-
-    # fixing these here to ensure binning is same for all stats computed!
-    k_min = 0.01
-    k_max = 0.4
-    n_bins = 30
     
     # NOTE by default assumes tracer field is already normalized!
 
@@ -586,16 +582,12 @@ def compute_pk_linear(seed, cosmo, box_size, n_grid_orig,
 
 
 def compute_pgm(tracer_field, matter_density_field, cosmo, box_size,
+                k_min=0.01, k_max=0.4, n_bins=30,
                log_binning=True,
                normalise_grid=False, deconvolve_grid=False,
                interlacing=False, deposit_method='cic',
                correct_grid=False,
                n_threads=8, fn_stat=None):
-
-    # fixing these here to ensure binning is same for all stats computed!
-    k_min = 0.01
-    k_max = 0.4
-    n_bins = 30    
     
     # make sure to pre-normalize the matter density field!
     # for muchisimocks, divide by n_grid_orig**3; for SHAMe, divide by np.sum(matter_density_field) (??)
@@ -666,13 +658,8 @@ def compute_pgm(tracer_field, matter_density_field, cosmo, box_size,
     return pgm_obj
 
 
-def compute_bispectrum(base, tracer_field, fn_stat=None):
+def compute_bispectrum(base, tracer_field, k_min=0.01, k_max=0.4, n_bins=7, fn_stat=None):
 
-    # fixing these here to ensure binning is same for all stats computed!
-    k_min = 0.01
-    k_max = 0.4
-    n_bins = 7
-        
     k_edges = np.linspace(k_min, k_max, n_bins+1) # 7 bins
     k_edges_squeeze = k_edges.copy()
     lmax = 1
