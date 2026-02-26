@@ -215,12 +215,11 @@ def define_LH_cosmo(tag_bounds=''):
     if 'test' in tag_bounds:
         bounds_dict = restrict_bounds(bounds_dict, factor=0.05)
     
-    if tag_bounds == '_quijote':
-        fiducial_dict = utils.cosmo_dict_quijote
-    elif tag_bounds == '_shame':
+    if tag_bounds == '_shame':
         fiducial_dict = utils.cosmo_dict_shame
     else:
-        raise ValueError(f'Unknown tag_bounds {tag_bounds}')
+        # this will be the came for the LHs, if we fix some params
+        fiducial_dict = utils.cosmo_dict_quijote
 
     return param_names_ordered, bounds_dict, fiducial_dict
 
@@ -283,7 +282,7 @@ def define_LH_Anoise(tag_bounds=''):
         bounds_dict = {'An_homog':  [-3.0, -3.0],
                        'An_b1'   :  [-3.0, 3.0],
                        'An_b2'   :  [-2.0, 2.0],
-                       'An_bs2'  :  [-2.0, 2.0],
+                       'An_bs2'  :  [-5.0, 5.0], 
                        'An_bl'   :  [-10.0, 10.0],
                       }
         fiducial_dict = {'An_homog':  1.0,

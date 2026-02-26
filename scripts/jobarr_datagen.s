@@ -2,7 +2,7 @@
 #SBATCH --qos=regular
 ##SBATCH --job-name=datagen_test_p5_n1000_vel_step100
 ##SBATCH --job-name=datagen_quijote_p0_n1000_vel_step100
-#SBATCH --job-name=datagen_shame_p0_n1000_step100
+#SBATCH --job-name=datagen_shame_p0_n1000_step100_round2
 ##SBATCH --job-name=datagen_p5_n10000_vel_step100_round2
 ##SBATCH --job-name=datagen_fixedcosmo_step10
 ##SBATCH --job-name=datagen_fisher_quijote_step3

@@ -856,7 +856,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       inf_methods, tags_inf, tags_test=None,
                       colors=None, labels=None,
                       figsize=(7,7), fontsize_legend=18,
-                      extents={}, title=None, unreparameterize=False):
+                      extents={}, title=None, unreparameterize=False,
+                      shades=None, loc_legend=(1.05, 1.0)):
     if title is None:
         title = f'test model {idx_obs}'
     
@@ -884,7 +885,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             'available_params': available_params,
             'inf_method': inf_method,
             'label': labels[i] if labels is not None else None,
-            'color': colors[i] if colors is not None else None
+            'color': colors[i] if colors is not None else None,
+            'orig_idx': i,
         })
         all_param_names_per_chain.append(available_params)
     
@@ -1061,7 +1063,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         smooth = 4
         bins = 8
         
-        c.add_chain(chainconsumer.Chain(
+        chain_kwargs = dict(
             samples=samples_df,
             name=chain_data['label'],
             color=color,
@@ -1069,7 +1071,12 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             bins=bins,
             #plot_cloud=True,
             plot_cloud=False,
-        ))
+        )
+        if shades is not None:
+            orig_idx = chain_data['orig_idx']
+            if orig_idx < len(shades):
+                chain_kwargs['shade'] = shades[orig_idx]
+        c.add_chain(chainconsumer.Chain(**chain_kwargs))
 
     # Set up plot configuration
     c.set_plot_config(
@@ -1079,7 +1086,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             #contour_label_font_size=12,
             summary_font_size=0,
             extents=extents,
-            legend_kwargs={'bbox_to_anchor': (1.05, 1.0), 
+            legend_kwargs={'bbox_to_anchor': loc_legend, 
                            'fontsize':fontsize_legend}
         )
     )
