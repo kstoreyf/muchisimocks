@@ -389,17 +389,18 @@ def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, 
 
 
 def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
+                        k_min=0.01, k_max=0.4, n_bins=32,
                         n_threads=1, fn_stat=None):
 
     print("Computing the 15 PNN cross power spectra")
-
-    k_min = 0.01
-    k_max = 0.4
-    n_bins = 30
     
     n_grid = bias_terms_eul.shape[-1]
     norm = n_grid_orig**3
     
+    # need to do this to get bacco to do what we want, because of a bug in bacco bin computation
+    # see notebooks/2026-02-25_pk_checks.ipynb for more details
+    n_bins_pass = n_bins+1
+
     log_binning = True
     deposit_method = 'cic'
     interlacing = False
@@ -423,7 +424,7 @@ def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
         "log_binning": log_binning,
         "kmin": k_min,
         "kmax": k_max,
-        "nbins": n_bins,
+        "nbins": n_bins_pass,
         "correct_grid": correct_grid,
         #"zspace": False,
         "cosmology": cosmo,
@@ -443,7 +444,7 @@ def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
         'min_k': k_min,
         'log_binning': log_binning,
         'log_binning_kmax': k_max,
-        'log_binning_nbins': n_bins,
+        'log_binning_nbins': n_bins_pass,
         'interlacing': interlacing,
         'depmethod': deposit_method,
         'correct_grid': correct_grid,
@@ -458,19 +459,18 @@ def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
 
     # In check_pnn.py, they use a linear theory power spectrum for correction
     n_grid = 512 # Assuming a default value, could be made a parameter
-    lt_k = np.logspace(np.log10(np.pi / box_size), np.log10(2 * np.pi / box_size * n_grid), num=100)
-    pk_lpt = bacco.utils.compute_pt_15_basis_terms(cosmo, expfactor=cosmo.expfactor, wavemode=lt_k)
+    #lt_k = np.logspace(np.log10(np.pi / box_size), np.log10(2 * np.pi / box_size * n_grid), num=100)
+    #pk_lpt = bacco.utils.compute_pt_15_basis_terms(cosmo, expfactor=cosmo.expfactor, wavemode=lt_k)
 
     power_all_terms = []
     for ii in range(0, len(prod)):
         print(f"Computing cross-spectrum {ii+1} of {len(prod)}", flush=True)
-        if ii in [1, 5, 9, 12]:
-            pk_lt = {'k': lt_k, 'pk': pk_lpt[0][ii], 'pk_nlin': pk_lpt[0][ii], 'pk_lt_log': True}
-        elif ii in [2, 3, 4, 7, 8, 11, 13]:
-            pk_lt = {'k': lt_k, 'pk': pk_lpt[0][ii], 'pk_nlin': pk_lpt[0][ii], 'pk_lt_log': False}
-        else:
-            pk_lt = None
-        args_power_grid_ii = args_power_grid.copy()
+        # if ii in [1, 5, 9, 12]:
+        #     pk_lt = {'k': lt_k, 'pk': pk_lpt[0][ii], 'pk_nlin': pk_lpt[0][ii], 'pk_lt_log': True}
+        # elif ii in [2, 3, 4, 7, 8, 11, 13]:
+        #     pk_lt = {'k': lt_k, 'pk': pk_lpt[0][ii], 'pk_nlin': pk_lpt[0][ii], 'pk_lt_log': False}
+        # else:
+        #     pk_lt = None
         #args_power_grid_ii['correct_grid'] = False if ii == 11 else True
         
         # passing pk_lt doesn't seem to be doing anything
@@ -479,8 +479,16 @@ def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
         power_term = bacco.statistics.compute_crossspectrum_twogrids(grid1=bias_terms_eul[prod[ii, 0]]/norm,
                                                         grid2=bias_terms_eul[prod[ii, 1]]/norm,
                                                         #pk_lt = pk_lt,
-                                                        **args_power_grid_ii)
-        power_all_terms.append(power_term)
+                                                        #**args_power_grid_ii
+                                                        **args_power_grid)
+        
+        # remove the last bin of all the arrays in the power_term, because of the dummy bin issue in bacco
+        power_term_corr = power_term.copy()
+        for key in power_term:
+            if (type(power_term[key])==np.ndarray or type(power_term[key])==list) and len(power_term[key])==len(power_term['k']):
+                power_term_corr[key] = power_term[key][:-1]
+        
+        power_all_terms.append(power_term_corr)
 
     if fn_stat is not None:
         Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
@@ -490,7 +498,7 @@ def compute_pnn_from_bias_fields(bias_terms_eul, cosmo, box_size, n_grid_orig,
 
 
 def compute_pk(tracer_field, cosmo, box_size,
-               k_min=0.01, k_max=0.4, n_bins=30,
+               k_min=0.01, k_max=0.4, n_bins=32,
                log_binning=True,
                normalise_grid=False, deconvolve_grid=False,
                interlacing=False, deposit_method='cic',
@@ -502,6 +510,10 @@ def compute_pk(tracer_field, cosmo, box_size,
     # n_grid has to match the tracer field size for this compuation!
     n_grid = tracer_field.shape[-1]
     print("Computing pk, using n_grid = ", n_grid, flush=True)
+
+    # need to do this to get bacco to do what we want, because of a bug in bacco bin computation
+    # see notebooks/2026-02-25_pk_checks.ipynb for more details
+    n_bins_pass = n_bins+1
 
     # defaults from bacco.statistics.compute_crossspectrum_twogrids
     # unless passed or otherwise denoted
@@ -522,7 +534,7 @@ def compute_pk(tracer_field, cosmo, box_size,
         "pk_lt": None,
         "kmin": k_min,
         "kmax": k_max,
-        "nbins": n_bins,
+        "nbins": n_bins_pass,
         "correct_grid": correct_grid,
         "zspace": False,
         "cosmology": cosmo,
@@ -542,7 +554,7 @@ def compute_pk(tracer_field, cosmo, box_size,
         'min_k': k_min,
         'log_binning': log_binning,
         'log_binning_kmax': k_max,
-        'log_binning_nbins': n_bins,
+        'log_binning_nbins': n_bins_pass,
         'interlacing': interlacing,
         'depmethod': deposit_method,
         'correct_grid': correct_grid,
@@ -558,11 +570,17 @@ def compute_pk(tracer_field, cosmo, box_size,
                         grid2=tracer_field,
                         **args_power_grid)
     
+    # remove the last bin of all the arrays in the pk_obj, because of the dummy bin issue in bacco
+    pk_obj_corr = pk_obj.copy()
+    for key in pk_obj:
+        if len(pk_obj[key])==len(pk_obj['k']):
+            pk_obj_corr[key] = pk_obj[key][:-1]
+
     if fn_stat is not None:
         Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
-        np.save(fn_stat, pk_obj)
+        np.save(fn_stat, pk_obj_corr)
         
-    return pk_obj
+    return pk_obj_corr
 
 
 def compute_pk_linear(seed, cosmo, box_size, n_grid_orig,
@@ -582,7 +600,7 @@ def compute_pk_linear(seed, cosmo, box_size, n_grid_orig,
 
 
 def compute_pgm(tracer_field, matter_density_field, cosmo, box_size,
-                k_min=0.01, k_max=0.4, n_bins=30,
+                k_min=0.01, k_max=0.4, n_bins=32,
                log_binning=True,
                normalise_grid=False, deconvolve_grid=False,
                interlacing=False, deposit_method='cic',
@@ -595,6 +613,10 @@ def compute_pgm(tracer_field, matter_density_field, cosmo, box_size,
     # n_grid has to match the tracer field size for this computation!
     n_grid = tracer_field.shape[-1]
     print("Computing pgm, using n_grid = ", n_grid, flush=True)
+
+    # need to do this to get bacco to do what we want, because of a bug in bacco bin computation
+    # see notebooks/2026-02-25_pk_checks.ipynb for more details
+    n_bins_pass = n_bins+1
 
     # defaults from bacco.statistics.compute_crossspectrum_twogrids
     # unless passed or otherwise denoted
@@ -615,7 +637,7 @@ def compute_pgm(tracer_field, matter_density_field, cosmo, box_size,
         "pk_lt": None,
         "kmin": k_min,
         "kmax": k_max,
-        "nbins": n_bins,
+        "nbins": n_bins_pass,
         "correct_grid": correct_grid,
         "zspace": False,
         "cosmology": cosmo,
@@ -635,7 +657,7 @@ def compute_pgm(tracer_field, matter_density_field, cosmo, box_size,
         'min_k': k_min,
         'log_binning': log_binning,
         'log_binning_kmax': k_max,
-        'log_binning_nbins': n_bins,
+        'log_binning_nbins': n_bins_pass,
         'interlacing': interlacing,
         'depmethod': deposit_method,
         'correct_grid': correct_grid,
@@ -651,11 +673,17 @@ def compute_pgm(tracer_field, matter_density_field, cosmo, box_size,
                         grid2=matter_density_field,
                         **args_power_grid)
     
+    # remove the last bin of all the arrays in the pgm_obj, because of the dummy bin issue in bacco
+    pgm_obj_corr = pgm_obj.copy()
+    for key in pgm_obj:
+        if len(pgm_obj[key])==len(pgm_obj['k']):
+            pgm_obj_corr[key] = pgm_obj[key][:-1]
+
     if fn_stat is not None:
         Path.absolute(Path(fn_stat).parent).mkdir(parents=True, exist_ok=True)
-        np.save(fn_stat, pgm_obj)
+        np.save(fn_stat, pgm_obj_corr)
         
-    return pgm_obj
+    return pgm_obj_corr
 
 
 def compute_bispectrum(base, tracer_field, k_min=0.01, k_max=0.4, n_bins=7, fn_stat=None):

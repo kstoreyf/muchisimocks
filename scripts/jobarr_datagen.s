@@ -2,7 +2,8 @@
 #SBATCH --qos=regular
 ##SBATCH --job-name=datagen_test_p5_n1000_vel_step100
 ##SBATCH --job-name=datagen_quijote_p0_n1000_vel_step100
-#SBATCH --job-name=datagen_shame_p0_n1000_step100_round2
+##SBATCH --job-name=datagen_shame_p0_n1000_step100_round2
+#SBATCH --job-name=datagen_coverage_p5_n1000_step100_round2
 ##SBATCH --job-name=datagen_p5_n10000_vel_step100_round2
 ##SBATCH --job-name=datagen_fixedcosmo_step10
 ##SBATCH --job-name=datagen_fisher_quijote_step3
@@ -52,8 +53,9 @@ echo "idx_mock_start=${idx_mock_start}, idx_mock_end=${idx_mock_end}"
 
 #python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --tag_params '_p5_n10000'
 #python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --tag_params '_test_p5_n1000'
+python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --tag_params '_coverage_p5_n1000'
 #python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fixed --tag_params '_quijote_p0_n1000'
-python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fixed --tag_params '_shame_p0_n1000'
+#python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fixed --tag_params '_shame_p0_n1000'
 #python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fixed
 #python data_creation_pipeline.py ${idx_mock_start} ${idx_mock_end} --modecosmo fisher --tag_params='_fisher_quijote'
 #python cuda_minimal.py
