@@ -573,7 +573,7 @@ def compute_pk(tracer_field, cosmo, box_size,
     # remove the last bin of all the arrays in the pk_obj, because of the dummy bin issue in bacco
     pk_obj_corr = pk_obj.copy()
     for key in pk_obj:
-        if len(pk_obj[key])==len(pk_obj['k']):
+        if (type(pk_obj[key])==np.ndarray or type(pk_obj[key])==list) and len(pk_obj[key])==len(pk_obj['k']):
             pk_obj_corr[key] = pk_obj[key][:-1]
 
     if fn_stat is not None:
@@ -676,7 +676,7 @@ def compute_pgm(tracer_field, matter_density_field, cosmo, box_size,
     # remove the last bin of all the arrays in the pgm_obj, because of the dummy bin issue in bacco
     pgm_obj_corr = pgm_obj.copy()
     for key in pgm_obj:
-        if len(pgm_obj[key])==len(pgm_obj['k']):
+        if (type(pgm_obj[key])==np.ndarray or type(pgm_obj[key])==list) and len(pgm_obj[key])==len(pgm_obj['k']):
             pgm_obj_corr[key] = pgm_obj[key][:-1]
 
     if fn_stat is not None:
@@ -686,9 +686,9 @@ def compute_pgm(tracer_field, matter_density_field, cosmo, box_size,
     return pgm_obj_corr
 
 
-def compute_bispectrum(base, tracer_field, k_min=0.01, k_max=0.4, n_bins=7, fn_stat=None):
+def compute_bispectrum(base, tracer_field, k_min=0.01, k_max=0.4, n_bins=12, fn_stat=None):
 
-    k_edges = np.linspace(k_min, k_max, n_bins+1) # 7 bins
+    k_edges = np.linspace(k_min, k_max, n_bins+1)
     k_edges_squeeze = k_edges.copy()
     lmax = 1
     

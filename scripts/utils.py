@@ -114,6 +114,14 @@ cosmo_dict_shame = {
             'tau'           : 0.0952,
 }
 
+# MULTIPYLING b2 by 2 bc marcos said there is a mismatch in the definition of b2 and bs2 bw prob bias and hybrid bias
+# "with the Probabilistic Bias approach one gets:
+# b2_pb = b2_measured/2
+# bs2_pb = b_s2_measured/2
+# Here measured means the one you get in your posterior"
+bias_dict_shame_nbar00011 = {'b1': 0.52922445, 'b2': 0.13816352*2, 'bs2': -0.21806094*2, 'bl': -1.0702721}
+bias_dict_shame_nbar00022 = {'b1': 0.47410742, 'b2': 0.06350746*2, 'bs2': -0.16940883*2, 'bl': -0.82443643}
+bias_dict_shame_nbar00054 = {'b1': 0.40209658, 'b2': -0.00958755*2, 'bs2': -0.09669132*2, 'bl': -0.79150708}
 
 cosmo_param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
 biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl'] 
@@ -125,6 +133,10 @@ statistics_scaler_funcs = {'pk': 'log_minmax',
                            'bispec': 'minmax',
                            'pgm': 'log_minmax_const',
                           }
+
+n_factor_arr = [1, 2, 4, 8, 16, 32]
+nest_level_to_n_factor = {i: f for i, f in enumerate(n_factor_arr)}
+n_factor_to_nest_level = {v: k for k, v in nest_level_to_n_factor.items()}
 
 
 def get_stat_label(statistics):

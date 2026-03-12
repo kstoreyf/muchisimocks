@@ -1,5 +1,7 @@
 import os
 os.environ["OMP_NUM_THREADS"] = str(1)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 import numpy as np
 
@@ -77,11 +79,11 @@ def train_likefree_inference(config, overwrite=False):
     tag_biasparams = config["tag_biasparams"]
     tag_noise = config.get("tag_noise", None)  # noise parameters
     tag_Anoise = config.get("tag_Anoise", None)  # noise parameters
-    kwargs_data = config["kwargs_data"]
     run_mode = config["run_mode"]
     sweep_name = config["sweep_name"]
     tag_data = config["tag_data"]
     tag_inf = config["tag_inf"]
+    bx = config.get("bx", None)
 
     dir_sbi = f'{dir_results}/results_sbi/sbi{tag_inf}'
     fn_posterior = f"{dir_sbi}/posterior.p"
@@ -99,7 +101,7 @@ def train_likefree_inference(config, overwrite=False):
                                       tag_noise=tag_noise,
                                       tag_Anoise=tag_Anoise,
                                       tag_data=tag_data,
-                                      kwargs=kwargs_data)
+                                      bx=bx)
 
     # get bounds dict
     _, dict_bounds_cosmo, _ = genp.define_LH_cosmo(tag_params)
@@ -111,8 +113,8 @@ def train_likefree_inference(config, overwrite=False):
         dict_bounds.update(dict_bounds_noise)
     
     # turn parameters into nice theta for training
-    theta, param_names = data_loader.param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df=Anoise_df,
-                                                        n_rlzs_per_cosmo=config["n_rlzs_per_cosmo"])
+    theta, param_names = data_loader.param_dfs_to_theta(idxs_params, params_df, biasparams_df, 
+                                                        Anoise_df=Anoise_df)
     print('theta shape:', theta.shape)
     print(param_names)
     
@@ -154,13 +156,10 @@ def train_likefree_inference(config, overwrite=False):
             print('Updated bounds after plite filtering:', dict_bounds)
     
     ### Subsampling (ntrain and train/val)
-    # downsample based on n_train    
     if n_train is None:
         n_train = len(random_ints_cosmo)
-    # gets all the random ints less than ntrain, so guarantees we're not missing numbers
-    random_ints_cosmo = random_ints_cosmo[random_ints_cosmo<n_train]
-    # then these are split fractionally into train and val
-    idxs_cosmo_train, idxs_cosmo_val, _ = utils.idxs_train_val_test(random_ints_cosmo, frac_train=0.9, frac_val=0.1, frac_test=0.0)
+    idxs_cosmo_subset = random_ints_cosmo[:n_train]
+    idxs_cosmo_train, idxs_cosmo_val, _ = utils.idxs_train_val_test(idxs_cosmo_subset, frac_train=0.9, frac_val=0.1, frac_test=0.0)
 
     # for each row in the index metadata of the full dataset, 
     # if our intended training idx is in it, keep
@@ -262,7 +261,6 @@ def test_likefree_inference(config, overwrite=False):
     
     print(statistics, tag_params, tag_biasparams)
     print(tag_params_test, tag_biasparams_test)
-    # n_rlzs_per_cosmo = kwargs_data_test["n_rlzs_per_cosmo"]
     ### Load data and parameters
     # our setup is such that that the test set is a separate dataset, so no need to split
     # don't need theta either - just predicting, not comparing

@@ -8,11 +8,23 @@ import tensorflow as tf
 import utils
 
 
+NESTED_META_COLS = ['idx_cosmo', 'nest_layer']
+
+
+def _is_nested_bias(biasparams_df):
+    """Check if bias params DataFrame has nested metadata columns."""
+    return biasparams_df is not None and 'idx_cosmo' in biasparams_df.columns
+
+
+def _get_bias_param_cols(biasparams_df):
+    """Get only the parameter columns (excluding metadata)."""
+    return [c for c in biasparams_df.columns if c not in NESTED_META_COLS]
+
 
 def load_data(data_mode, statistics, tag_params, tag_biasparams,
               tag_noise=None, tag_Anoise=None,
               tag_data=None,
-              kwargs={}):
+              kwargs={}, bx=None, n_cosmo_max=None):
     
     k, y, y_err = [], [], []
     for statistic in statistics:
@@ -20,7 +32,9 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
         if data_mode == 'muchisimocks':
             k_i, y_i, y_err_i, idxs_params = load_data_muchisimocks(statistic,
                                             tag_params, tag_biasparams, 
-                                            tag_noise=tag_noise, tag_Anoise=tag_Anoise, **kwargs)
+                                            tag_noise=tag_noise, tag_Anoise=tag_Anoise,
+                                            bx=bx, n_cosmo_max=n_cosmo_max,
+                                            **kwargs)
         elif data_mode == 'emu':
             k_i, y_i, y_err_i, idxs_params = load_data_emu(statistic,
                                             tag_params, tag_biasparams, **kwargs)
@@ -37,7 +51,7 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
         y.append(y_i)
         y_err.append(y_err_i)    
 
-    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams, tag_Anoise=tag_Anoise)
+    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams, tag_Anoise=tag_Anoise, bx=bx)
     return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias
 
 
@@ -117,6 +131,14 @@ def get_idxs_params(tag_params, tag_biasparams, tag_Anoise=None, n_bias_per_cosm
                     # For fixed noise or no noise, use mock index
                     idx_noise = idx_mock
                 idxs_params.append((idx_mock, idx_bias, idx_noise))
+            elif _is_nested_bias(biasparams_df):
+                bias_rows = biasparams_df[biasparams_df['idx_cosmo'] == idx_mock]
+                for idx_bias in bias_rows.index:
+                    if tag_Anoise is not None and 'p0' not in tag_Anoise:
+                        idx_noise = idx_bias
+                    else:
+                        idx_noise = idx_mock
+                    idxs_params.append((idx_mock, idx_bias, idx_noise))
             else:
                 start_idx = idx_mock * factor
                 end_idx = (idx_mock + 1) * factor
@@ -181,10 +203,13 @@ def get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=None,
     """
     
     if modecosmo=='lh':
-        assert factor is not None, "factor must be provided"
-        start_idx = idx_mock * factor
-        end_idx = (idx_mock + 1) * factor
-        idxs_bias = list(range(start_idx, end_idx))
+        if biasparams_df is not None and _is_nested_bias(biasparams_df):
+            idxs_bias = biasparams_df[biasparams_df['idx_cosmo'] == idx_mock].index.tolist()
+        else:
+            assert factor is not None, "factor must be provided"
+            start_idx = idx_mock * factor
+            end_idx = (idx_mock + 1) * factor
+            idxs_bias = list(range(start_idx, end_idx))
     elif modecosmo=='fisher':
         assert params_df is not None and biasparams_df is not None, "params_df and biasparams_df must be provided"
         if params_df.iloc[idx_mock]['param_shifted']=='fiducial':
@@ -363,7 +388,7 @@ def get_bispec_mask(tag_data, tag_mask='', k=None, bispec=None):
 
 def load_params(tag_params=None, tag_biasparams=None,
                 tag_Anoise=None,
-                dir_params='../data/params'):
+                dir_params='../data/params', bx=None):
     
     if tag_params is None:
         params_df = None
@@ -379,7 +404,7 @@ def load_params(tag_params=None, tag_biasparams=None,
         biasparams_dict_fixed = {}
         random_ints_bias = None
     else:
-        biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams, dir_params=dir_params)
+        biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams, dir_params=dir_params, bx=bx)
         fn_randints_bias = f'{dir_params}/randints{tag_biasparams}.npy'
         random_ints_bias = np.load(fn_randints_bias, allow_pickle=True) if os.path.exists(fn_randints_bias) else None
         
@@ -408,17 +433,12 @@ def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
                 kname = 'sigma8_cold'
             param_dict[kname] = v
 
-        # MULTIPYLING b2 by 2 bc marcos said there is a mismatch in the definition of b2 and bs2 bw prob bias and hybrid bias
-        # "with the Probabilistic Bias approach one gets:
-        # b2_pb = b2_measured/2
-        # bs2_pb = b_s2_measured/2
-        # Here measured means the one you get in your posterior"
         if tag_mock == '_nbar0.00011':
-            param_dict.update({'b1': 0.52922445, 'b2': 0.13816352*2, 'bs2': -0.21806094*2, 'bl': -1.0702721})
+            param_dict.update(utils.bias_dict_shame_nbar00011)
         elif tag_mock == '_nbar0.00022':
-            param_dict.update({'b1': 0.47410742, 'b2': 0.06350746*2, 'bs2': -0.16940883*2, 'bl': -0.82443643})
+            param_dict.update(utils.bias_dict_shame_nbar00022)
         elif tag_mock == '_nbar0.00054':
-            param_dict.update({'b1': 0.40209658, 'b2': -0.00958755*2, 'bs2': -0.09669132*2, 'bl': -0.79150708})
+            param_dict.update(utils.bias_dict_shame_nbar00054)
         else:
             raise ValueError(f"tag_mock {tag_mock} not recognized for shame OOD data!")
         return param_dict
@@ -447,7 +467,7 @@ def load_cosmo_params(tag_params, dir_params='../data/params'):
     return params_df, param_dict_fixed
     
     
-def load_bias_params(tag_biasparams, dir_params='../data/params'):
+def load_bias_params(tag_biasparams, dir_params='../data/params', bx=None):
     if 'fisher' in tag_biasparams:
         fn_biasparams = f'{dir_params}/params{tag_biasparams}.txt'
     else:
@@ -463,6 +483,12 @@ def load_bias_params(tag_biasparams, dir_params='../data/params'):
         if os.path.exists(fn_biasparams_fixed)
         else {}
     )
+    # For nested bias params, filter by nesting level if requested.
+    # Original index is preserved so stat filenames still match.
+    if (biasparams_df is not None and bx is not None
+            and 'nest_layer' in biasparams_df.columns):
+        nest_level = utils.n_factor_to_nest_level[bx]
+        biasparams_df = biasparams_df[biasparams_df['nest_layer'] <= nest_level].copy()
     return biasparams_df, biasparams_dict_fixed
 
 
@@ -484,7 +510,9 @@ def load_Anoise_params(tag_Anoise, dir_params='../data/params'):
         # "Anoise_dict_fixed" is the pythonic way to check for a non-empty dict
         assert Anoise_df is not None or Anoise_dict_fixed, f"tag_Anoise {tag_Anoise} should have a corresponding Anoise_df or Anoise_dict_fixed!"
     return Anoise_df, Anoise_dict_fixed
-    
+
+
+
     
 def param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df=None, n_rlzs_per_cosmo=1):
     """
@@ -514,9 +542,9 @@ def param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df=None, n_
         theta_noise = utils.repeat_arr_rlzs(theta_noise_orig, n_rlzs=n_rlzs_per_cosmo)
         return theta_noise, param_names
     elif params_df is None and Anoise_df is None:
-        param_names.extend(biasparams_df.columns.tolist())
-        # Extract idx_bias from three-tuple (idx_mock, idx_bias, idx_noise)
-        theta_bias_orig = np.array([biasparams_df.loc[idx_bias].values for _, idx_bias, _ in idxs_params])
+        bias_param_cols = _get_bias_param_cols(biasparams_df)
+        param_names.extend(bias_param_cols)
+        theta_bias_orig = np.array([biasparams_df.loc[idx_bias, bias_param_cols].values for _, idx_bias, _ in idxs_params])
         theta_bias = utils.repeat_arr_rlzs(theta_bias_orig, n_rlzs=n_rlzs_per_cosmo)
         return theta_bias, param_names
     elif biasparams_df is None and Anoise_df is None:
@@ -530,7 +558,8 @@ def param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df=None, n_
     if params_df is not None:
         param_names.extend(params_df.columns.tolist())
     if biasparams_df is not None:
-        param_names.extend(biasparams_df.columns.tolist())
+        bias_param_cols = _get_bias_param_cols(biasparams_df)
+        param_names.extend(bias_param_cols)
     if Anoise_df is not None:
         param_names.extend(Anoise_df.columns.tolist())
 
@@ -543,7 +572,7 @@ def param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df=None, n_
             params_combined.append(cosmo_params)
         
         if biasparams_df is not None:
-            bias_params = biasparams_df.loc[idx_bias].values
+            bias_params = biasparams_df.loc[idx_bias, bias_param_cols].values
             params_combined.append(bias_params)
             
         if Anoise_df is not None:
@@ -640,7 +669,7 @@ def get_param_names(tag_params=None, tag_biasparams=None, tag_Anoise=None, dir_p
         fn_biasparams = f'{dir_params}/params_lh{tag_biasparams}.txt'
         if os.path.exists(fn_biasparams):
             biasparams_df = pd.read_csv(fn_biasparams, index_col=0)
-            param_names.extend(biasparams_df.columns.tolist())
+            param_names.extend(_get_bias_param_cols(biasparams_df))
 
     if tag_Anoise is not None:
         fn_Anoise = f'{dir_params}/params_lh{tag_Anoise}.txt'
@@ -827,7 +856,8 @@ def get_dir_statistics(statistic, tag_params, tag_biasparams, tag_noise=None, ta
 def load_data_muchisimocks(statistic, tag_params, tag_biasparams, 
                            tag_noise=None, tag_Anoise=None,
                            tag_datagen='',
-                           mode_precomputed=None, return_pk_objs=False):
+                           mode_precomputed=None, return_pk_objs=False,
+                           bx=None, n_cosmo_max=None):
     
     # Determine directories and file structure
     dir_statistics = get_dir_statistics(statistic, tag_params, tag_biasparams, 
@@ -848,13 +878,18 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
     
     # Load parameter dataframes
     params_df, param_dict_fixed = load_cosmo_params(tag_params)
-    biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
+    biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams, bx=bx)
     Anoise_df, Anoise_dict_fixed = load_Anoise_params(tag_Anoise)
 
     # Find available cosmologies
     idxs_LH = _get_available_cosmologies(dir_statistics, stat_name)
     print(f"Found {len(idxs_LH)} diff cosmo {stat_name}s in {dir_statistics}")
     assert len(idxs_LH) > 0, f"No {stat_name}s found in {dir_statistics}!"
+
+    if n_cosmo_max is not None and len(idxs_LH) > n_cosmo_max:
+        rng = np.random.default_rng(seed=42)
+        idxs_LH = np.sort(rng.choice(idxs_LH, size=n_cosmo_max, replace=False))
+        print(f"Subsampled to {len(idxs_LH)} cosmologies (n_cosmo_max={n_cosmo_max})")
 
     # Initialize output arrays
     stat_arr, error_arr, idxs_params = [], [], []
@@ -1074,6 +1109,8 @@ def _get_bias_indices_for_cosmology(idx_LH, params_df, biasparams_df):
             return np.where(biasparams_df['param_shifted'] == 'fiducial')[0].tolist()
     else:
         # Latin Hypercube case
+        if _is_nested_bias(biasparams_df):
+            return biasparams_df[biasparams_df['idx_cosmo'] == idx_LH].index.tolist()
         factor, longer_df = check_df_lengths(params_df, biasparams_df)
         if longer_df == 'bias':
             return get_bias_indices_for_idx(idx_LH, modecosmo='lh', factor=factor)
@@ -1120,7 +1157,9 @@ def get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics,
     # For precomputed data, files already exist with bias parameters applied
     if biasparams_df is not None and 'p0' not in tag_biasparams:
         # Varied bias parameters case
-        if 'fisher' in str(biasparams_df.index[0]):  # Quick fisher check
+        if _is_nested_bias(biasparams_df):
+            idxs_bias = biasparams_df[biasparams_df['idx_cosmo'] == idx_mock].index.tolist()
+        elif 'fisher' in str(biasparams_df.index[0]):  # Quick fisher check
             idxs_bias = get_bias_indices_for_idx(idx_mock, modecosmo='fisher',
                                                params_df=params_df, biasparams_df=biasparams_df)
         else:

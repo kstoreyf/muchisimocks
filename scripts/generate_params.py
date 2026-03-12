@@ -3,27 +3,30 @@ import os
 import pandas as pd
 from pathlib import Path
 import re
+import time
 
 from scipy.stats import qmc
+import gethypercube
 
 import utils
 
 
 def main():
     generate_params_LH()
+    #generate_params_nested_LH()
     #generate_params_fisher()
 
 
 
 def generate_params_LH():
     
-    # seed 42, at least for the p5 mocks
-    seed = 42
+    # default seed was 42, at least for the p5 mocks
     overwrite = False # probs keep false!!! don't want to overwrite param files
 
     # Run this by uncommenting the part you want; not pretty, I know
 
-    n_samples = 1000
+    #n_samples = 1
+    
     #n_samples = 10000
     #n_samples = 1000000 #100x
     #n_samples = 50000 #5x
@@ -40,14 +43,18 @@ def generate_params_LH():
     
     ### bias
     bounds_type = 'bias'
-    n_params_vary = 4
-    tag_bounds = '_biasnest'
-    # n_params_vary = 4
-    # tag_bounds = '_biaszen'
-    #n_params_vary = 1
-    #tag_bounds = '_b1zen'
+
+    #n_samples = 1
+    #seed = 42
     #n_params_vary = 0
-    #tag_bounds = '_b0000'
+    #tag_bounds = '_biasshame'
+
+    n_samples = 1000
+    seed = 53
+    n_params_vary = 4
+    tag_bounds = '_biascoverage'
+
+
     
     ### noise
     #bounds_type = 'Anoise'
@@ -97,6 +104,46 @@ def generate_params_LH():
     if len(param_names_fixed) > 0:
         save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
     
+
+def generate_params_nested_LH():
+    
+    seed = 42
+    overwrite = False # probs keep false!!! don't want to overwrite param files
+
+    #n_cosmo = 800
+    n_cosmo = 10000
+    n_factors = np.array(utils.n_factor_arr)
+    m_layers = list(n_cosmo * n_factors)
+    
+    ### bias
+    n_params_vary = 4
+    tag_bounds = '_biasnest'
+    param_names_vary = ['b1', 'b2', 'bs2', 'bl']
+    param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(tag_bounds=tag_bounds)
+    
+    n_total = m_layers[-1]
+    tag_params = f'{tag_bounds}_p{n_params_vary}_n{n_total}'
+    dir_params = '../data/params'
+    fn_params = f'{dir_params}/params_lh{tag_params}.txt'
+    fn_params_fixed = f'{dir_params}/params_fixed{tag_params}.txt'
+    Path.mkdir(Path(dir_params), parents=True, exist_ok=True)
+
+    if os.path.isfile(fn_params) and not overwrite:
+        print(f'Found existing nested LH params: {fn_params}; stopping!')
+        return
+    
+    if os.path.isfile(fn_params_fixed) and not overwrite:
+        print(f'Found existing fixed params: {fn_params_fixed}; stopping!')
+        return
+
+    generate_nested_LH(param_names_vary, bounds_dict, m_layers, fn_params, seed=seed)
+    fn_rands = f'{dir_params}/randints{tag_params}.npy'
+    utils.generate_randints(n_total, fn_rands)
+        
+    param_names_fixed = [pn for pn in param_names_ordered if pn not in param_names_vary]
+    if len(param_names_fixed) > 0:
+        save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
+        
 
 
 # TODO update with Anoise?? not sure if want to
@@ -221,7 +268,7 @@ def define_LH_cosmo(tag_bounds=''):
     return param_names_ordered, bounds_dict, fiducial_dict
 
 
-def define_LH_bias(tag_bounds='biasnest'):
+def define_LH_bias(tag_bounds='_biasnest'):
         
     # biasnest
     bounds_dict = {'b1'     :  [-1.0, 3.0], #upped b1 max from 2 to 3
@@ -229,11 +276,15 @@ def define_LH_bias(tag_bounds='biasnest'):
                     'bs2'   :  [-2.0, 2.0],
                     'bl'   :  [-10.0, 10.0],
                 }
-    fiducial_dict = {'b1'     :  1.0,
-                     'b2'    :  0.0,
-                     'bs2'   :  0.0,
-                     'bl'   :  0.0,
-                    }
+
+    if 'shame' in tag_bounds:
+        fiducial_dict = utils.bias_dict_shame_nbar00022 #fiducial number density
+    else:
+        fiducial_dict = {'b1'     :  1.0,
+                        'b2'    :  0.0,
+                        'bs2'   :  0.0,
+                        'bl'   :  0.0,
+                        }
         
     return utils.biasparam_names_ordered, bounds_dict, fiducial_dict
     
@@ -270,8 +321,7 @@ def define_LH_Anoise(tag_bounds=''):
     return utils.noiseparam_names_ordered, bounds_dict, fiducial_dict
 
 
-def generate_LH(param_names_vary, bounds_dict, 
-                n_samples, fn_params, 
+def generate_LH(param_names_vary, bounds_dict, n_samples, fn_params, 
                 seed=42):
 
     print(param_names_vary)
@@ -279,9 +329,11 @@ def generate_LH(param_names_vary, bounds_dict,
     n_params = len(param_names_vary)
     # using an old version of scipy for pytorch compatibility, and it takes seed not rng
     sampler = qmc.LatinHypercube(d=n_params, seed=seed)
+    # sample has shape (n_samples, n_params)
     sample = sampler.random(n=n_samples)
     # think it's fine to use same seed here
     rng = np.random.default_rng(seed)
+    # default axis=0 which is shuffling in samples, as we want
     rng.shuffle(sample) # to ensure a random order (output is semi-random but not guaranteed)
 
     l_bounds = [bounds_dict[pn][0] for pn in param_names_vary]
@@ -293,6 +345,69 @@ def generate_LH(param_names_vary, bounds_dict,
         param_df[param_name] = sample_scaled[:,param_names_vary.index(param_name)]
     param_df.to_csv(fn_params)
     print(f'Saved LH to {fn_params}')
+
+
+def generate_nested_LH(param_names_vary, bounds_dict, m_layers, fn_params, seed=42):
+    """Generate a nested Latin hypercube design and save as a single file.
+    
+    Saves one CSV with columns for each bias param plus metadata columns
+    ``idx_cosmo`` (which cosmology each row is assigned to) and ``nest_layer``
+    (which nesting level the row was introduced in). Rows are in natural
+    gethypercube order (first N rows = layer for N), with rows shuffled
+    within each chunk of n_cosmo to break any ordering artifacts.
+    """
+    k = len(param_names_vary)
+    n_cosmo = m_layers[0]
+    n_total = m_layers[-1]
+    max_factor = n_total // n_cosmo
+
+    print(f'Generating nested LHD: k={k}, m_layers={m_layers}')
+    t0 = time.time()
+    layers = gethypercube.nested_lhd(k=k, m_layers=m_layers, seed=17,
+                                     scramble=True, optimization=None)
+    t1 = time.time()
+    print(f'  nested_lhd: {t1 - t0:.2f}s')
+
+    l_bounds = [bounds_dict[pn][0] for pn in param_names_vary]
+    u_bounds = [bounds_dict[pn][1] for pn in param_names_vary]
+    layers_phys = gethypercube.scale_LH(layers, l_bounds, u_bounds)
+    full_design = layers_phys[-1]
+    t2 = time.time()
+    print(f'  scale_LH: {t2 - t1:.2f}s')
+
+    # Shuffle rows within each chunk of n_cosmo to break ordering artifacts
+    # from the LH construction, while preserving nesting (point sets unchanged)
+    rng = np.random.default_rng(seed)
+    for chunk in range(max_factor):
+        start = chunk * n_cosmo
+        end = start + n_cosmo
+        perm = rng.permutation(n_cosmo)
+        full_design[start:end] = full_design[start:end][perm]
+    t3 = time.time()
+    print(f'  per-chunk shuffle ({max_factor} chunks): {t3 - t2:.2f}s')
+
+    # idx_cosmo: row i within each chunk maps to cosmo i
+    idx_cosmo = np.tile(np.arange(n_cosmo), max_factor)
+
+    # nest_layer: which nesting level each row was first introduced in
+    n_factors = [m // n_cosmo for m in m_layers]
+    nest_layer = np.empty(n_total, dtype=int)
+    prev_factor = 0
+    for factor in n_factors:
+        nest_layer[prev_factor * n_cosmo : factor * n_cosmo] = utils.n_factor_to_nest_level[factor]
+        prev_factor = factor
+
+    param_df = pd.DataFrame(full_design, columns=param_names_vary)
+    param_df['idx_cosmo'] = idx_cosmo
+    param_df['nest_layer'] = nest_layer
+    t4 = time.time()
+    print(f'  build metadata + DataFrame: {t4 - t3:.2f}s')
+
+    param_df.to_csv(fn_params)
+    t5 = time.time()
+    print(f'  save CSV: {t5 - t4:.2f}s')
+    print(f'  TOTAL: {t5 - t0:.2f}s')
+    print(f'Saved nested LH ({n_total} rows, {len(m_layers)} layers) to {fn_params}')
 
 
 def save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict):
