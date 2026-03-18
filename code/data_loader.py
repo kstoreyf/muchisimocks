@@ -4,7 +4,6 @@ import os
 import pandas as pd
 from pathlib import Path
 import re
-import tensorflow as tf
 
 import paths
 import utils
@@ -99,8 +98,7 @@ def load_data_shame(statistic, tag_mock):
     return k, stat, error
 
 
-def get_idxs_params(tag_params, tag_biasparams, tag_Anoise=None, n_bias_per_cosmo=1, 
-                    modecosmo='lh'):
+def get_idxs_params(tag_params, tag_biasparams, tag_Anoise=None, modecosmo='lh'):
     """
     For each cosmological parameter index, get the corresponding bias and noise parameter indices.
     Returns a list of (idx_mock, idx_bias, idx_noise) tuples.
@@ -109,15 +107,6 @@ def get_idxs_params(tag_params, tag_biasparams, tag_Anoise=None, n_bias_per_cosm
     biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
     
     n_cosmo_params = len(params_df)
-    
-    # Handle case when biasparams_df is None (fixed bias params)
-    if biasparams_df is None:
-        factor = 1  # One bias parameter set per cosmology (fixed)
-    else:
-        n_biasparams = len(biasparams_df)
-        factor = n_biasparams // n_cosmo_params
-        if n_biasparams % n_cosmo_params != 0:
-            raise ValueError(f"biasparams_df length ({n_biasparams}) is not an integer multiple of params_df length ({n_cosmo_params})")
 
     idxs_params = []
     for idx_mock in params_df.index:
@@ -140,16 +129,13 @@ def get_idxs_params(tag_params, tag_biasparams, tag_Anoise=None, n_bias_per_cosm
                         idx_noise = idx_mock
                     idxs_params.append((idx_mock, idx_bias, idx_noise))
             else:
-                start_idx = idx_mock * factor
-                end_idx = (idx_mock + 1) * factor
-                for idx_bias in range(start_idx, end_idx):
-                    # In most cases, noise index follows bias index pattern
-                    if tag_Anoise is not None and 'p0' not in tag_Anoise:
-                        idx_noise = idx_bias
-                    else:
-                        # For fixed noise or no noise, use mock index
-                        idx_noise = idx_mock
-                    idxs_params.append((idx_mock, idx_bias, idx_noise))
+                # Simple (non-nested) LH: assume 1-to-1 mapping between cosmology and bias row.
+                idx_bias = idx_mock
+                if tag_Anoise is not None and 'p0' not in tag_Anoise:
+                    idx_noise = idx_bias
+                else:
+                    idx_noise = idx_mock
+                idxs_params.append((idx_mock, idx_bias, idx_noise))
         elif modecosmo == 'fisher':
             if biasparams_df is None:
                 # Fixed bias params: use idx_bias = 0 for all cosmologies
@@ -180,36 +166,27 @@ def get_idxs_params(tag_params, tag_biasparams, tag_Anoise=None, n_bias_per_cosm
     return idxs_params
 
 
-def get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=None,
-                             params_df=None, biasparams_df=None):
+def get_bias_indices_for_idx(idx_mock, modecosmo='lh', params_df=None, biasparams_df=None):
     """
-    # TODO this should probs be combined with check_df_lengths function,
-    # but would have to revamp the params-to-theta function
     Get the bias parameter indices corresponding to a power spectrum index.
     
     For LH:
-    For a given idx_LH and factor, returns consecutive indices:
-    idx_LH=0, factor=10 -> [0, 1, 2, ..., 9]
-    idx_LH=1, factor=10 -> [10, 11, 12, ..., 19]
+    - nested bias: select rows with idx_cosmo == idx_mock
+    - simple (non-nested) LH: assume 1-to-1 mapping (idx_bias == idx_mock)
     For Fisher:
     Get so only one param is shifted each time
     
-    Args:
-        idx_LH (int): The power spectrum index
-        factor (int): The factor relating number of bias parameters to number of power spectra
-        
     Returns:
-        list: List of bias parameter indices
+        list: List of bias parameter indices.
     """
     
     if modecosmo=='lh':
-        if biasparams_df is not None and _is_nested_bias(biasparams_df):
-            idxs_bias = biasparams_df[biasparams_df['idx_cosmo'] == idx_mock].index.tolist()
-        else:
-            assert factor is not None, "factor must be provided"
-            start_idx = idx_mock * factor
-            end_idx = (idx_mock + 1) * factor
-            idxs_bias = list(range(start_idx, end_idx))
+        if biasparams_df is None:
+            return [0]
+        if _is_nested_bias(biasparams_df):
+            return biasparams_df[biasparams_df['idx_cosmo'] == idx_mock].index.tolist()
+        # Simple (non-nested) LH: 1-to-1 mapping between cosmology and bias row.
+        return [idx_mock]
     elif modecosmo=='fisher':
         assert params_df is not None and biasparams_df is not None, "params_df and biasparams_df must be provided"
         if params_df.iloc[idx_mock]['param_shifted']=='fiducial':
@@ -217,41 +194,6 @@ def get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=None,
         else:
             idxs_bias = np.where(biasparams_df['param_shifted']=='fiducial')[0]        
     return idxs_bias
-
-
-
-def check_df_lengths(params_df, biasparams_df):
-    """
-    Check the length relationship between params_df and biasparams_df.
-    
-    Args:
-        params_df (pd.DataFrame): DataFrame containing cosmological parameters
-        biasparams_df (pd.DataFrame): DataFrame containing bias parameters
-        
-    Returns:
-        tuple: (factor, longer_df)
-            - factor: The integer factor relating the lengths (1 if same length)
-            - longer_df: String indicating which DataFrame is longer ('params', 'bias', or 'same')
-    """
-    if params_df is None or biasparams_df is None:
-        return 1, 'same'
-    
-    n_params = len(params_df)
-    n_biasparams = len(biasparams_df)
-    
-    if n_params == n_biasparams:
-        return 1, 'same'
-    
-    if n_params > n_biasparams:
-        factor = n_params / n_biasparams
-        if not factor.is_integer():
-            raise ValueError(f"params_df length ({n_params}) is not an integer multiple of biasparams_df length ({n_biasparams})")
-        return int(factor), 'params'
-    else:
-        factor = n_biasparams / n_params
-        if not factor.is_integer():
-            raise ValueError(f"biasparams_df length ({n_biasparams}) is not an integer multiple of params_df length ({n_params})")
-        return int(factor), 'bias'
 
 
 def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
@@ -727,49 +669,6 @@ def load_data_emu(statistic, tag_params, tag_biasparams, tag_errG='', tag_datage
 
 
 
-# NOT CURRENTLY USED
-def get_split(data_mode, split, theta, y, y_err, random_ints, 
-              n_train, n_val, n_test,
-              n_rlzs_per_cosmo=None):
-    
-    # keep these fractions hard-coded or else things will get weird
-    frac_train=0.8
-    frac_val=0.1
-    frac_test=0.1
-
-    print(len(random_ints))
-    #TODO deal with N_tot hardcoding magic
-    idxs_train, idxs_val, idxs_test = utils.idxs_train_val_test(random_ints, 
-                                   frac_train=frac_train, frac_val=frac_val, frac_test=frac_test,
-                                   N_tot=10000)
-    print(len(idxs_train), len(idxs_val), len(idxs_test))
-
-    # CAUTION the subsamples will be very overlapping! this is ok for directly checking
-    # for size dependence (less variability), but in a robust trend test would want to
-    # do multiple random subsamples of a given size.
-    # IF WANT TO DO RANDOM, make sure to set seed / do something smart to get same 
-    # subsample back for testing!
-    idxs_train = idxs_train[:n_train]
-    idxs_test = idxs_test[:n_test]
-    idxs_val = idxs_val[:n_val]
-    
-    n_emuPk = len(random_ints)
-    idxs_train_orig = idxs_train.copy()
-    idxs_train = []
-    if data_mode == 'emu':
-        for n_rlz in range(n_rlzs_per_cosmo):
-            idxs_train.extend(idxs_train_orig + n_rlz*n_emuPk)
-    elif 'muchisimocks' in data_mode:
-        idxs_train.extend(idxs_train_orig)
-    idxs_train = np.array(idxs_train)
-    print(idxs_train.shape)
-            
-    theta_train, theta_val, theta_test = utils.split_train_val_test(theta, idxs_train, idxs_val, idxs_test)
-    y_train, y_val, y_test = utils.split_train_val_test(y, idxs_train, idxs_val, idxs_test)
-    y_err_train, y_err_val, y_err_test = utils.split_train_val_test(y_err, idxs_train, idxs_val, idxs_test)
-
-    
-    
 def get_dir_statistics(statistic, tag_params, tag_biasparams, tag_noise=None, tag_Anoise=None):
     if tag_biasparams is not None and tag_noise is not None and tag_Anoise is not None:
         # think tag_noise and tag_Anoise will always go together bc you need to know how to modify noise field
@@ -796,57 +695,6 @@ def get_dir_statistics(statistic, tag_params, tag_biasparams, tag_noise=None, ta
     
 #     # deal with noise-only case
 #     # compute the statistic of only the noise field!
-#     if tag_params is None:
-#         assert tag_noise is not None, "If tag_params is None, tag_noise must be provided for noise-only computation"
-#         fn_statistic = f'{dir_statistics}/{statistic}_n{idx_mock}.npy'
-#         fns_statistics.append(fn_statistic)
-#         idxs_bias = None #?
-#         idxs_noise = [idx_mock] # use the mock index as the noise field index
-            
-#     # varied bias param case
-#     elif tag_biasparams is not None and 'p0' not in tag_biasparams:                
-            
-#         # figure out which bias indices to use
-#         if 'fisher' in tag_biasparams:
-#             idxs_bias = get_bias_indices_for_idx(idx_mock, modecosmo='fisher',
-#                                                 params_df=params_df, biasparams_df=biasparams_df)
-#         else:
-#             factor, longer_df = check_df_lengths(params_df, biasparams_df)
-#             assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
-#             idxs_bias = get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=factor)
-        
-#         #actually for now we are aligning with cosmo! TODO confirm
-#         idxs_noise = [idx_mock]*len(idxs_bias) 
-#         #idxs_noise = idxs_bias
-#         for idx_bias, idx_noise in zip(idxs_bias, idxs_noise):
-#             if tag_Anoise is not None and 'p0' not in tag_Anoise:
-#                 # noise field associated w the bias params
-#                 # in the case where 1 bias param per cosmo, idx_mock==idx_bias==idx_noise
-#                 fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}_n{idx_noise}.npy' 
-#             else:
-#                 fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_b{idx_bias}.npy'
-#             fns_statistics.append(fn_statistic)
-    
-#     # fixed bias param case, OR pnn (only dep on cosmo)
-#     else:
-#         #idxs_bias = None # bias not needed, either bc pnn, or noise-only
-#         # i believe this is just to run the loop, it will only be cases for fixed biasparams,
-#         # or none at all (e.g. pnn)
-#         idxs_bias = [0] # because for noise we may also need (?)
-        
-#         if tag_biasparams is not None and 'p0' in tag_biasparams and tag_noise is not None:
-#             # dep on cosmo and noise, e.g. fixed bias params but with noise
-#             idx_noise = idx_mock
-#             idxs_noise = [idx_noise]
-#             fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}_n{idx_noise}.npy'
-#         else:    
-#             # only dep on cosmo, e.g. pnn
-#             idxs_noise = None
-#             fn_statistic = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
-#         fns_statistics.append(fn_statistic)
-#     return fns_statistics, idxs_bias, idxs_noise
-
-
 ## updated version by claude, incl helper functions below here
 def load_data_muchisimocks(statistic, tag_params, tag_biasparams, 
                            tag_noise=None, tag_Anoise=None,
@@ -1117,11 +965,8 @@ def _get_bias_indices_for_cosmology(idx_LH, params_df, biasparams_df):
         # Latin Hypercube case
         if _is_nested_bias(biasparams_df):
             return biasparams_df[biasparams_df['idx_cosmo'] == idx_LH].index.tolist()
-        factor, longer_df = check_df_lengths(params_df, biasparams_df)
-        if longer_df == 'bias':
-            return get_bias_indices_for_idx(idx_LH, modecosmo='lh', factor=factor)
-        else:
-            return [idx_LH]  # 1-to-1 mapping
+        # Simple (non-nested) LH: assume 1-to-1 mapping between cosmology and bias row.
+        return [idx_LH]
 
 
 def _add_noise_to_statistic(stat, idx_LH, idx_bias, tag_noise, tag_Anoise,
@@ -1169,8 +1014,8 @@ def get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics,
             idxs_bias = get_bias_indices_for_idx(idx_mock, modecosmo='fisher',
                                                params_df=params_df, biasparams_df=biasparams_df)
         else:
-            factor, longer_df = check_df_lengths(params_df, biasparams_df)
-            idxs_bias = get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=factor)
+            # Simple (non-nested) LH: assume 1-to-1 mapping between cosmology and bias row.
+            idxs_bias = [idx_mock]
         
         # Generate filenames for each bias parameter
         idxs_noise = [idx_mock] * len(idxs_bias)  # Align with cosmology

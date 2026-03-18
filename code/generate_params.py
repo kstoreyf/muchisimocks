@@ -10,7 +10,88 @@ from scipy.stats import qmc
 import gethypercube
 
 import utils
-import utils_cosmo
+
+
+PARAM_NAMES_ORDERED = {
+    "cosmo": ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns', 'neutrino_mass', 'w0', 'wa'],
+    "bias": utils.biasparam_names_ordered,
+    # Noise amplitude parameter sets (two “options”, treated like distinct parameter sets)
+    "Anoise_An": ["A_noise"],
+    "Anoise_Anmult": utils.noiseparam_names_ordered,
+}
+
+BOUNDS = {
+    # bounds from baccoemu for biased tracers (private version)
+    # https://baccoemu.readthedocs.io/en/latest/#parameter-space
+    "cosmo": {
+        'omega_cold'     :  [0.23, 0.4],
+        'omega_baryon'   :  [0.04, 0.06],
+        'sigma8_cold'    :  [0.65, 0.9],  # public emulator only goes down to 0.73, but private down to 0.65
+        'ns'             :  [0.92, 1.01],
+        'hubble'         :  [0.6, 0.8],
+        'neutrino_mass'  :  [0.0, 0.4],
+        'w0'             :  [-1.15, -0.85],
+        'wa'             :  [-0.3, 0.3],
+    },
+    "bias": {
+        'b1'  :  [-1.0, 3.0],  # upped b1 max from 2 to 3
+        'b2'  :  [-2.0, 2.0],
+        'bs2' :  [-2.0, 2.0],
+        'bl'  :  [-10.0, 10.0],
+    },
+    "Anoise_An": {
+        "A_noise": [0.0, 2.0],
+    },
+    "Anoise_Anmult": {
+        'An_homog':  [-3.0, 3.0],
+        'An_b1'   :  [-3.0, 3.0],
+        'An_b2'   :  [-2.0, 2.0],
+        'An_bs2'  :  [-5.0, 5.0],
+        'An_bl'   :  [-10.0, 10.0],
+    },
+}
+
+
+def get_param_set_key(bounds_type: str, anoise_option: str | None = None) -> str:
+    """Return internal key for PARAM_NAMES_ORDERED/BOUNDS, including Anoise option handling."""
+    if bounds_type in ("cosmo", "bias"):
+        return bounds_type
+    if bounds_type == "Anoise":
+        if anoise_option is None:
+            raise ValueError('anoise_option must be provided for bounds_type="Anoise"')
+        if anoise_option not in ("An", "Anmult"):
+            raise ValueError(f'Unknown anoise_option "{anoise_option}" (expected "An" or "Anmult")')
+        return f"Anoise_{anoise_option}"
+    if bounds_type == "biasnoise":
+        if anoise_option is None:
+            raise ValueError('anoise_option must be provided for bounds_type="biasnoise"')
+        return f"biasnoise_{anoise_option}"
+    raise ValueError('bounds_type must be "cosmo", "bias", "Anoise", or "biasnoise"')
+
+
+def get_bounds(bounds_type: str, anoise_option: str | None = None) -> dict:
+    """Return bounds_dict for a given bounds_type (and Anoise option where needed)."""
+    if bounds_type in ("cosmo", "bias"):
+        return BOUNDS[bounds_type]
+    if bounds_type == "Anoise":
+        return BOUNDS[get_param_set_key("Anoise", anoise_option)]
+    if bounds_type == "biasnoise":
+        # Concatenate bias + Anoise bounds
+        b = BOUNDS["bias"].copy()
+        b.update(BOUNDS[get_param_set_key("Anoise", anoise_option)])
+        return b
+    raise ValueError('bounds_type must be "cosmo", "bias", "Anoise", or "biasnoise"')
+
+
+def get_param_names_ordered(bounds_type: str, anoise_option: str | None = None) -> list[str]:
+    """Return ordered parameter names for a given bounds_type (and Anoise option where needed)."""
+    if bounds_type in ("cosmo", "bias"):
+        return list(PARAM_NAMES_ORDERED[bounds_type])
+    if bounds_type == "Anoise":
+        return list(PARAM_NAMES_ORDERED[get_param_set_key("Anoise", anoise_option)])
+    if bounds_type == "biasnoise":
+        return list(PARAM_NAMES_ORDERED["bias"]) + list(PARAM_NAMES_ORDERED[get_param_set_key("Anoise", anoise_option)])
+    raise ValueError('bounds_type must be "cosmo", "bias", "Anoise", or "biasnoise"')
 
 
 # Named parameter sets for reproducible Latin-hypercube runs.
@@ -21,6 +102,7 @@ PARAM_SETS_LH = {
         n_params_vary=5,
         n_samples=10_000,
         tag_bounds="",
+        fiducial_dict=utils.cosmo_dict_quijote,
         seed=42,
     ),
     # Test cosmology LH over "coverage" bounds
@@ -29,6 +111,7 @@ PARAM_SETS_LH = {
         n_params_vary=5,
         n_samples=1_000,
         tag_bounds="_coverage",
+        fiducial_dict=utils.cosmo_dict_quijote,
         seed=42,
     ),
     # Test cosmology LH at fixed shame cosmology
@@ -37,6 +120,7 @@ PARAM_SETS_LH = {
         n_params_vary=5,
         n_samples=1_000,
         tag_bounds="_shame",
+        fiducial_dict=utils.cosmo_dict_shame,
         seed=42,
     ),
     # Bias SHAMe, single fixed point
@@ -45,6 +129,7 @@ PARAM_SETS_LH = {
         n_params_vary=0,
         n_samples=1,
         tag_bounds="_biasshame",
+        fiducial_dict=utils.bias_dict_shame["_nbar0.00022"],
         seed=42,
     ),
     # Bias SHAMe, bl=0, single fixed point 
@@ -53,6 +138,7 @@ PARAM_SETS_LH = {
         n_params_vary=0,
         n_samples=1,
         tag_bounds="_biasshamebl0",
+        fiducial_dict=utils.bias_dict_shame["_nbar0.00022_bl0"],
         seed=42,
     ),
     # Example: bias coverage run (uncomment/adjust values as needed)
@@ -61,6 +147,7 @@ PARAM_SETS_LH = {
         n_params_vary=4,
         n_samples=1000,
         tag_bounds="_biascoverage",
+        fiducial_dict={"b1": 1.0, "b2": 0.0, "bs2": 0.0, "bl": 0.0},
         seed=53,
     ),
 }
@@ -68,25 +155,73 @@ PARAM_SETS_LH = {
 # Named parameter sets for nested LH bias runs.
 PARAM_SETS_NESTED = {
     "biasnest_p4_n320000": dict(
+        bounds_type="bias",
         n_cosmo=10_000,
         n_factors=utils.n_factor_arr,  # [1,2,4,8,16,32]
         n_params_vary=4,
         tag_bounds="_biasnest",
+        fiducial_dict={"b1": 1.0, "b2": 0.0, "bs2": 0.0, "bl": 0.0},
         seed=42,
+    ),
+    # Bias+noise nested LH (bias + Anmult), 9 total parameters
+    "biasnoisenest_p9_320000": dict(
+        bounds_type="biasnoise",
+        anoise_option="Anmult",
+        n_cosmo=10_000,
+        n_factors=utils.n_factor_arr,  # [1,2,4,8,16,32]
+        n_params_vary=9,
+        tag_bounds="_biasnoisenest",
+        fiducial_dict={
+            "b1": 1.0, "b2": 0.0, "bs2": 0.0, "bl": 0.0,
+            "An_homog": 1.0, "An_b1": 0.0, "An_b2": 0.0, "An_bs2": 0.0, "An_bl": 0.0,
+        },
+        seed=64,
+    ),
+}
+
+# Named parameter sets for Fisher grids.
+PARAM_SETS_FISHER = {
+    # Bias Fisher grid around fiducial biaszen
+    "fisher_biaszen_p4": dict(
+        bounds_type="bias",
+        n_params_vary=4,
+        tag_bounds="_biaszen",
+        fiducial_dict={"b1": 1.0, "b2": 0.0, "bs2": 0.0, "bl": 0.0},
+        delta_fracextent=0.05,
+        n_deltas_per_side=2,
+        overwrite=False,
+    ),
+    # Example: cosmology Fisher grid around quijote fiducial
+    "fisher_quijote_p5": dict(
+        bounds_type="cosmo",
+        n_params_vary=5,
+        tag_bounds="_quijote",
+        fiducial_dict=utils.cosmo_dict_quijote,
+        delta_fracextent=0.05,
+        n_deltas_per_side=2,
+        overwrite=False,
     ),
 }
 
 
 def main():
     # Select which LH parameter set to generate.
-    scenario_name = "bias_shamebl0_p0_n1"
-    config = PARAM_SETS_LH[scenario_name]
-    generate_params_LH(**config)
+    #scenario_name = "bias_shamebl0_p0_n1"
+    #config = PARAM_SETS_LH[scenario_name]
+    #generate_params_LH(**config)
     # Example for nested LH:
     # nested_name = "biasnest_p4_n320000"
     # nested_cfg = PARAM_SETS_NESTED[nested_name]
     # generate_params_nested_LH(**nested_cfg)
-    # generate_params_fisher()
+    # Example for Fisher grid:
+    # fisher_name = "fisher_biaszen_p4"
+    # fisher_cfg = PARAM_SETS_FISHER[fisher_name]
+    # generate_params_fisher(**fisher_cfg)
+
+    # Bias+noise nested LH (bias + Anmult), 9 total parameters
+    biasnoisenest_name = "biasnoisenest_p9_320000"
+    biasnoisenest_cfg = PARAM_SETS_NESTED[biasnoisenest_name]
+    generate_params_nested_LH(**biasnoisenest_cfg)
 
 
 def generate_params_LH(
@@ -94,25 +229,16 @@ def generate_params_LH(
     n_params_vary: int,
     n_samples: int,
     tag_bounds: str,
+    fiducial_dict: dict,
     seed: int,
+    anoise_option: str | None = None,
     overwrite: bool = False,
 ):
     """Generate LH (and fixed) param files for a given configuration."""
-    if bounds_type == 'cosmo':
-        param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
-        # for now we will always select the varying params in this order, for reproducibility
-        param_names_vary = param_names_vary[:n_params_vary]
-        param_names_ordered, bounds_dict, fiducial_dict = define_LH_cosmo(tag_bounds=tag_bounds)
-    elif bounds_type == 'bias':
-        param_names_vary = ['b1', 'b2', 'bs2', 'bl']
-        param_names_vary = param_names_vary[:n_params_vary]
-        param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(tag_bounds=tag_bounds)
-    elif bounds_type == 'Anoise':
-        param_names_vary = ['An_homog', 'An_b1', 'An_b2', 'An_bs2', 'An_bl']
-        param_names_vary = param_names_vary[:n_params_vary]
-        param_names_ordered, bounds_dict, fiducial_dict = define_LH_Anoise(tag_bounds=tag_bounds)
-    else:
-        raise ValueError("bounds_type must be 'cosmo' or 'bias' or 'Anoise'")
+    bounds_dict = get_bounds(bounds_type, anoise_option=anoise_option)
+    param_names_ordered = get_param_names_ordered(bounds_type, anoise_option=anoise_option)
+    # deterministic selection for reproducibility
+    param_names_vary = param_names_ordered[:n_params_vary]
     
     tag_params = f'{tag_bounds}_p{len(param_names_vary)}_n{n_samples}'
     dir_params = '../data/params'
@@ -140,20 +266,23 @@ def generate_params_LH(
     
 
 def generate_params_nested_LH(
+    bounds_type: str,
     n_cosmo: int,
     n_factors,
     n_params_vary: int,
     tag_bounds: str,
+    fiducial_dict: dict,
     seed: int,
+    anoise_option: str | None = None,
     overwrite: bool = False,
 ):
     """Generate nested LH bias params for a configurable design."""
     n_factors = np.array(n_factors)
     m_layers = list(n_cosmo * n_factors)
 
-    # bias
-    param_names_vary = ['b1', 'b2', 'bs2', 'bl']
-    param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(tag_bounds=tag_bounds)
+    param_names_ordered = get_param_names_ordered(bounds_type, anoise_option=anoise_option)
+    param_names_vary = param_names_ordered[:n_params_vary]
+    bounds_dict = get_bounds(bounds_type, anoise_option=anoise_option)
     
     n_total = m_layers[-1]
     tag_params = f'{tag_bounds}_p{n_params_vary}_n{n_total}'
@@ -181,33 +310,19 @@ def generate_params_nested_LH(
 
 
 # TODO update with Anoise?? not sure if want to
-def generate_params_fisher():
-    
-    overwrite = False # probs keep false!!! don't want to overwrite param files
-    delta_fracextent = 0.05
-    n_deltas_per_side = 2
-    
-    #bounds_type = 'cosmo' #cosmo or bias
-    bounds_type = 'bias'
-    
-    #n_params_vary = 0
-    #tag_bounds = '' #NOTE params are automatically tagged below; this is for '_test' or '_quijote' so far
-    #tag_bounds = '_test'
-    #n_params_vary = 5
-    #tag_bounds = '_quijote'
-    
-    # bounds_type = 'bias'
-    n_params_vary = 4
-    tag_bounds = '_biaszen'
-    #n_params_vary = 1
-    #tag_bounds = '_b1zen'
-    #n_params_vary = 0
-    #tag_bounds = '_b1000'
-    
-    # for now choosing to not put pN in tag, bc usually will want to 
-    # vary all of that set
-    #tag_params = f'_fisher{tag_bounds}_p{len(param_names_vary)}
-    tag_params = '_fisher'+tag_bounds
+def generate_params_fisher(
+    bounds_type: str,
+    n_params_vary: int,
+    tag_bounds: str,
+    fiducial_dict: dict,
+    delta_fracextent: float,
+    n_deltas_per_side: int,
+    anoise_option: str | None = None,
+    overwrite: bool = False,
+):
+    """Generate a Fisher grid (fiducial + one-at-a-time parameter shifts)."""
+    # for now choosing to not put pN in tag, bc usually will want to vary all of that set
+    tag_params = '_fisher' + tag_bounds
     
     dir_params = '../data/params'
     fn_params = f'{dir_params}/params{tag_params}.txt'
@@ -215,15 +330,16 @@ def generate_params_fisher():
         print(f'Found existing params file: {fn_params}; stopping!')
         return
     
+    bounds_dict = get_bounds(bounds_type, anoise_option=anoise_option)
     if bounds_type == 'cosmo':
         # for now we will always select the varying params in this order, for easy reproducibility
         param_names_vary = utils.cosmo_param_names_ordered[:n_params_vary]
-        param_names_ordered, bounds_dict, fiducial_dict = define_LH_cosmo(tag_bounds=tag_bounds)
+        param_names_ordered = get_param_names_ordered("cosmo")
     elif bounds_type == 'bias':
         param_names_vary = utils.biasparam_names_ordered[:n_params_vary]
-        param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(tag_bounds=tag_bounds)
+        param_names_ordered = get_param_names_ordered("bias")
     else:
-        raise ValueError("pset must be 'cosmo' or 'bias'")
+        raise ValueError("bounds_type must be 'cosmo' or 'bias'")
     
     ### Fisher deltas - changing one param at a time
     # Compute deltas: 5% of the extent of each parameter
@@ -277,84 +393,11 @@ def generate_params_fisher():
         save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
 
 
-def define_LH_cosmo(tag_bounds=''):
-    
-    param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns', 'neutrino_mass', 'w0', 'wa']
-
-    # bounds from baccoemu for biased tracers (private version)
-    # https://baccoemu.readthedocs.io/en/latest/#parameter-space
-    bounds_dict = {'omega_cold'     :  [0.23, 0.4],
-                    'omega_baryon'  :  [0.04, 0.06],
-                    'sigma8_cold'   :  [0.65, 0.9], # public emulator only goes down to 0.73, but private down to 0.65
-                    'ns'            :  [0.92, 1.01],
-                    'hubble'        :  [0.6, 0.8],
-                    'neutrino_mass' :  [0.0, 0.4],
-                    'w0'            :  [-1.15, -0.85],
-                    'wa'            :  [-0.3, 0.3],
-                    }
-
-    if tag_bounds == '_shame':
-        fiducial_dict = utils.cosmo_dict_shame
-    else:
-        # this will be the fiducial for the LHs, if we fix some params
-        fiducial_dict = utils.cosmo_dict_quijote
-
-    return param_names_ordered, bounds_dict, fiducial_dict
-
-
-def define_LH_bias(tag_bounds='_biasnest'):
-    """Return (param_names_ordered, bounds_dict, fiducial_dict) for bias LH."""
-    # biasnest
-    bounds_dict = {'b1'     :  [-1.0, 3.0], #upped b1 max from 2 to 3
-                    'b2'    :  [-2.0, 2.0],
-                    'bs2'   :  [-2.0, 2.0],
-                    'bl'   :  [-10.0, 10.0],
-                }
-
-    if tag_bounds=='_biasshame':
-        fiducial_dict = utils.bias_dict_shame['_nbar0.00022']  # fiducial number density
-    elif tag_bounds=='_biasshamebl0':
-        fiducial_dict = utils.bias_dict_shame['_nbar0.00022_bl0']
-    else:
-        fiducial_dict = {'b1'     :  1.0,
-                        'b2'    :  0.0,
-                        'bs2'   :  0.0,
-                        'bl'   :  0.0,
-                        }
-        
-    return utils.biasparam_names_ordered, bounds_dict, fiducial_dict
-    
-
-
-def define_LH_Anoise(tag_bounds=''):
-    """
-    Define the parameter space for the noise field amplitude.
-    """
-    
-    if tag_bounds is None:
-        return [], {}, {}
-    
-    if tag_bounds == '_An':
-        bounds_dict = {'A_noise': [0.0, 2.0]}
-        fiducial_dict = {'A_noise': 1.0}
-    elif '_Anmult' in tag_bounds:
-        # same as b1
-        bounds_dict = {'An_homog':  [-3.0, -3.0],
-                       'An_b1'   :  [-3.0, 3.0],
-                       'An_b2'   :  [-2.0, 2.0],
-                       'An_bs2'  :  [-5.0, 5.0], 
-                       'An_bl'   :  [-10.0, 10.0],
-                      }
-        fiducial_dict = {'An_homog':  1.0,
-                         'An_b1'   :  0.0,
-                         'An_b2'   :  0.0,
-                         'An_bs2'  :  0.0,
-                         'An_bl'   :  0.0,
-                        }
-    else:
-        raise ValueError(f'Unknown tag_bounds {tag_bounds}')
-    
-    return utils.noiseparam_names_ordered, bounds_dict, fiducial_dict
+### NOTE:
+# Older define_LH_* helpers were replaced by:
+# - PARAM_SETS_* providing fiducial_dict explicitly
+# - PARAM_NAMES_ORDERED for ordering
+# - get_bounds(bounds_type, tag_bounds) for bounds
 
 
 def generate_LH(param_names_vary, bounds_dict, n_samples, fn_params, seed=42):

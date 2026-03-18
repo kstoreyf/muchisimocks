@@ -94,11 +94,6 @@ def generate_pks(emu, tag_biasparams, params_df, param_dict_fixed, biasparams_df
     print(f"Generating emuPks for {fn_emuPk}...")
     #cosmo_params = utils.setup_cosmo_emu(cosmo='quijote')
     
-    # Check the relationship between biasparams_df and idxs_LH
-    if 'fisher' not in tag_biasparams:
-        # only used later if not fisher
-        factor, longer_df = data_loader.check_df_lengths(params_df, biasparams_df)
-        
     param_dict_fixed['expfactor'] = 1
     #cosmo_params['expfactor'] = 1
     #k = np.logspace(-2, np.log10(0.75), 30)
@@ -118,11 +113,13 @@ def generate_pks(emu, tag_biasparams, params_df, param_dict_fixed, biasparams_df
         
         # figure out which bias indices to use
         if 'fisher' in tag_biasparams:
-            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='fisher', 
-                                                params_df=params_df, biasparams_df=biasparams_df)
+            idxs_bias = data_loader.get_bias_indices_for_idx(
+                idx_mock, modecosmo='fisher', params_df=params_df, biasparams_df=biasparams_df
+            )
         else:
-            assert longer_df == 'bias' or longer_df == 'same', "In non-precomputed mode, biasparams_df should be longer or same length as params_df"
-            idxs_bias = data_loader.get_bias_indices_for_idx(idx_mock, modecosmo='lh', factor=factor)
+            idxs_bias = data_loader.get_bias_indices_for_idx(
+                idx_mock, modecosmo='lh', biasparams_df=biasparams_df
+            )
 
         # loop over bias params, get pk
         for i, idx_bias in enumerate(idxs_bias):
