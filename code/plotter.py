@@ -5,6 +5,8 @@ import os
 import pandas as pd
 
 import utils
+from .utils_cosmo import param_name_to_param_name_emu  # convenient local alias
+from .utils_inference import chi2, figure_of_merit      # used in some plotting helpers
 
 
 def plot_loss(history):
