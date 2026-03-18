@@ -14,7 +14,7 @@ import bacco
 import bacco.probabilistic_bias as pb
 
 import sys
-sys.path.append('/dipc/kstoreyf/muchisimocks/scripts')
+# sys.path.append('/dipc/kstoreyf/muchisimocks/scripts')  # Check that it works without this (e.g. PYTHONPATH or install)
 import utils
 import compute_statistics as cs
 
@@ -331,7 +331,7 @@ def compute_pk(tracer_field, box_size_mock, cosmo=None, fn_stat=None,):
 
 
 def compute_bispectrum(tracer_field, box_size_mock, n_grid, fn_stat=None, n_threads=8):
-    base = cs.setup_bispsec(box_size_mock, n_grid, n_threads=n_threads)
+    base = cs.setup_bispec(box_size_mock, n_grid, n_threads=n_threads)
     bspec, bk_corr = cs.compute_bispectrum(base, tracer_field, fn_stat=fn_stat)
     return bspec, bk_corr
 

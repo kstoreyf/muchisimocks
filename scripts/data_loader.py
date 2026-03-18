@@ -1,3 +1,4 @@
+"""Load mock/emu statistics, parameters, and train/val/test splits for muchisimocks."""
 import numpy as np
 import os
 import pandas as pd
@@ -6,7 +7,6 @@ import re
 import tensorflow as tf
 
 import utils
-
 
 NESTED_META_COLS = ['idx_cosmo', 'nest_layer']
 
@@ -55,12 +55,10 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
     return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias
 
 
-def load_data_ood(data_mode, statistics, tag_mock,
-                  tag_data=None,
-              kwargs={}):
-    """
-    Load out-of-distribution (OOD) data for a specific mode and set of statistics.
-    """
+def load_data_ood(data_mode, statistics, tag_mock, tag_data=None, kwargs=None):
+    """Load OOD data (e.g. shame) for given statistics and tag_mock; optional tag_data mask."""
+    if kwargs is None:
+        kwargs = {}
     k, y, y_err = [], [], []
     for statistic in statistics:
         # idxs_params should be the same for all so will just grab last one
@@ -87,12 +85,13 @@ def load_data_shame(statistic, tag_mock):
     fn_statistics = f'{dir_statistics}/{statistic}.npy'
     if not os.path.exists(fn_statistics):
         raise ValueError(f"File {fn_statistics} does not exist!")
-    if statistic == 'pk' or statistic == 'pgm':
+    if statistic == 'pk':
+        k, stat, error, pk_obj = load_pk(fn_statistics)
+    elif statistic == 'pgm':
+        # Keep branch separate in case pk vs pgm file format diverges; pgm currently uses pk key.
         k, stat, error, pk_obj = load_pk(fn_statistics)
     elif statistic == 'bispec':
         k, stat, error, bispec_obj = load_bispec(fn_statistics)
-    elif statistic == 'pgm':
-        k, stat, error, pgm_obj = load_pgm(fn_statistics)
     else:
         raise ValueError(f"Statistic {statistic} not recognized / computed for this dataset (shame, {tag_mock})!")
     print(f"Loaded {statistic} with shape {stat.shape}")

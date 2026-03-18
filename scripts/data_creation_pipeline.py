@@ -1,3 +1,4 @@
+"""Create muchisimocks: bias fields, tracer fields, and catalogs for a range of idx_mock."""
 import argparse
 import numpy as np
 import os
@@ -10,7 +11,6 @@ import bacco
 import bacco.probabilistic_bias as pb
 
 import utils
-
 
 pyfftw.config.NUM_THREADS = 8
 print("pyfftw nthreads", pyfftw.config.NUM_THREADS)

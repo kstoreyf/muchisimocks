@@ -144,7 +144,7 @@ def load_fit_data(data_config: dict):
     ) / data_config['n_grid_orig']**3
     
     gc.collect()
-    base_bispec = cs.setup_bispsec(data_config['box_size'], data_config['n_grid'], n_threads=1)
+    base_bispec = cs.setup_bispec(data_config['box_size'], data_config['n_grid'], n_threads=1)
     
     return {
         'k_mock': k_mock,

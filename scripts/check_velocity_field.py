@@ -72,7 +72,7 @@ mesh = np.load(fn_mesh)
 import compute_statistics as cs
 # compute bispectrum
 n_threads = 8
-base = cs.setup_bispsec(box_size, n_grid, n_threads)
+base = cs.setup_bispec(box_size, n_grid, n_threads)
 
 bspec, bk_corr = cs.compute_bispectrum(base, mesh)
 k123 = bspec.get_ks()

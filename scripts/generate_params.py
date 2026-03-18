@@ -1,3 +1,4 @@
+"""Generate Latin-hypercube and nested-LH parameter files for cosmo, bias, or noise."""
 import numpy as np
 import os
 import pandas as pd
@@ -19,7 +20,7 @@ def main():
 
 
 def generate_params_LH():
-    
+    """Generate LH (and fixed) param files; configure bounds_type and n_samples in code."""
     # default seed was 42, at least for the p5 mocks
     overwrite = False # probs keep false!!! don't want to overwrite param files
 
@@ -270,7 +271,7 @@ def define_LH_cosmo(tag_bounds=''):
 
 
 def define_LH_bias(tag_bounds='_biasnest'):
-        
+    """Return (param_names_ordered, bounds_dict, fiducial_dict) for bias LH."""
     # biasnest
     bounds_dict = {'b1'     :  [-1.0, 3.0], #upped b1 max from 2 to 3
                     'b2'    :  [-2.0, 2.0],
@@ -324,9 +325,8 @@ def define_LH_Anoise(tag_bounds=''):
     return utils.noiseparam_names_ordered, bounds_dict, fiducial_dict
 
 
-def generate_LH(param_names_vary, bounds_dict, n_samples, fn_params, 
-                seed=42):
-
+def generate_LH(param_names_vary, bounds_dict, n_samples, fn_params, seed=42):
+    """Sample Latin hypercube and save CSV to fn_params."""
     print(param_names_vary)
 
     n_params = len(param_names_vary)
@@ -414,6 +414,7 @@ def generate_nested_LH(param_names_vary, bounds_dict, m_layers, fn_params, seed=
 
 
 def save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict):
+    """Write single-row CSV of fixed parameters from fiducial_dict."""
     param_df_fixed = pd.DataFrame()    
     for param_name in param_names_fixed:
         param_df_fixed[param_name] = [fiducial_dict[param_name]]

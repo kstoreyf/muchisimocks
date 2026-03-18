@@ -1,7 +1,6 @@
-import numpy as np 
+"""Shared constants, cosmology/bias helpers, and inference/plotting utilities for muchisimocks."""
+import numpy as np
 import os
-
-
 
 param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
                 'sigma8_cold': r'$\sigma_{8}$',
@@ -145,6 +144,7 @@ n_factor_to_nest_level = {v: k for k, v in nest_level_to_n_factor.items()}
 
 
 def get_stat_label(statistics):
+    """Return combined LaTeX label for a list of statistic names (e.g. ['pk', 'bispec'])."""
     labels = []
     for stat in statistics:
         labels.append(labels_statistics[stat])
@@ -166,6 +166,7 @@ def get_stat_colors(statistics_arr):
 
 def idxs_train_val_test(random_ints, frac_train=0.8, frac_val=0.1, frac_test=0.1,
                         N_tot=None):
+    """Split indices into train/val/test from random_ints (e.g. from generate_randints)."""
     print(frac_train, frac_val, frac_test)
     tol = 1e-6
     assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!" 
@@ -184,6 +185,7 @@ def idxs_train_val_test(random_ints, frac_train=0.8, frac_val=0.1, frac_test=0.1
 
 
 def split_train_val_test(arr, idxs_train, idxs_val, idxs_test):
+    """Split array into train/val/test using given index arrays."""
     arr_train = arr[idxs_train]
     arr_val = arr[idxs_val]
     arr_test = arr[idxs_test]
@@ -248,9 +250,10 @@ def get_posterior_maxes(samples_equal, param_names):
 
 
 def get_samples(idx_obs, inf_method, tag_inf, tag_test='', tag_obs=None):
+    """Load posterior samples for observation idx_obs (mn, sbi, emcee, dynesty, or fisher)."""
     if inf_method == 'mn':
         return get_samples_mn(idx_obs, tag_inf, tag_test=tag_test)
-    if inf_method == 'sbi':
+    elif inf_method == 'sbi':
         return get_samples_sbi(idx_obs, tag_inf, tag_test=tag_test)
     elif inf_method == 'emcee':
         return get_samples_emcee(idx_obs, tag_inf, tag_obs=tag_obs)
@@ -263,12 +266,11 @@ def get_samples(idx_obs, inf_method, tag_inf, tag_test='', tag_obs=None):
         
 
 def get_moments_test_sbi(tag_inf, tag_test='', param_names=None):
+    """Load SBI test posterior mean and covariances from saved samples."""
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
     print(f"fn_samples_test_pred = {fn_samples_test_pred}")
     samples_arr = np.load(fn_samples_test_pred)
-
-    dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     param_names_all = np.loadtxt(f'{dir_sbi}/param_names.txt', dtype=str)
     if param_names is None:
         param_names = param_names_all
@@ -281,9 +283,7 @@ def get_moments_test_sbi(tag_inf, tag_test='', param_names=None):
     elif samples_arr.ndim == 3:
         samples_arr = samples_arr[:,:,i_pn]
         theta_test_pred = np.mean(samples_arr, axis=0)
-        covs_test_pred = np.array([np.cov(samples_arr[:,i,:].T) for i in range(samples_arr.shape[1])])
-        #theta_test_pred = np.mean(np.mean(samples_arr, axis=0), axis=0)
-        #covs_test_pred = np.mean([np.cov(samples_arr[:,i,:].T) for i in range(samples_arr.shape[1])], axis=0)
+        covs_test_pred = np.array([np.cov(samples_arr[:, i, :].T) for i in range(samples_arr.shape[1])])
     else:
         raise ValueError(f"Samples shape {samples_arr.shape} is weird!")
     return theta_test_pred, covs_test_pred, param_names
@@ -397,51 +397,43 @@ def reparameterize_theta(theta, param_names):
     Parameters:
     -----------
     theta : numpy.ndarray
-        Array of shape (n_samples, n_params) containing parameter values
+        Array of shape (n_samples, n_params) or (n_params,) containing parameter values
     param_names : list
         List of parameter names corresponding to columns in theta
         
     Returns:
     --------
     theta_reparam : numpy.ndarray
-        Reparameterized theta array
+        Reparameterized theta array (same shape as input)
     param_names_reparam : list
         List of reparameterized parameter names
     """
-    # Check that sigma8_cold is in param_names
     if 'sigma8_cold' not in param_names:
         raise ValueError("sigma8_cold must be in param_names for reparameterization")
-    
-    # Find index of sigma8_cold
+
+    one_d = theta.ndim == 1
+    if one_d:
+        theta = np.atleast_2d(theta)
+
     idx_sigma8 = param_names.index('sigma8_cold')
-    
-    # Define parameters to multiply by sigma_8
     params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
-    
-    # Define parameters to multiply by sigma_8^2
     params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
-    
-    # Create a copy of theta and param_names
+
     theta_reparam = theta.copy()
     param_names_reparam = param_names.copy()
-    
-    # Process each parameter
+
     for i, param_name in enumerate(param_names):
         if param_name in params_sigma8:
-            # Multiply by sigma_8
             sigma8_values = theta[:, idx_sigma8]
             theta_reparam[:, i] = theta[:, i] * sigma8_values
-            # Rename parameter
-            new_name = f'sigma8_cold_x_{param_name}'
-            param_names_reparam[i] = new_name
+            param_names_reparam[i] = f'sigma8_cold_x_{param_name}'
         elif param_name in params_sigma8_squared:
-            # Multiply by sigma_8^2
             sigma8_values = theta[:, idx_sigma8]
             theta_reparam[:, i] = theta[:, i] * (sigma8_values ** 2)
-            # Rename parameter
-            new_name = f'sigma8_cold_sq_x_{param_name}'
-            param_names_reparam[i] = new_name
-    
+            param_names_reparam[i] = f'sigma8_cold_sq_x_{param_name}'
+
+    if one_d:
+        theta_reparam = theta_reparam[0]
     return theta_reparam, param_names_reparam
 
 
@@ -513,7 +505,7 @@ def reparameterize_bounds(dict_bounds):
 
 
 def param_dict_to_bacco_param_dict(param_dict, neutrino_mass=None):
-    
+    """Convert our param names/units to bacco Cosmology format (e.g. sigma8_cold -> sigma8)."""
     if neutrino_mass is None:
         assert 'neutrino_mass' in param_dict, "must pass neutrino mass in param dict or separately!"
         neutrino_mass = param_dict['neutrino_mass']
@@ -547,6 +539,7 @@ def param_dict_to_bacco_param_dict(param_dict, neutrino_mass=None):
 
 
 def get_cosmo(param_dict, a_scale=1, sim_name='quijote'):
+    """Build bacco Cosmology from param dict; fills missing keys from fiducial (e.g. quijote)."""
     import bacco
     
     param_names_bacco = ['omega_cdm', 'omega_baryon', 'hubble', 'ns', 'sigma8', 
@@ -607,9 +600,10 @@ def cosmo_bacco_to_cosmo_baccoemu(cosmo):
 
 # TODO fill this out with other name mismatches ??
 def param_name_to_param_name_emu(param_name):
-    # TODO this is not true if have nonzero neutrino mass!! 
+    """Map bacco param name to emulator name (e.g. sigma8 -> sigma8_cold). Not exact for nonzero neutrino_mass."""
+    # TODO this is not true if have nonzero neutrino mass!!
     # compute relation: https://chatgpt.com/share/6792b607-1aa8-8002-b6e5-128a98d70302
-    if param_name=='sigma8':
+    if param_name == 'sigma8':
         param_name_emu = 'sigma8_cold'
     else:
         param_name_emu = param_name
@@ -723,28 +717,6 @@ def compute_fisher_matrix(derivatives, covariance_matrix, param_names):
                                        np.dot(cov_inv, derivatives[param_j]))
     
     return fisher_matrix
-
-
-def chi2_old(theta_true, theta_pred, covs_pred):
-    chi2s = []
-    print(theta_true.shape, theta_pred.shape, covs_pred.shape)
-    if covs_pred.ndim == 3:
-        for t_true, t_pred, cov_pred in zip(theta_true, theta_pred, covs_pred):
-            diff = t_true - t_pred
-            cov_pred_inv = np.linalg.inv(cov_pred)
-            #print(diff.shape, cov_pred_inv.shape)
-            chi2 = diff.T @ cov_pred_inv @ diff
-            chi2s.append(chi2)
-    elif covs_pred.ndim == 2:
-        diff = (theta_true - theta_pred).T
-        print(diff.shape, covs_pred.shape)
-        cov_pred_inv = np.linalg.inv(covs_pred)
-        chi2 = diff.T @ cov_pred_inv @ diff
-        #chi2 = (theta_true - theta_pred)/np.sqrt(covs_pred)
-        chi2s.append(chi2)
-    else:
-        raise ValueError(f"covs_pred shape {covs_pred.shape} is weird!")
-    return chi2s
 
 
 def chi2(theta_true, theta_pred, covs_pred):

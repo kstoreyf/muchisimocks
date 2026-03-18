@@ -64,7 +64,7 @@ def parse_args():
         #magic
         box_size = 1000.0
         n_grid = 128
-        base = setup_bispsec(box_size, n_grid, n_threads)
+        base = setup_bispec(box_size, n_grid, n_threads)
     else:
         base = None
         
@@ -130,7 +130,7 @@ def run_loop():
     #statistic = 'bispec'
     statistic = 'pk'
     if statistic == 'bispec':
-        base = setup_bispsec(box_size, n_grid, n_threads)
+        base = setup_bispec(box_size, n_grid, n_threads)
     else:
         base = None
 
@@ -146,8 +146,8 @@ def run_loop():
             )    
     
 
-def setup_bispsec(box_size, n_grid, n_threads):
-    # Load the PolyBin3D class 
+def setup_bispec(box_size, n_grid, n_threads):
+    """Build PolyBin3D bispectrum estimator (FFTW backend). Used by bispec statistic and downstream scripts."""
     import PolyBin3D as pb
     start = time.time()
     base = pb.PolyBin3D([box_size, box_size, box_size], n_grid, 
@@ -162,11 +162,10 @@ def setup_bispsec(box_size, n_grid, n_threads):
     return base
     
     
-## updated version by claude
 def run(statistic, idx_mock,
-        tag_params=None, tag_biasparams=None, tag_noise=None, tag_Anoise=None, 
+        tag_params=None, tag_biasparams=None, tag_noise=None, tag_Anoise=None,
         base_bispec=None, n_threads=1, overwrite=False):
-
+    """Compute one statistic (pnn, pk, pklin, bispec, pgm) for a single idx_mock and save to disk."""
     print(f"Starting muchisimocks {statistic} computation for idx_mock={idx_mock}", flush=True)
 
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, _, _ = \
