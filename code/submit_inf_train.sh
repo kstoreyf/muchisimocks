@@ -18,10 +18,9 @@ for n_train in "${n_train_arr[@]}"; do
         tag_biasparams="_biasnest_p4_n320000"  
         bx=1
         tag_noise=""
-        tag_Anoise=""   
         #tag_mask=""
         tag_mask="_kb0.25"
-        tag_data_train="_muchisimocks${tag_stats}${tag_mask}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}"
+        tag_data_train="_muchisimocks${tag_stats}${tag_mask}${tag_params}${tag_biasparams}${tag_noise}"
         #tag_rp=""
         tag_rp="_rp"
         tag_inf_train="_bx${bx}_ntrain${n_train}"

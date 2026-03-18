@@ -42,7 +42,6 @@ def generate_train_config(dir_config='../configs/configs_train',
     tag_params = '_p5_n10000'
     tag_biasparams = '_biasnest_p4_n320000'
     tag_noise = None
-    tag_Anoise = None
     #tag_mask = ''
     tag_mask = '_kb0.25'
     bx = 1 # bx is bias parameters per cosmo (1x, 2x, 4x, 8x, 16x, 32x)
@@ -60,7 +59,7 @@ def generate_train_config(dir_config='../configs/configs_train',
     tag_stats = f'_{"_".join(statistics)}'    
     tag_paramsall = tag_params + tag_biasparams
     if tag_noise is not None:
-        tag_paramsall += tag_noise + tag_Anoise
+        tag_paramsall += tag_noise
     tag_data = '_'+data_mode + tag_stats + tag_mask + tag_paramsall
     
     # build tag
@@ -91,7 +90,6 @@ def generate_train_config(dir_config='../configs/configs_train',
         "tag_params": tag_params,
         "tag_biasparams": tag_biasparams,
         "tag_noise": tag_noise,
-        "tag_Anoise": tag_Anoise,
         "tag_mask": tag_mask,
         "n_train": n_train,
         "bx": bx,
@@ -131,7 +129,6 @@ def generate_test_config(dir_config='../configs/configs_test',
     tag_params = '_p5_n10000'
     tag_biasparams = '_biasnest_p4_n320000'
     tag_noise = None
-    tag_Anoise = None
     #tag_mask = '_kb0.25'
     bx=4
     tag_mask = ''
@@ -160,7 +157,6 @@ def generate_test_config(dir_config='../configs/configs_test',
     # tag_noise_test = '_noise_unit_test_p5_n1000'
     # tag_Anoise_test = '_Anmult_p5_n1000'
     tag_noise_test = None
-    tag_Anoise_test = None
     
     # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
     tag_stats = f'_{"_".join(statistics)}'    
@@ -169,12 +165,12 @@ def generate_test_config(dir_config='../configs/configs_test',
     # but keep alert in case i need to change this later
     tag_paramsall = tag_params + tag_biasparams
     if tag_noise is not None:
-        tag_paramsall += tag_noise + tag_Anoise
+        tag_paramsall += tag_noise
     tag_data_train = '_'+data_mode + tag_stats + tag_mask + tag_paramsall
     
     tag_paramsall_test = tag_params_test + tag_biasparams_test
     if tag_noise_test is not None:
-        tag_paramsall_test += tag_noise_test + tag_Anoise_test
+        tag_paramsall_test += tag_noise_test
     tag_data_test = '_'+data_mode + tag_stats + tag_mask + tag_paramsall_test
 
     # build tag
@@ -205,12 +201,10 @@ def generate_test_config(dir_config='../configs/configs_test',
         "tag_params": tag_params,
         "tag_biasparams": tag_biasparams,
         "tag_noise": tag_noise,
-        "tag_Anoise": tag_Anoise,
         "tag_mask": tag_mask,
         "tag_params_test": tag_params_test,
         "tag_biasparams_test": tag_biasparams_test,
         "tag_noise_test": tag_noise_test,
-        "tag_Anoise_test": tag_Anoise_test,
         "n_train": n_train,
         "bx": bx,
         "evaluate_mean": evaluate_mean,
@@ -257,7 +251,6 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     #tag_biasparams = '_biaszen_p4_n100000' #10x
     tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
     tag_noise = '_noise_unit_p5_n10000'
-    tag_Anoise = '_Anmult_p5_n200000'
     #tag_Anoise = '_An_p1_n10000'
     #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
     #tag_noise = None
@@ -286,7 +279,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     
     tag_paramsall = tag_params + tag_biasparams
     if tag_noise is not None:
-        tag_paramsall += tag_noise + tag_Anoise
+        tag_paramsall += tag_noise
     tag_data_train = '_'+data_mode + tag_stats + tag_mask + tag_paramsall
 
     # build tag
@@ -323,7 +316,6 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
         "tag_params": tag_params,
         "tag_biasparams": tag_biasparams,
         "tag_noise": tag_noise,
-        "tag_Anoise": tag_Anoise,
         "tag_mask": tag_mask,
         "n_train": n_train,
         "evaluate_mean": evaluate_mean,

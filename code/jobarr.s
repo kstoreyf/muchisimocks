@@ -7,7 +7,8 @@
 ##SBATCH --job-name=pgm_p5_n10000_biaszen_p4_n200000_noise_unit_p5_n10000_Anmult_p5_n200000_step100_round5
 ##SBATCH --job-name=pnn_p5_n10000_round2
 ##SBATCH --job-name=pnn_coverage_p5_n1000_step100_round2
-#SBATCH --job-name=bispec_coverage_p5_n1000_biascoverage_p4_n1000_step100
+#SBATCH --job-name=bispec_p5_n10000_biasnoisenest_p9_n320000_step100
+##SBATCH --job-name=bispec_coverage_p5_n1000_biascoverage_p4_n1000_step100
 ##SBATCH --job-name=bispec_shame_p0_n1000_biasshame_p0_n1_step100
 ##SBATCH --job-name=bispec_shame_p0_n1000_biasshame_p0_n1_step100_round2
 ##SBATCH --job-name=pgm_p5_n10000_biasnest_p4_n320000_step100_round2
@@ -23,8 +24,8 @@
 # too many tasks submitted? with 100 at a time... careful! try 25
 ##x-y%z; start x, end y INCLUSIVE, z tasks at a time max
 ##(Y-X)*step_size = total you want to run
-##SBATCH --array=0-99%20 # for 10000 training set
-#SBATCH --array=0-9 # for 1000 test sets
+#SBATCH --array=0-99%50 # for 10000 training set
+##SBATCH --array=0-9 # for 1000 test sets
 ##SBATCH --array=0-0
 ##SBATCH --mem=3G # 2G for bispectrum, 1G too low; 3G for pnn, 2G too low (??)
 #SBATCH --mem=4G
@@ -65,13 +66,19 @@ echo "idx_mock_start=${idx_mock_start}, idx_mock_end=${idx_mock_end}"
 # test
 #python compute_statistics.py --statistic pnn --tag_params _coverage_p5_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 #python compute_statistics.py --statistic pgm --tag_params _coverage_p5_n1000 --tag_biasparams _biascoverage_p4_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
-python compute_statistics.py --statistic bispec --tag_params _coverage_p5_n1000 --tag_biasparams _biascoverage_p4_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+#python compute_statistics.py --statistic bispec --tag_params _coverage_p5_n1000 --tag_biasparams _biascoverage_p4_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 # fixed cosmo
 #python compute_statistics.py --statistic bispec --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1
 #python compute_statistics.py --statistic pgm --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _quijote_p0_n1000 --tag_biasparams _b1000_p0_n1
 #python compute_statistics.py --statistic pnn --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _shame_p0_n1000
 #python compute_statistics.py --statistic pgm --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_params _shame_p0_n1000 --tag_biasparams _biasshame_p0_n1
 #python compute_statistics.py --statistic bispec --tag_params _shame_p0_n1000 --tag_biasparams _biasshame_p0_n1 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end}
+
+### noisy anmult
+# train
+#python compute_statistics.py --statistic pk --tag_params _p5_n10000 --tag_biasparams _biasnoisenest_p9_n320000 --tag_noise _noise_unit_p5_n10000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end}
+#python compute_statistics.py --statistic pgm --tag_params _p5_n10000 --tag_biasparams _biasnoisenest_p9_n320000 --tag_noise _noise_unit_p5_n10000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end}
+python compute_statistics.py --statistic bispec --tag_params _p5_n10000 --tag_biasparams _biasnoisenest_p9_n320000 --tag_noise _noise_unit_p5_n10000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end}
 
 ### noise-only
 #python compute_statistics.py --statistic pk --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} --tag_noise _noise_p5_n10000

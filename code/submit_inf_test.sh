@@ -18,10 +18,9 @@ for n_train in "${n_train_arr[@]}"; do
         tag_params="_p5_n10000"
         tag_biasparams="_biasnest_p4_n320000"  
         tag_noise=""
-        tag_Anoise=""   
         tag_mask=""
         #tag_mask="_kb0.25"
-        tag_data_train="_muchisimocks${tag_stats}${tag_mask}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}"
+        tag_data_train="_muchisimocks${tag_stats}${tag_mask}${tag_params}${tag_biasparams}${tag_noise}"
         tag_rp="_rp"
         #tag_rp=""
         bx=4
@@ -35,7 +34,6 @@ for n_train in "${n_train_arr[@]}"; do
         tag_mean="_mean"
         #tag_mean=""
         tag_noise_test=""
-        tag_Anoise_test=""
         ### coverage
         # tag_params_test="_test_p5_n1000"
         # #tag_biasparams_test="_b1000_p0_n1"
@@ -47,7 +45,7 @@ for n_train in "${n_train_arr[@]}"; do
         # tag_noise_test=""
         # tag_Anoise_test=""
         ### Muchisimocks test set 
-        tag_data_test="_muchisimocks${tag_stats}${tag_mask}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_Anoise_test}${tag_mean}"
+        tag_data_test="_muchisimocks${tag_stats}${tag_mask}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_mean}"
 
         ### OOD test set
         #data_mode="shame" 

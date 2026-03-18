@@ -36,8 +36,6 @@ def parse_args():
                         help='Tag for bias parameter set')
     parser.add_argument('--tag_noise', type=str, default=None,
                         help='Tag for noise fields')
-    parser.add_argument('--tag_Anoise', type=str, default=None,
-                        help='Tag for noise parameter set')
     parser.add_argument('--idx_mock_start', type=int,
                         help='Index of the LH realization to start')
     parser.add_argument('--idx_mock_end', type=int,
@@ -52,7 +50,6 @@ def parse_args():
     tag_params = args.tag_params
     tag_biasparams = args.tag_biasparams
     tag_noise = args.tag_noise
-    tag_Anoise = args.tag_Anoise
     n_threads = args.n_threads
     overwrite = args.overwrite
 
@@ -74,7 +71,7 @@ def parse_args():
         #print(idx_mock)
         run(statistic, idx_mock,
             tag_params=tag_params, tag_biasparams=tag_biasparams,
-            tag_noise=tag_noise, tag_Anoise=tag_Anoise,
+            tag_noise=tag_noise,
             n_threads=n_threads, overwrite=overwrite, 
             base_bispec=base)
         # try:
@@ -118,7 +115,7 @@ def run_loop():
     tag_params = None # for noise-only, no params
     tag_biasparams = None # for noise-only, no bias params
     tag_noise = '_noise_quijote_p0_n1000'
-    tag_Anoise = None # will be computing stats directly of noise field, no A_noise needed
+    tag_Anoise = None  # deprecated; noise parameters now live inside tag_biasparams
     
     overwrite = False
     n_threads = 1
@@ -141,7 +138,7 @@ def run_loop():
         run(statistic, idx_mock, 
             tag_params=tag_params,
             tag_biasparams=tag_biasparams,
-            tag_noise=tag_noise, tag_Anoise=tag_Anoise,
+            tag_noise=tag_noise,
             base_bispec=base,
             n_threads=n_threads, overwrite=overwrite, 
             )    
@@ -164,15 +161,13 @@ def setup_bispec(box_size, n_grid, n_threads):
     
     
 def run(statistic, idx_mock,
-        tag_params=None, tag_biasparams=None, tag_noise=None, tag_Anoise=None,
+        tag_params=None, tag_biasparams=None, tag_noise=None,
         base_bispec=None, n_threads=1, overwrite=False):
     """Compute one statistic (pnn, pk, pklin, bispec, pgm) for a single idx_mock and save to disk."""
     print(f"Starting muchisimocks {statistic} computation for idx_mock={idx_mock}", flush=True)
 
-    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, _, _ = \
-        data_loader.load_params(tag_params, tag_biasparams, tag_Anoise)
-    print('tag_Anoise =',tag_Anoise)
-    print(len(Anoise_df) if Anoise_df is not None else "Anoise_df is None", flush=True)
+    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, _, _ = \
+        data_loader.load_params(tag_params, tag_biasparams)
 
     if tag_params is not None:  
         if 'p0' in tag_params or 'fisher' in tag_params:
@@ -209,7 +204,7 @@ def run(statistic, idx_mock,
     else:
         # For other statistics, use the shared function
         dir_statistics, fns_statistics_all, idxs_bias, idxs_noise = data_loader.get_fns_statistic(
-            statistic, idx_mock, tag_params, tag_biasparams, tag_noise, tag_Anoise,
+            statistic, idx_mock, tag_params, tag_biasparams, tag_noise, None,
             params_df, biasparams_df
         )
         
@@ -265,7 +260,7 @@ def run(statistic, idx_mock,
                 start = time.time()
 
                 tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
-                                        biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed,
+                                        biasparams_dict_fixed,
                                         n_grid_orig)
                 compute_pk(tracer_field, cosmo, box_size,
                                         n_threads=n_threads, fn_stat=fn_statistic)
@@ -285,7 +280,7 @@ def run(statistic, idx_mock,
                 start = time.time()
 
                 tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
-                                        biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed,
+                                        biasparams_dict_fixed,
                                         n_grid_orig)
                 bias_terms_eul = get_bias_fields(fn_fields)
                 # Get the second bias field (index 1)
@@ -303,7 +298,7 @@ def run(statistic, idx_mock,
 
                 assert base_bispec is not None, "base_bispec must be provided for bispectrum computation"
                 tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
-                                        biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed,
+                                        biasparams_dict_fixed,
                                         n_grid_orig)
                 compute_bispectrum(base_bispec, tracer_field, fn_stat=fn_statistic)
             
@@ -334,8 +329,8 @@ def get_bias_fields(fn_fields):
     return bias_terms_eul
 
 
-def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, biasparams_dict_fixed, 
-                      Anoise_df, Anoise_dict_fixed, n_grid_orig):
+def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, biasparams_dict_fixed,
+                      n_grid_orig):
     
     print("make_tracer_field")
     print(fn_fields)
@@ -346,29 +341,36 @@ def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, 
         # Check if idx_noise is None when we need it
         if idx_noise is None:
             raise ValueError(f"idx_noise is None but tag_noise='{tag_noise}' was provided. "
-                           f"This suggests a mismatch in the logic for determining noise indices. "
-                           f"Check that tag_Anoise and other noise-related parameters are correctly set.")
+                           f"This suggests a mismatch in the logic for determining noise indices.")
         
         # get noise field
         fn_noise = str(paths.noise_fields_dir(tag_noise) / f'noise_field_n{idx_noise}.npy')
         if not os.path.exists(fn_noise):
             raise ValueError(f"Noise field {fn_noise} does not exist!")
         noise_field = np.load(fn_noise)
+
+        # Noise amplitude is now sourced from tag_biasparams.
+        A_noise_dict = biasparams_dict_fixed.copy() if biasparams_dict_fixed else {}
+        if biasparams_df is not None and idx_bias is not None:
+            A_noise_dict.update(biasparams_df.loc[idx_bias].to_dict())
         
-        # get A_noise; can have noise without Anoise, but if have Anoise will also need noise
-        # noise-field computation only
-        if Anoise_df is None and Anoise_dict_fixed is None:
-            A_noise = None
+        if 'An_gaussian' in A_noise_dict:
+            A_noise = A_noise_dict['An_gaussian']
+            noise_model = 'additive'
         else:
-            # when one of these is not None, this should get us A_noise for fixed or varying
-            A_noise_dict = Anoise_dict_fixed.copy()
-            if Anoise_df is not None:
-                A_noise_dict.update(Anoise_df.loc[idx_noise].to_dict())
-            # A_noise is now a vector
-            A_noise = [A_noise_dict[npm] for npm in utils.noiseparam_names_ordered]  
+            # Multiplicative noise: An_homog/An_b1/...
+            missing = [npm for npm in utils.noiseparam_names_ordered if npm not in A_noise_dict]
+            if missing:
+                raise KeyError(
+                    "Missing multiplicative noise parameters in tag_biasparams: "
+                    f"{missing}. Expected one of 'An_gaussian' or {utils.noiseparam_names_ordered}."
+                )
+            A_noise = [A_noise_dict[npm] for npm in utils.noiseparam_names_ordered]
+            noise_model = 'multiplicative'
     else:
         noise_field = None
         A_noise = None
+        noise_model = 'multiplicative'
 
     if fn_fields is not None:
         # load eulerian bias fields
@@ -380,7 +382,7 @@ def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, 
         bias_vector = [biasparam_dict[name] for name in utils.biasparam_names_ordered]
         # make tracer field
         tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_orig,
-                                                noise_field=noise_field, A_noise=A_noise)
+                                                noise_field=noise_field, A_noise=A_noise, noise_model=noise_model)
     else:
         # noise-only
         tracer_field = noise_field

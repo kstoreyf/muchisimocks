@@ -78,7 +78,6 @@ def train_likefree_inference(config, overwrite=False):
     tag_params = config["tag_params"]
     tag_biasparams = config["tag_biasparams"]
     tag_noise = config.get("tag_noise", None)  # noise parameters
-    tag_Anoise = config.get("tag_Anoise", None)  # noise parameters
     run_mode = config["run_mode"]
     sweep_name = config["sweep_name"]
     tag_data = config["tag_data"]
@@ -91,30 +90,36 @@ def train_likefree_inference(config, overwrite=False):
         print(f"Oh look, posterior.p already exists in {dir_sbi}, and overwrite={overwrite}! Skipping training.")
         return
     
-    print(f"Training with tag_params={tag_params}, tag_biasparams={tag_biasparams}, tag_noise={tag_noise}, tag_Anoise={tag_Anoise}")
+    print(f"Training with tag_params={tag_params}, tag_biasparams={tag_biasparams}, tag_noise={tag_noise}")
 
     ### Load data and parameters
     # don't need the fixed params for training!
-    k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints_cosmo, random_ints_bias = \
+    k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints_cosmo, random_ints_bias = \
                 data_loader.load_data(data_mode, statistics, 
                                       tag_params, tag_biasparams,
                                       tag_noise=tag_noise,
-                                      tag_Anoise=tag_Anoise,
                                       tag_data=tag_data,
                                       bx=bx)
-
-    # get bounds dict
-    _, dict_bounds_cosmo, _ = genp.define_LH_cosmo(tag_params)
-    _, dict_bounds_bias, _ = genp.define_LH_bias(tag_biasparams)
-    dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
-    # add noise parameter bounds if they exist
-    if tag_Anoise is not None:
-        _, dict_bounds_noise, _ = genp.define_LH_Anoise(tag_Anoise)
-        dict_bounds.update(dict_bounds_noise)
     
     # turn parameters into nice theta for training
-    theta, param_names = data_loader.param_dfs_to_theta(idxs_params, params_df, biasparams_df, 
-                                                        Anoise_df=Anoise_df)
+    theta, param_names = data_loader.param_dfs_to_theta(
+        idxs_params, params_df, biasparams_df
+    )
+
+    # Build bounds directly from the known parameter set bounds.
+    # Noise parameters are stored inside tag_biasparams now.
+    dict_bounds = {}
+    for pn in param_names:
+        if pn in genp.BOUNDS["cosmo"]:
+            dict_bounds[pn] = genp.BOUNDS["cosmo"][pn]
+        elif pn in genp.BOUNDS["bias"]:
+            dict_bounds[pn] = genp.BOUNDS["bias"][pn]
+        elif pn in genp.BOUNDS["Anoisegaussian"]:
+            dict_bounds[pn] = genp.BOUNDS["Anoisegaussian"][pn]
+        elif pn in genp.BOUNDS["Anoisemult"]:
+            dict_bounds[pn] = genp.BOUNDS["Anoisemult"][pn]
+        else:
+            raise KeyError(f"Missing bounds for parameter '{pn}'. Update generate_params.BOUNDS.")
     print('theta shape:', theta.shape)
     print(param_names)
     
@@ -221,7 +226,6 @@ def test_likefree_inference(config, overwrite=False):
     tag_params = config["tag_params"]
     tag_biasparams = config["tag_biasparams"]
     tag_noise = config.get("tag_noise", None)  
-    tag_Anoise = config.get("tag_Anoise", None) 
     evaluate_mean = config["evaluate_mean"]
     idxs_obs = config["idxs_obs"]
     #idxs_obs = np.arange(10)
@@ -229,7 +233,6 @@ def test_likefree_inference(config, overwrite=False):
     tag_params_test = config["tag_params_test"]
     tag_biasparams_test = config["tag_biasparams_test"]
     tag_noise_test = config.get("tag_noise_test", None) 
-    tag_Anoise_test = config.get("tag_Anoise_test", None) 
     tag_data_train = config["tag_data_train"]
     tag_data_test = config["tag_data_test"]
     tag_inf_train = config["tag_inf_train"]
@@ -263,16 +266,15 @@ def test_likefree_inference(config, overwrite=False):
     ### Load data and parameters
     # our setup is such that that the test set is a separate dataset, so no need to split
     # don't need theta either - just predicting, not comparing
-    print(tag_noise_test, tag_Anoise_test)
-    k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = \
+    print(tag_noise_test)
+    k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
                 data_loader.load_data(data_mode, statistics,
                                       tag_params_test, tag_biasparams_test,
                                       tag_noise=tag_noise_test,
-                                      tag_Anoise=tag_Anoise_test,
                                       tag_data=tag_data_train, #this goes to mask
                                       )
 
-    param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams, tag_Anoise=tag_Anoise)
+    param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams)
 
     sbi_network = sbi_model.SBIModel(
                 tag_sbi=tag_inf_train,
@@ -322,7 +324,6 @@ def test_likefree_inference_ood(config, overwrite=False):
     tag_params = config["tag_params"]
     tag_biasparams = config["tag_biasparams"]
     tag_noise = config.get("tag_noise", None)  
-    tag_Anoise = config.get("tag_Anoise", None) 
     tag_data_train = config["tag_data_train"]
     tag_inf_train = config["tag_inf_train"]
     sweep_name = config["sweep_name"]
@@ -359,7 +360,7 @@ def test_likefree_inference_ood(config, overwrite=False):
     # tag_data_train goes to mask, NOTE this could be structured more clearly...
     k, y, y_err = data_loader.load_data_ood(data_mode_test, statistics, tag_mock, tag_data=tag_data_train)
 
-    param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams, tag_Anoise=tag_Anoise)
+    param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams)
 
     sbi_network = sbi_model.SBIModel(
                 tag_sbi=tag_inf_train,
@@ -403,7 +404,6 @@ def run_likelihood_inference(config):
     statistics = config['statistics']
     tag_params = config['tag_params']
     tag_biasparams = config['tag_biasparams']
-    tag_Anoise = config.get('tag_Anoise', None)  # noise parameters
     tag_data = config.get('tag_data', None)
     tag_inf = config['tag_inf']
     cosmo_param_names_vary = config.get('cosmo_param_names_vary', [])
@@ -414,10 +414,9 @@ def run_likelihood_inference(config):
         assert 'p0' in tag_params, "If you're evaluating the mean, don't you want fixed cosmo?"
     
     # Load data and parameters
-    k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = \
+    k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
         data_loader.load_data(data_mode, statistics,
                               tag_params, tag_biasparams, 
-                              tag_Anoise=tag_Anoise,
                               tag_data=tag_data, 
                               )
 
@@ -441,16 +440,9 @@ def run_likelihood_inference(config):
     _, dict_bounds_bias, _ = genp.define_LH_bias(tag_biasparams)
     dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
     
-    # add noise parameter bounds if they exist
-    if tag_Anoise is not None:
-        _, dict_bounds_noise, _ = genp.define_LH_Anoise(tag_Anoise)
-        dict_bounds.update(dict_bounds_noise)
-        
     print("bounds")
     print(dict_bounds_cosmo)
     print(dict_bounds_bias)
-    if tag_Anoise is not None:
-        print(dict_bounds_noise)
 
     # not using training data for likelihood methods, so unclear how to scale; 
     # let's just do log for now

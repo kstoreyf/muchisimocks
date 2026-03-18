@@ -22,7 +22,7 @@ def _get_bias_param_cols(biasparams_df):
 
 
 def load_data(data_mode, statistics, tag_params, tag_biasparams,
-              tag_noise=None, tag_Anoise=None,
+              tag_noise=None,
               tag_data=None,
               kwargs={}, bx=None, n_cosmo_max=None):
     
@@ -32,7 +32,7 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
         if data_mode == 'muchisimocks':
             k_i, y_i, y_err_i, idxs_params = load_data_muchisimocks(statistic,
                                             tag_params, tag_biasparams, 
-                                            tag_noise=tag_noise, tag_Anoise=tag_Anoise,
+                                            tag_noise=tag_noise,
                                             bx=bx, n_cosmo_max=n_cosmo_max,
                                             **kwargs)
         elif data_mode == 'emu':
@@ -51,8 +51,8 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
         y.append(y_i)
         y_err.append(y_err_i)    
 
-    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams, tag_Anoise=tag_Anoise, bx=bx)
-    return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias
+    params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias = load_params(tag_params, tag_biasparams, bx=bx)
+    return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
 
 
 def load_data_ood(data_mode, statistics, tag_mock, tag_data=None, kwargs=None):
@@ -98,10 +98,13 @@ def load_data_shame(statistic, tag_mock):
     return k, stat, error
 
 
-def get_idxs_params(tag_params, tag_biasparams, tag_Anoise=None, modecosmo='lh'):
+def get_idxs_params(tag_params, tag_biasparams, modecosmo='lh'):
     """
-    For each cosmological parameter index, get the corresponding bias and noise parameter indices.
+    For each cosmological parameter index, get the corresponding bias parameter indices.
     Returns a list of (idx_mock, idx_bias, idx_noise) tuples.
+
+    NOTE: idx_noise is kept for backward-shape compatibility even though noise parameters
+    are now stored inside the bias parameter dataframe.
     """
     params_df, param_dict_fixed = load_cosmo_params(tag_params)
     biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams)
@@ -110,56 +113,31 @@ def get_idxs_params(tag_params, tag_biasparams, tag_Anoise=None, modecosmo='lh')
 
     idxs_params = []
     for idx_mock in params_df.index:
+        # In the new design, noise parameters live inside the bias dataframe.
+        # We still output idx_noise to preserve the existing index tuple shape.
+        idx_noise = idx_mock
         if modecosmo == 'lh':
             if biasparams_df is None:
-                # Fixed bias params: use idx_bias = 0 for all cosmologies
                 idx_bias = 0
-                if tag_Anoise is not None and 'p0' not in tag_Anoise:
-                    idx_noise = idx_bias
-                else:
-                    # For fixed noise or no noise, use mock index
-                    idx_noise = idx_mock
                 idxs_params.append((idx_mock, idx_bias, idx_noise))
             elif _is_nested_bias(biasparams_df):
                 bias_rows = biasparams_df[biasparams_df['idx_cosmo'] == idx_mock]
                 for idx_bias in bias_rows.index:
-                    if tag_Anoise is not None and 'p0' not in tag_Anoise:
-                        idx_noise = idx_bias
-                    else:
-                        idx_noise = idx_mock
                     idxs_params.append((idx_mock, idx_bias, idx_noise))
             else:
-                # Simple (non-nested) LH: assume 1-to-1 mapping between cosmology and bias row.
                 idx_bias = idx_mock
-                if tag_Anoise is not None and 'p0' not in tag_Anoise:
-                    idx_noise = idx_bias
-                else:
-                    idx_noise = idx_mock
                 idxs_params.append((idx_mock, idx_bias, idx_noise))
         elif modecosmo == 'fisher':
             if biasparams_df is None:
-                # Fixed bias params: use idx_bias = 0 for all cosmologies
                 idx_bias = 0
-                if tag_Anoise is not None and 'p0' not in tag_Anoise:
-                    idx_noise = idx_bias
-                else:
-                    idx_noise = idx_mock
                 idxs_params.append((idx_mock, idx_bias, idx_noise))
             else:
                 if params_df.iloc[idx_mock]['param_shifted'] == 'fiducial':
                     for idx_bias in biasparams_df.index:
-                        if tag_Anoise is not None and 'p0' not in tag_Anoise:
-                            idx_noise = idx_bias
-                        else:
-                            idx_noise = idx_mock
                         idxs_params.append((idx_mock, idx_bias, idx_noise))
                 else:
                     fiducial_bias_idxs = np.where(biasparams_df['param_shifted'] == 'fiducial')[0]
                     for idx_bias in fiducial_bias_idxs:
-                        if tag_Anoise is not None and 'p0' not in tag_Anoise:
-                            idx_noise = idx_bias
-                        else:
-                            idx_noise = idx_mock
                         idxs_params.append((idx_mock, idx_bias, idx_noise))
         else:
             raise ValueError(f"Unknown modecosmo: {modecosmo}")
@@ -329,7 +307,6 @@ def get_bispec_mask(tag_data, tag_mask='', k=None, bispec=None):
 
 
 def load_params(tag_params=None, tag_biasparams=None,
-                tag_Anoise=None,
                 dir_params='../data/params', bx=None):
     
     if tag_params is None:
@@ -349,17 +326,7 @@ def load_params(tag_params=None, tag_biasparams=None,
         biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams, dir_params=dir_params, bx=bx)
         fn_randints_bias = f'{dir_params}/randints{tag_biasparams}.npy'
         random_ints_bias = np.load(fn_randints_bias, allow_pickle=True) if os.path.exists(fn_randints_bias) else None
-        
-    if tag_Anoise is None:
-        Anoise_df = None
-        Anoise_dict_fixed = {}
-    else:
-        Anoise_df, Anoise_dict_fixed = load_Anoise_params(tag_Anoise, dir_params=dir_params)
-            
-    # TODO figure out what to do about randoms in Anoise case
-    # NOTE this if/else is so current code doesn't break if don't give tag_Anoise, 
-    # but probs will want to update everywhere
-    return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, Anoise_df, Anoise_dict_fixed, random_ints, random_ints_bias
+    return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
     
     
 def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
@@ -384,6 +351,8 @@ def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
    
     
 def load_cosmo_params(tag_params, dir_params='../data/params'):
+    if tag_params is None:
+        return None, {}
     # TODO this is so messy! figure out what to do about lh prefix
     if 'fisher' in tag_params:
         fn_params = f'{dir_params}/params{tag_params}.txt'
@@ -391,11 +360,13 @@ def load_cosmo_params(tag_params, dir_params='../data/params'):
         fn_params = f'{dir_params}/params_lh{tag_params}.txt'
     fn_params_fixed = f'{dir_params}/params_fixed{tag_params}.txt'
 
-    params_df = (
-        pd.read_csv(fn_params, index_col=0)
-        if os.path.exists(fn_params)
-        else None
-    )
+    if not os.path.exists(fn_params):
+        raise FileNotFoundError(
+            f"Missing cosmology params file for tag_params={tag_params}. "
+            f"Expected: {fn_params}"
+        )
+    params_df = pd.read_csv(fn_params, index_col=0)
+
     param_dict_fixed = (
         pd.read_csv(fn_params_fixed).iloc[0].to_dict() 
         if os.path.exists(fn_params_fixed)
@@ -405,16 +376,19 @@ def load_cosmo_params(tag_params, dir_params='../data/params'):
     
     
 def load_bias_params(tag_biasparams, dir_params='../data/params', bx=None):
+    if tag_biasparams is None:
+        return None, {}
     if 'fisher' in tag_biasparams:
         fn_biasparams = f'{dir_params}/params{tag_biasparams}.txt'
     else:
         fn_biasparams = f'{dir_params}/params_lh{tag_biasparams}.txt'
     fn_biasparams_fixed = f'{dir_params}/params_fixed{tag_biasparams}.txt'
-    biasparams_df = (
-        pd.read_csv(fn_biasparams, index_col=0)
-        if os.path.exists(fn_biasparams)
-        else None
-    )
+    if not os.path.exists(fn_biasparams):
+        raise FileNotFoundError(
+            f"Missing bias params file for tag_biasparams={tag_biasparams}. "
+            f"Expected: {fn_biasparams}"
+        )
+    biasparams_df = pd.read_csv(fn_biasparams, index_col=0)
     biasparams_dict_fixed = (
         pd.read_csv(fn_biasparams_fixed).iloc[0].to_dict() 
         if os.path.exists(fn_biasparams_fixed)
@@ -429,29 +403,14 @@ def load_bias_params(tag_biasparams, dir_params='../data/params', bx=None):
     return biasparams_df, biasparams_dict_fixed
 
 
-def load_Anoise_params(tag_Anoise, dir_params='../data/params'):
-    # NOTE not handling fisher case rn, don't know if will need
-    fn_Anoise = f'{dir_params}/params_lh{tag_Anoise}.txt'
-    fn_Anoise_fixed = f'{dir_params}/params_fixed{tag_Anoise}.txt'
-    Anoise_df = (
-        pd.read_csv(fn_Anoise, index_col=0)
-        if os.path.exists(fn_Anoise)
-        else None
-    )
-    Anoise_dict_fixed = (
-        pd.read_csv(fn_Anoise_fixed).iloc[0].to_dict() 
-        if os.path.exists(fn_Anoise_fixed)
-        else {}
-    )
-    if tag_Anoise is not None:
-        # "Anoise_dict_fixed" is the pythonic way to check for a non-empty dict
-        assert Anoise_df is not None or Anoise_dict_fixed, f"tag_Anoise {tag_Anoise} should have a corresponding Anoise_df or Anoise_dict_fixed!"
-    return Anoise_df, Anoise_dict_fixed
+#
+# Noise parameters previously lived in a separate Anoise parameter set.
+# They are now stored inside the bias parameter dataframe.
 
 
 
     
-def param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df=None, n_rlzs_per_cosmo=1):
+def param_dfs_to_theta(idxs_params, params_df, biasparams_df, n_rlzs_per_cosmo=1):
     """
     Convert parameter DataFrames to a theta array that can be used for inference.
     Handles cases where params_df, biasparams_df, and Anoise_df have different lengths.
@@ -468,55 +427,32 @@ def param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df=None, n_
             - theta: 2D numpy array of parameter values
             - param_names: List of parameter names corresponding to columns in theta
     """
-    assert params_df is not None or biasparams_df is not None or Anoise_df is not None, "At least one of params_df, biasparams_df, or Anoise_df must be specified"
+    assert params_df is not None or biasparams_df is not None, "At least one of params_df or biasparams_df must be specified"
     param_names = []
 
     # Base cases: only one DataFrame provided
-    if params_df is None and biasparams_df is None:
-        param_names.extend(Anoise_df.columns.tolist())
-        # Extract idx_noise from three-tuple (idx_mock, idx_bias, idx_noise)
-        theta_noise_orig = np.array([Anoise_df.loc[idx_noise].values for _, _, idx_noise in idxs_params])
-        theta_noise = utils.repeat_arr_rlzs(theta_noise_orig, n_rlzs=n_rlzs_per_cosmo)
-        return theta_noise, param_names
-    elif params_df is None and Anoise_df is None:
+    if params_df is None:
         bias_param_cols = _get_bias_param_cols(biasparams_df)
         param_names.extend(bias_param_cols)
         theta_bias_orig = np.array([biasparams_df.loc[idx_bias, bias_param_cols].values for _, idx_bias, _ in idxs_params])
         theta_bias = utils.repeat_arr_rlzs(theta_bias_orig, n_rlzs=n_rlzs_per_cosmo)
         return theta_bias, param_names
-    elif biasparams_df is None and Anoise_df is None:
+    if biasparams_df is None:
         param_names.extend(params_df.columns.tolist())
-        # Extract idx_mock from three-tuple (idx_mock, idx_bias, idx_noise)
         theta_cosmo_orig = np.array([params_df.loc[idx_mock].values for idx_mock, _, _ in idxs_params])
         theta_cosmo = utils.repeat_arr_rlzs(theta_cosmo_orig, n_rlzs=n_rlzs_per_cosmo)
         return theta_cosmo, param_names
-    
+
     # Add parameter names from all DataFrames
-    if params_df is not None:
-        param_names.extend(params_df.columns.tolist())
-    if biasparams_df is not None:
-        bias_param_cols = _get_bias_param_cols(biasparams_df)
-        param_names.extend(bias_param_cols)
-    if Anoise_df is not None:
-        param_names.extend(Anoise_df.columns.tolist())
+    param_names.extend(params_df.columns.tolist())
+    bias_param_cols = _get_bias_param_cols(biasparams_df)
+    param_names.extend(bias_param_cols)
 
     theta = []
-    for idx_mock, idx_bias, idx_noise in idxs_params:
-        params_combined = []
-        
-        if params_df is not None:
-            cosmo_params = params_df.loc[idx_mock].values
-            params_combined.append(cosmo_params)
-        
-        if biasparams_df is not None:
-            bias_params = biasparams_df.loc[idx_bias, bias_param_cols].values
-            params_combined.append(bias_params)
-            
-        if Anoise_df is not None:
-            noise_params = Anoise_df.loc[idx_noise].values
-            params_combined.append(noise_params)
-        
-        theta.append(np.concatenate(params_combined))        
+    for idx_mock, idx_bias, _ in idxs_params:
+        cosmo_params = params_df.loc[idx_mock].values
+        bias_params = biasparams_df.loc[idx_bias, bias_param_cols].values
+        theta.append(np.concatenate([cosmo_params, bias_params]))
     theta = np.array(theta)
     
     # TODO test/check this part! not using bc haven't been using emulated set
@@ -528,15 +464,15 @@ def param_dfs_to_theta(idxs_params, params_df, biasparams_df, Anoise_df=None, n_
     
     
     
-def load_theta_test(tag_params_test, tag_biasparams_test, tag_Anoise_test=None,
-                    cosmo_param_names_vary=None, bias_param_names_vary=None, noise_param_names_vary=None,
+def load_theta_test(tag_params_test, tag_biasparams_test,
+                    cosmo_param_names_vary=None, bias_param_names_vary=None,
                     n_rlzs_per_cosmo=1):
     # in theory could make this load whichever of the params want, variable or fixed,
     # but for now we want either completely fixed or completely varied, so this is fine
     # TODO NOW i think we might need to handle this case
     
     # get parameter files
-    params_df_test, param_dict_fixed_test, biasparams_df_test, biasparams_dict_fixed_test, Anoise_df_test, Anoise_dict_fixed_test, _, _ = load_params(tag_params_test, tag_biasparams_test, tag_Anoise=tag_Anoise_test)
+    params_df_test, param_dict_fixed_test, biasparams_df_test, biasparams_dict_fixed_test, _, _ = load_params(tag_params_test, tag_biasparams_test)
 
     # load test data
     if 'p0' in tag_params_test and 'p0' in tag_biasparams_test:
@@ -545,13 +481,10 @@ def load_theta_test(tag_params_test, tag_biasparams_test, tag_Anoise_test=None,
         # if both tests sets are entirely fixed, our theta is just the fixed data, repeated for each observation
         theta_test = [param_dict_fixed_test[pname] for pname in cosmo_param_names_vary]
         theta_test.extend([biasparams_dict_fixed_test[pname] for pname in bias_param_names_vary])
-        # Add noise parameters if they exist and are specified
-        if tag_Anoise_test is not None and 'p0' in tag_Anoise_test and noise_param_names_vary is not None:
-            theta_test.extend([Anoise_dict_fixed_test[pname] for pname in noise_param_names_vary])
     else:
         # for when have a LH of varied bias parameters
-        idxs_params = get_idxs_params(tag_params_test, tag_biasparams_test, tag_Anoise=tag_Anoise_test)
-        theta_test, param_names = param_dfs_to_theta(idxs_params, params_df_test, biasparams_df_test, Anoise_df_test, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
+        idxs_params = get_idxs_params(tag_params_test, tag_biasparams_test)
+        theta_test, _ = param_dfs_to_theta(idxs_params, params_df_test, biasparams_df_test, n_rlzs_per_cosmo=n_rlzs_per_cosmo)
         
     return np.array(theta_test)
     
@@ -577,7 +510,7 @@ def load_theta_ood(data_mode, tag_mock,
 
     
 
-def get_param_names(tag_params=None, tag_biasparams=None, tag_Anoise=None, dir_params='../data/params'):
+def get_param_names(tag_params=None, tag_biasparams=None, dir_params='../data/params'):
     """
     Gets parameter names given tag_params and tag_biasparams.
 
@@ -607,12 +540,11 @@ def get_param_names(tag_params=None, tag_biasparams=None, tag_Anoise=None, dir_p
         if os.path.exists(fn_biasparams):
             biasparams_df = pd.read_csv(fn_biasparams, index_col=0)
             param_names.extend(_get_bias_param_cols(biasparams_df))
-
-    if tag_Anoise is not None:
-        fn_Anoise = f'{dir_params}/params_lh{tag_Anoise}.txt'
-        if os.path.exists(fn_Anoise):
-            Anoise_df = pd.read_csv(fn_Anoise, index_col=0)
-            param_names.extend(Anoise_df.columns.tolist())
+        else:
+            raise FileNotFoundError(
+                f"Missing bias params file for tag_biasparams={tag_biasparams}. "
+                f"Expected: {fn_biasparams}"
+            )
 
     return param_names
 
@@ -669,17 +601,8 @@ def load_data_emu(statistic, tag_params, tag_biasparams, tag_errG='', tag_datage
 
 
 
-def get_dir_statistics(statistic, tag_params, tag_biasparams, tag_noise=None, tag_Anoise=None):
-    if tag_biasparams is not None and tag_noise is not None and tag_Anoise is not None:
-        # think tag_noise and tag_Anoise will always go together bc you need to know how to modify noise field
-        # (tho the combos can vary, that's why they're different)
-        tag_mocks = tag_params + tag_biasparams + tag_noise + tag_Anoise
-    elif tag_biasparams is not None:
-        tag_mocks = tag_params + tag_biasparams
-    elif tag_noise is not None and tag_params is None:
-        tag_mocks = tag_noise
-    else:
-        tag_mocks = tag_params
+def get_dir_statistics(statistic, tag_params, tag_biasparams, tag_noise=None):
+    tag_mocks = ''.join([t for t in [tag_params, tag_biasparams, tag_noise] if t is not None])
     dir_statistics = paths.statistics_dir(statistic, tag_mocks)
     return str(dir_statistics)
 
@@ -703,8 +626,8 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
                            bx=None, n_cosmo_max=None):
     
     # Determine directories and file structure
-    dir_statistics = get_dir_statistics(statistic, tag_params, tag_biasparams, 
-                                        tag_noise=tag_noise, tag_Anoise=tag_Anoise)
+    dir_statistics = get_dir_statistics(statistic, tag_params, tag_biasparams,
+                                        tag_noise=tag_noise)
     print(f"dir_statistics: {dir_statistics}")
     stat_name = statistic
     
@@ -721,7 +644,8 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
     # Load parameter dataframes
     params_df, param_dict_fixed = load_cosmo_params(tag_params)
     biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams, bx=bx)
-    Anoise_df, Anoise_dict_fixed = load_Anoise_params(tag_Anoise)
+    # Noise parameters now live inside the biasparams dataframe.
+    Anoise_df, Anoise_dict_fixed = None, {}
 
     # Find available cosmologies
     idxs_LH = _get_available_cosmologies(dir_statistics, stat_name)
@@ -795,7 +719,7 @@ def _process_single_cosmology(idx_LH, statistic, stat_name, mode_precomputed, di
     if mode_precomputed:
         return _process_precomputed_cosmology(
             idx_LH, statistic, dir_statistics, params_df, biasparams_df,
-            tag_biasparams, tag_Anoise, return_pk_objs
+            tag_biasparams, tag_noise, tag_Anoise, return_pk_objs
         )
     else:
         return _process_pnn_cosmology(
@@ -806,13 +730,16 @@ def _process_single_cosmology(idx_LH, statistic, stat_name, mode_precomputed, di
         )
 
 
-def _process_precomputed_cosmology(idx_LH, statistic, dir_statistics, 
-                                  params_df, biasparams_df, tag_biasparams, tag_Anoise, return_pk_objs):
+def _process_precomputed_cosmology(idx_LH, statistic, dir_statistics,
+                                  params_df, biasparams_df, tag_biasparams,
+                                  tag_noise, tag_Anoise, return_pk_objs):
     """Handle precomputed pk/bispec files - original logic."""
     
     # Get filenames and indices using existing logic
     _, fns_statistics, idxs_bias, idxs_noise = get_fns_statistic_precomputed(
-        statistic, idx_LH, dir_statistics, params_df, biasparams_df, tag_biasparams, tag_Anoise
+        statistic, idx_LH, dir_statistics,
+        params_df, biasparams_df, tag_biasparams,
+        tag_noise, tag_Anoise
     )
     
     stats, errors, indices, objs = [], [], [], []
@@ -928,8 +855,10 @@ def _process_pnn_cosmology(idx_LH, statistic, stat_name, dir_statistics,
         
         # Handle noise if specified
         if tag_noise is not None:
-            stat = _add_noise_to_statistic(stat, idx_LH, idx_bias, tag_noise, tag_Anoise,
-                                          Anoise_df, Anoise_dict_fixed)
+            stat = _add_noise_to_statistic(
+                stat, idx_LH, idx_bias, tag_noise,
+                biasparams_df, biasparams_dict_fixed
+            )
         
         # Determine noise index - always use idx_LH
         idx_noise = idx_LH
@@ -969,12 +898,12 @@ def _get_bias_indices_for_cosmology(idx_LH, params_df, biasparams_df):
         return [idx_LH]
 
 
-def _add_noise_to_statistic(stat, idx_LH, idx_bias, tag_noise, tag_Anoise,
-                           Anoise_df, Anoise_dict_fixed):
+def _add_noise_to_statistic(stat, idx_LH, idx_bias, tag_noise,
+                           biasparams_df, biasparams_dict_fixed):
     """Add noise to a statistic if noise parameters are specified."""
     
     # Load noise power spectrum
-    dir_noise = get_dir_statistics('pk', None, None, tag_noise, None)
+    dir_noise = get_dir_statistics('pk', None, None, tag_noise=tag_noise)
     fn_noise = f'{dir_noise}/pk_n{idx_LH}.npy'
     
     if not os.path.exists(fn_noise):
@@ -983,21 +912,26 @@ def _add_noise_to_statistic(stat, idx_LH, idx_bias, tag_noise, tag_Anoise,
     pk_obj_noise = np.load(fn_noise, allow_pickle=True).item()
     stat_noise = pk_obj_noise['pk']
     
-    # Get noise amplitude - always use idx_LH for noise index
+    # Get noise amplitude (scalar gaussian noise) from the bias parameter row.
     A_noise_dict = {}
-    if Anoise_dict_fixed:
-        A_noise_dict.update(Anoise_dict_fixed)
-        
-    if Anoise_df is not None:
-        A_noise_dict.update(Anoise_df.loc[idx_LH].to_dict())
-    
-    A_noise = A_noise_dict['A_noise']
-    
-    return stat + A_noise * stat_noise
+    if biasparams_dict_fixed:
+        A_noise_dict.update(biasparams_dict_fixed)
+    if biasparams_df is not None:
+        A_noise_dict.update(biasparams_df.loc[idx_bias].to_dict())
+
+    if 'An_gaussian' not in A_noise_dict:
+        raise KeyError(
+            "Expected scalar gaussian noise parameter 'An_gaussian' inside tag_biasparams. "
+            "If you are using multiplicative noise (An_homog/An_b1/...), pnn-mode noise "
+            "application needs to be handled elsewhere."
+        )
+
+    return stat + A_noise_dict['An_gaussian'] * stat_noise
 
 
-def get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics, 
-                                 params_df, biasparams_df, tag_biasparams, tag_Anoise):
+def get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics,
+                                 params_df, biasparams_df, tag_biasparams,
+                                 tag_noise, tag_Anoise):
     """
     Get filenames for precomputed statistics (pk, bispec).
     This is the cleaned-up version of the original get_fns_statistic logic.
@@ -1031,13 +965,18 @@ def get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics,
         # if we're using noise at all, we'll want idx_noise set; 
         # even if fixed A_noise, we'll be using the set of noise fields also indexed by idx_noise
         # (if tag_Anoise is not None, tag_noise is also not None)
-        if tag_Anoise is not None:
-            # noisy & varying noise params
+        if tag_noise is not None:
+            # Need idx_noise to let downstream load the correct noise_field_n{idx_noise}.npy
             idx_noise = idx_mock
             idxs_noise = [idx_noise]
-            fn_stat = f'{dir_statistics}/{statistic}_{idx_mock}_n{idx_noise}.npy'
         else:
             idxs_noise = None
+            idx_noise = None
+
+        # Filename convention (n index) is still controlled by the legacy tag_Anoise flag.
+        if tag_Anoise is not None:
+            fn_stat = f'{dir_statistics}/{statistic}_{idx_mock}_n{idx_noise}.npy'
+        else:
             fn_stat = f'{dir_statistics}/{statistic}_{idx_mock}.npy'
         fns_statistics.append(fn_stat)
     
@@ -1049,7 +988,7 @@ def get_fns_statistic_noise_only(statistic, idx_mock, tag_noise):
     Handle the special case of noise-only statistics.
     Separated out for clarity.
     """
-    dir_statistics = get_dir_statistics(statistic, None, None, tag_noise, None)
+    dir_statistics = get_dir_statistics(statistic, None, None, tag_noise=tag_noise)
     fn_statistic = f'{dir_statistics}/{statistic}_n{idx_mock}.npy'
     return dir_statistics, [fn_statistic], None, [idx_mock]
 
@@ -1067,8 +1006,10 @@ def get_fns_statistic(statistic, idx_mock, tag_params, tag_biasparams,
         return get_fns_statistic_noise_only(statistic, idx_mock, tag_noise)
     
     # Precomputed case
-    dir_statistics = get_dir_statistics(statistic, tag_params, tag_biasparams, 
-                                       tag_noise, tag_Anoise)
+    dir_statistics = get_dir_statistics(
+        statistic, tag_params, tag_biasparams, tag_noise=tag_noise
+    )
     dir_statistics, fns_statistics, idxs_bias, idxs_noise = get_fns_statistic_precomputed(statistic, idx_mock, dir_statistics,
-                                        params_df, biasparams_df, tag_biasparams, tag_Anoise)
+                                        params_df, biasparams_df, tag_biasparams,
+                                        tag_noise, tag_Anoise)
     return dir_statistics, fns_statistics, idxs_bias, idxs_noise

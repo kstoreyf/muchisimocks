@@ -16,8 +16,8 @@ PARAM_NAMES_ORDERED = {
     "cosmo": ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns', 'neutrino_mass', 'w0', 'wa'],
     "bias": utils.biasparam_names_ordered,
     # Noise amplitude parameter sets (two “options”, treated like distinct parameter sets)
-    "Anoise_An": ["A_noise"],
-    "Anoise_Anmult": utils.noiseparam_names_ordered,
+    "Anoisegaussian": ["An_gaussian"],
+    "Anoisemult": utils.noiseparam_names_ordered,
 }
 
 BOUNDS = {
@@ -39,10 +39,10 @@ BOUNDS = {
         'bs2' :  [-2.0, 2.0],
         'bl'  :  [-10.0, 10.0],
     },
-    "Anoise_An": {
-        "A_noise": [0.0, 2.0],
+    "Anoisegaussian": {
+        "An_gaussian": [0.0, 2.0],
     },
-    "Anoise_Anmult": {
+    "Anoisemult": {
         'An_homog':  [-3.0, 3.0],
         'An_b1'   :  [-3.0, 3.0],
         'An_b2'   :  [-2.0, 2.0],
@@ -61,7 +61,7 @@ def get_param_set_key(bounds_type: str, anoise_option: str | None = None) -> str
             raise ValueError('anoise_option must be provided for bounds_type="Anoise"')
         if anoise_option not in ("An", "Anmult"):
             raise ValueError(f'Unknown anoise_option "{anoise_option}" (expected "An" or "Anmult")')
-        return f"Anoise_{anoise_option}"
+        return "Anoisegaussian" if anoise_option == "An" else "Anoisemult"
     if bounds_type == "biasnoise":
         if anoise_option is None:
             raise ValueError('anoise_option must be provided for bounds_type="biasnoise"')
@@ -164,7 +164,7 @@ PARAM_SETS_NESTED = {
         seed=42,
     ),
     # Bias+noise nested LH (bias + Anmult), 9 total parameters
-    "biasnoisenest_p9_320000": dict(
+    "biasnoisenest_p9_n320000": dict(
         bounds_type="biasnoise",
         anoise_option="Anmult",
         n_cosmo=10_000,
@@ -206,13 +206,15 @@ PARAM_SETS_FISHER = {
 
 def main():
     # Select which LH parameter set to generate.
-    #scenario_name = "bias_shamebl0_p0_n1"
-    #config = PARAM_SETS_LH[scenario_name]
-    #generate_params_LH(**config)
+    #param_set_name = "bias_shamebl0_p0_n1"
+    #param_set_cfg = PARAM_SETS_LH[param_set_name]
+    #generate_params_LH(**param_set_cfg)
+
     # Example for nested LH:
     # nested_name = "biasnest_p4_n320000"
     # nested_cfg = PARAM_SETS_NESTED[nested_name]
     # generate_params_nested_LH(**nested_cfg)
+
     # Example for Fisher grid:
     # fisher_name = "fisher_biaszen_p4"
     # fisher_cfg = PARAM_SETS_FISHER[fisher_name]
@@ -391,13 +393,6 @@ def generate_params_fisher(
     param_names_fixed = [pn for pn in param_names_ordered if pn not in param_names_vary]
     if len(param_names_fixed) > 0:
         save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
-
-
-### NOTE:
-# Older define_LH_* helpers were replaced by:
-# - PARAM_SETS_* providing fiducial_dict explicitly
-# - PARAM_NAMES_ORDERED for ordering
-# - get_bounds(bounds_type, tag_bounds) for bounds
 
 
 def generate_LH(param_names_vary, bounds_dict, n_samples, fn_params, seed=42):
