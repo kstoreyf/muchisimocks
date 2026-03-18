@@ -10,62 +10,94 @@ from scipy.stats import qmc
 import gethypercube
 
 import utils
+import utils_cosmo
+
+
+# Named parameter sets for reproducible Latin-hypercube runs.
+PARAM_SETS_LH = {
+    # Main cosmology LH
+    "cosmo_p5_n10000": dict(
+        bounds_type="cosmo",
+        n_params_vary=5,
+        n_samples=10_000,
+        tag_bounds="",
+        seed=42,
+    ),
+    # Test cosmology LH over "coverage" bounds
+    "cosmo_coverage_p5_n10000": dict(
+        bounds_type="cosmo",
+        n_params_vary=5,
+        n_samples=1_000,
+        tag_bounds="_coverage",
+        seed=42,
+    ),
+    # Test cosmology LH at fixed shame cosmology
+    "cosmo_shame_p5_n1000": dict(
+        bounds_type="cosmo",
+        n_params_vary=5,
+        n_samples=1_000,
+        tag_bounds="_shame",
+        seed=42,
+    ),
+    # Bias SHAMe, single fixed point
+    "bias_shame_p0_n1": dict(
+        bounds_type="bias",
+        n_params_vary=0,
+        n_samples=1,
+        tag_bounds="_biasshame",
+        seed=42,
+    ),
+    # Bias SHAMe, bl=0, single fixed point 
+    "bias_shamebl0_p0_n1": dict(
+        bounds_type="bias",
+        n_params_vary=0,
+        n_samples=1,
+        tag_bounds="_biasshamebl0",
+        seed=42,
+    ),
+    # Example: bias coverage run (uncomment/adjust values as needed)
+    "bias_coverage_p4_n1000": dict(
+        bounds_type="bias",
+        n_params_vary=4,
+        n_samples=1000,
+        tag_bounds="_biascoverage",
+        seed=53,
+    ),
+}
+
+# Named parameter sets for nested LH bias runs.
+PARAM_SETS_NESTED = {
+    "biasnest_p4_n320000": dict(
+        n_cosmo=10_000,
+        n_factors=utils.n_factor_arr,  # [1,2,4,8,16,32]
+        n_params_vary=4,
+        tag_bounds="_biasnest",
+        seed=42,
+    ),
+}
 
 
 def main():
-    generate_params_LH()
-    #generate_params_nested_LH()
-    #generate_params_fisher()
+    # Select which LH parameter set to generate.
+    scenario_name = "bias_shamebl0_p0_n1"
+    config = PARAM_SETS_LH[scenario_name]
+    generate_params_LH(**config)
+    # Example for nested LH:
+    # nested_name = "biasnest_p4_n320000"
+    # nested_cfg = PARAM_SETS_NESTED[nested_name]
+    # generate_params_nested_LH(**nested_cfg)
+    # generate_params_fisher()
 
 
-
-def generate_params_LH():
-    """Generate LH (and fixed) param files; configure bounds_type and n_samples in code."""
-    # default seed was 42, at least for the p5 mocks
-    overwrite = False # probs keep false!!! don't want to overwrite param files
-
-    # Run this by uncommenting the part you want; not pretty, I know
-
-    #n_samples = 1
-    
-    #n_samples = 10000
-    #n_samples = 1000000 #100x
-    #n_samples = 50000 #5x
-    #n_samples = 200000 #20x
-    
-    ### cosmo
-    #bounds_type = 'cosmo' 
-    #n_params_vary = 5
-    #tag_bounds = '' #NOTE params are automatically tagged below; this is for '_test' or '_quijote' so far
-    #tag_bounds = '_test' #old, has restricted bounts 5%
-    #tag_bounds = '_coverage' #new, no restricted bounds
-    #tag_bounds = '_quijote'
-    #tag_bounds = '_shame'
-    
-    ### bias
-    bounds_type = 'bias'
-
-    n_samples = 1
-    seed = 42
-    n_params_vary = 0
-    #tag_bounds = '_biasshame'
-    tag_bounds = '_biasshamebl0'
-
-    # n_samples = 1000
-    # seed = 53
-    # n_params_vary = 4
-    # tag_bounds = '_biascoverage'
-
-
-    
-    ### noise
-    #bounds_type = 'Anoise'
-    #n_params_vary = 1
-    #tag_bounds = '_An'
-    #tag_bounds = '_Anmult'
-    #n_params_vary = 0
-    # tag_bounds = '_An1'    
-    
+def generate_params_LH(
+    bounds_type: str,
+    n_params_vary: int,
+    n_samples: int,
+    tag_bounds: str,
+    seed: int,
+    overwrite: bool = False,
+):
+    """Generate LH (and fixed) param files for a given configuration."""
     if bounds_type == 'cosmo':
         param_names_vary = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
         # for now we will always select the varying params in this order, for reproducibility
@@ -107,19 +139,19 @@ def generate_params_LH():
         save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
     
 
-def generate_params_nested_LH():
-    
-    seed = 42
-    overwrite = False # probs keep false!!! don't want to overwrite param files
-
-    #n_cosmo = 800
-    n_cosmo = 10000
-    n_factors = np.array(utils.n_factor_arr)
+def generate_params_nested_LH(
+    n_cosmo: int,
+    n_factors,
+    n_params_vary: int,
+    tag_bounds: str,
+    seed: int,
+    overwrite: bool = False,
+):
+    """Generate nested LH bias params for a configurable design."""
+    n_factors = np.array(n_factors)
     m_layers = list(n_cosmo * n_factors)
-    
-    ### bias
-    n_params_vary = 4
-    tag_bounds = '_biasnest'
+
+    # bias
     param_names_vary = ['b1', 'b2', 'bs2', 'bl']
     param_names_ordered, bounds_dict, fiducial_dict = define_LH_bias(tag_bounds=tag_bounds)
     
