@@ -21,11 +21,14 @@ import compute_statistics as cs
 
 
 def main():
-    #run_dens()
+    #run_density_to_mesh()
     run_tracer()
 
 
-def run_dens():
+def run_density_to_mesh():
+    '''
+    Process matter density field to mesh. (Do once per simulation, on the server with the sims.)
+    '''
     data_mode = 'shame'
     box_size_mock = 1024.0
     cosmo = utils.get_cosmo(utils.cosmo_dict_shame)
@@ -45,8 +48,8 @@ def run_tracer():
     Main function to process SHAMe catalog and compare with muchisimocks data.
     """
     # Configuration
-    #tag_mock = '_nbar0.00011'  
-    tag_mock = '_nbar0.00022'  
+    tag_mock = '_nbar0.00011'  
+    #tag_mock = '_nbar0.00022'  
     #tag_mock = '_nbar0.00054'  
     #tag_mock = '_An1_deconvolve'
     #tag_mock = '_An1_orig'
@@ -68,10 +71,10 @@ def run_tracer():
         raise ValueError(f"tag_mock {tag_mock} not recognized!")
     
     data_mode = 'shame'
-    #statistics = ['pk', 'bispec']
-    statistics = ['pgm']
+    statistics = ['pk', 'pgm', 'bispec']
+    #statistics = ['pgm']
     #statistics = ['pk']
-    overwrite = True
+    overwrite = False
     
     save_indiv_phases = True  # Whether to save individual phase statistics
     

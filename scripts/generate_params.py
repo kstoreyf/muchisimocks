@@ -44,15 +44,16 @@ def generate_params_LH():
     ### bias
     bounds_type = 'bias'
 
-    #n_samples = 1
-    #seed = 42
-    #n_params_vary = 0
+    n_samples = 1
+    seed = 42
+    n_params_vary = 0
     #tag_bounds = '_biasshame'
+    tag_bounds = '_biasshamebl0'
 
-    n_samples = 1000
-    seed = 53
-    n_params_vary = 4
-    tag_bounds = '_biascoverage'
+    # n_samples = 1000
+    # seed = 53
+    # n_params_vary = 4
+    # tag_bounds = '_biascoverage'
 
 
     
@@ -277,8 +278,10 @@ def define_LH_bias(tag_bounds='_biasnest'):
                     'bl'   :  [-10.0, 10.0],
                 }
 
-    if 'shame' in tag_bounds:
-        fiducial_dict = utils.bias_dict_shame_nbar00022 #fiducial number density
+    if tag_bounds=='_biasshame':
+        fiducial_dict = utils.bias_dict_shame['_nbar0.00022']  # fiducial number density
+    elif tag_bounds=='_biasshamebl0':
+        fiducial_dict = utils.bias_dict_shame['_nbar0.00022_bl0']
     else:
         fiducial_dict = {'b1'     :  1.0,
                         'b2'    :  0.0,

@@ -26,8 +26,8 @@ def main():
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
     for statistics in stat_arr:
         for n_train in n_train_arr:
-            generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
             #generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
     #generate_runlike_config(overwrite=overwrite)
     
@@ -43,7 +43,8 @@ def generate_train_config(dir_config='../configs/configs_train',
     tag_biasparams = '_biasnest_p4_n320000'
     tag_noise = None
     tag_Anoise = None
-    tag_mask = ''
+    #tag_mask = ''
+    tag_mask = '_kb0.25'
     bx = 1 # bx is bias parameters per cosmo (1x, 2x, 4x, 8x, 16x, 32x)
 
     # running inferece params
@@ -63,14 +64,15 @@ def generate_train_config(dir_config='../configs/configs_train',
     tag_data = '_'+data_mode + tag_stats + tag_mask + tag_paramsall
     
     # build tag
+    # TODO - check this when doing sweeps!
     tag_inf = tag_data
     if reparameterize:
         tag_inf += '_rp'
-    tag_inf_train = f'_bx{bx}_ntrain{n_train}'
-    tag_inf += tag_inf_train
+    tag_inf_num = f'_bx{bx}_ntrain{n_train}'
+    tag_inf += tag_inf_num
     if run_mode == 'sweep':
         tag_inf += f'_sweep{tag_sweep}'
-        sweep_name = tag_inf_train
+        sweep_name = tag_inf_num
     elif run_mode == 'best':
         # if want best, neeed the sweep name to match sweep,
         # but new tag_inf will be best
@@ -78,7 +80,7 @@ def generate_train_config(dir_config='../configs/configs_train',
         sweep_name = tag_data
         if reparameterize:
             sweep_name += '_rp'
-        sweep_name += f'_ntrain{n_train_sweep}_sweep{tag_sweep}'
+        sweep_name += f'{tag_inf_num}_sweep{tag_sweep}'
         tag_inf += f'_best{tag_sweep}'
     elif run_mode == 'single':
         sweep_name = None
@@ -131,7 +133,7 @@ def generate_test_config(dir_config='../configs/configs_test',
     tag_noise = None
     tag_Anoise = None
     #tag_mask = '_kb0.25'
-    bx=32
+    bx=4
     tag_mask = ''
 
     reparameterize = True

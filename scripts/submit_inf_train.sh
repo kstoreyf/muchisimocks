@@ -3,10 +3,10 @@
 #n_train_arr=(500 1000 2000 4000 6000 8000 10000)
 n_train_arr=(10000)
 #tag_stats_arr=("_pk" "_bispec" "_pk_bispec") 
-#tag_stats_arr=("_pk") 
+tag_stats_arr=("_pk") 
 #tag_stats_arr=("_bispec" "_pk_bispec") 
 #tag_stats_arr=("_pk_bispec")
-tag_stats_arr=("_pk_pgm")
+#tag_stats_arr=("_pk_pgm")
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_stats_arr=("_pgm")
 #tag_stats_arr=("_pgm" "_pk_pgm" "_pk_bispec_pgm") 
@@ -19,8 +19,8 @@ for n_train in "${n_train_arr[@]}"; do
         bx=1
         tag_noise=""
         tag_Anoise=""   
-        tag_mask=""
-        #tag_mask="_kb0.25"
+        #tag_mask=""
+        tag_mask="_kb0.25"
         tag_data_train="_muchisimocks${tag_stats}${tag_mask}${tag_params}${tag_biasparams}${tag_noise}${tag_Anoise}"
         #tag_rp=""
         tag_rp="_rp"

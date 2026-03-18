@@ -433,14 +433,9 @@ def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
                 kname = 'sigma8_cold'
             param_dict[kname] = v
 
-        if tag_mock == '_nbar0.00011':
-            param_dict.update(utils.bias_dict_shame_nbar00011)
-        elif tag_mock == '_nbar0.00022':
-            param_dict.update(utils.bias_dict_shame_nbar00022)
-        elif tag_mock == '_nbar0.00054':
-            param_dict.update(utils.bias_dict_shame_nbar00054)
-        else:
+        if tag_mock not in utils.bias_dict_shame:
             raise ValueError(f"tag_mock {tag_mock} not recognized for shame OOD data!")
+        param_dict.update(utils.bias_dict_shame[tag_mock])
         return param_dict
     else:
         raise ValueError(f"Data mode {data_mode} not recognized!")
@@ -868,9 +863,8 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
     if os.path.exists(dir_statistics):
         mode_precomputed = True
     else:
-        if statistic == 'pk' or statistic == 'pklin':
+        if statistic in ('pk', 'pklin', 'pgm'):
             stat_name = 'pnn'
-            # this was outside the if before, check nothing broke??
             dir_statistics = get_dir_statistics(stat_name, tag_params, None)
         mode_precomputed = False
     
@@ -986,12 +980,18 @@ def _process_precomputed_cosmology(idx_LH, statistic, dir_statistics,
         idx_noise = idxs_noise[i] if idxs_noise is not None else None
         
         # Load precomputed data
-        if statistic == 'pk' or statistic == 'pgm':
+        if statistic == 'pk':
             k_loaded, stat, error, pk_obj = load_pk(fn_stat)
             if k is None:
                 k = k_loaded
             if return_pk_objs:
                 objs.append(pk_obj)
+        elif statistic == 'pgm':
+            k_loaded, stat, error, pgm_obj = load_pgm(fn_stat)
+            if k is None:
+                k = k_loaded
+            if return_pk_objs:
+                objs.append(pgm_obj)
         elif statistic == 'bispec':
             k_loaded, stat, error, bispec_obj = load_bispec(fn_stat, n_grid=128)
             if k is None:
@@ -1068,11 +1068,13 @@ def _process_pnn_cosmology(idx_LH, statistic, stat_name, dir_statistics,
         bias_params_dict.update(biasparams_dict_fixed)
         bias_params = [bias_params_dict[bpn] for bpn in utils.biasparam_names_ordered]
         
-        # Convert pnn to pk
+        # Convert pnn to pk or pgm
         if statistic == 'pk':
             stat = utils.pnn_to_pk(pnn_obj, bias_params, pk_type='pk')
         elif statistic == 'pklin':
             stat = utils.pnn_to_pk(pnn_obj, bias_params, pk_type='pk_theory_lin')
+        elif statistic == 'pgm':
+            stat = utils.pnn_to_pgm(pnn_obj, bias_params, pk_type='pk')
         else:
             raise ValueError(f"Statistic {statistic} not supported for pnn mode")
         
@@ -1089,7 +1091,11 @@ def _process_pnn_cosmology(idx_LH, statistic, stat_name, dir_statistics,
         indices.append((idx_LH, idx_bias, idx_noise))
         
         if return_pk_objs:
-            objs.append(pnn_obj)  # Could create a modified object here if needed
+            if statistic == 'pgm':
+                pgm_obj = {'k': k, 'pgm': stat, 'pgm_gaussian_error': np.zeros_like(stat)}
+                objs.append(pgm_obj)
+            else:
+                objs.append(pnn_obj)
     
     return k, stats, errors, indices, objs
 

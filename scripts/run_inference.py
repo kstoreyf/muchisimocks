@@ -226,7 +226,6 @@ def test_likefree_inference(config, overwrite=False):
     idxs_obs = config["idxs_obs"]
     #idxs_obs = np.arange(10)
     #idxs_obs = [0,1,2]
-    kwargs_data_test = config["kwargs_data_test"]
     tag_params_test = config["tag_params_test"]
     tag_biasparams_test = config["tag_biasparams_test"]
     tag_noise_test = config.get("tag_noise_test", None) 
@@ -235,9 +234,9 @@ def test_likefree_inference(config, overwrite=False):
     tag_data_test = config["tag_data_test"]
     tag_inf_train = config["tag_inf_train"]
     sweep_name = config["sweep_name"]
-    #n_test_eval = config.get("n_test_eval", None)
-    print("BEWARNED: manually setting n_test_eval to 100")
-    n_test_eval = 100
+    n_test_eval = config.get("n_test_eval", None)
+    #print("BEWARNED: manually setting n_test_eval to 100")
+    #n_test_eval = 100
     
     if evaluate_mean:
         tag_test = f'{tag_data_test}_mean'
@@ -271,7 +270,7 @@ def test_likefree_inference(config, overwrite=False):
                                       tag_noise=tag_noise_test,
                                       tag_Anoise=tag_Anoise_test,
                                       tag_data=tag_data_train, #this goes to mask
-                                      kwargs=kwargs_data_test)
+                                      )
 
     param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams, tag_Anoise=tag_Anoise)
 
@@ -409,7 +408,6 @@ def run_likelihood_inference(config):
     tag_inf = config['tag_inf']
     cosmo_param_names_vary = config.get('cosmo_param_names_vary', [])
     bias_param_names_vary = config.get('bias_param_names_vary', [])
-    kwargs_data = config.get('kwargs_data', {})
     assert len(statistics)==1 and statistics[0]=='pk', "Currently only pk is supported for likelihood inference"
 
     if evaluate_mean:
@@ -421,7 +419,7 @@ def run_likelihood_inference(config):
                               tag_params, tag_biasparams, 
                               tag_Anoise=tag_Anoise,
                               tag_data=tag_data, 
-                              kwargs=kwargs_data)
+                              )
 
     # for now only pk implemented, so just take first
     k = k[0]

@@ -119,9 +119,14 @@ cosmo_dict_shame = {
 # b2_pb = b2_measured/2
 # bs2_pb = b_s2_measured/2
 # Here measured means the one you get in your posterior"
-bias_dict_shame_nbar00011 = {'b1': 0.52922445, 'b2': 0.13816352*2, 'bs2': -0.21806094*2, 'bl': -1.0702721}
-bias_dict_shame_nbar00022 = {'b1': 0.47410742, 'b2': 0.06350746*2, 'bs2': -0.16940883*2, 'bl': -0.82443643}
-bias_dict_shame_nbar00054 = {'b1': 0.40209658, 'b2': -0.00958755*2, 'bs2': -0.09669132*2, 'bl': -0.79150708}
+bias_dict_shame = {
+    '_nbar0.00011': {'b1': 0.52922445, 'b2': 0.13816352*2, 'bs2': -0.21806094*2, 'bl': -1.0702721},
+    '_nbar0.00022': {'b1': 0.47410742, 'b2': 0.06350746*2, 'bs2': -0.16940883*2, 'bl': -0.82443643},
+    '_nbar0.00054': {'b1': 0.40209658, 'b2': -0.00958755*2, 'bs2': -0.09669132*2, 'bl': -0.79150708},
+    '_nbar0.00011_bl0': {'b1': 0.52922445, 'b2': 0.13816352*2, 'bs2': -0.21806094*2, 'bl': 0.0},
+    '_nbar0.00022_bl0': {'b1': 0.47410742, 'b2': 0.06350746*2, 'bs2': -0.16940883*2, 'bl': 0.0},
+    '_nbar0.00054_bl0': {'b1': 0.40209658, 'b2': -0.00958755*2, 'bs2': -0.09669132*2, 'bl': 0.0},
+}
 
 cosmo_param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns']
 biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl'] 
@@ -668,13 +673,22 @@ def pnn_to_pk(pnn, bias_params, return_cross=False, pk_type='pk'):
         fac = 2 if prod[i, 0] != prod[i, 1] else 1
         pgal_auto += bias_params_extended[prod[i, 0]] * bias_params_extended[prod[i, 1]] * fac * pnn[i][pk_type]
         
-    if return_cross:
-        # TODO check this
-        pks = [pnn[i]['pk'] for i in range(5)]
-        pgal_cross = np.dot(bias_params_extended, pks)
-        return pgal_auto, pgal_cross
-    else:
-        return pgal_auto
+    return pgal_auto
+
+
+def pnn_to_pgm(pnn, bias_params, pk_type='pk'):
+    """
+    Compute galaxy-matter cross power P_gm from PNN, matching compute_pgm() which uses matter = bias_terms_eul[1].
+    P_gm = <tracer, field_1> = P_01 + b1*P_11 + b2*P_21 + bs2*P_31 + bl*P_41.
+    PNN indices for (i,1) with i=0..4: 1, 5, 6, 7, 8.
+    """
+    message = 'Please, pass a valid bias array, with b1, b2, bs2, bl'
+    assert len(bias_params) == 4, message
+    bias_params_extended = np.concatenate(([1], bias_params))
+    # PNN order: (0,0),(0,1),(0,2),(0,3),(0,4),(1,1),(1,2),(1,3),(1,4),...
+    pnn_idx_pgm = [1, 5, 6, 7, 8]
+    pks_cross = [pnn[i][pk_type] for i in pnn_idx_pgm]
+    return np.dot(bias_params_extended, pks_cross)
 
 
 # used by scripts/generate_emuPks.py, generate_params_lh()
