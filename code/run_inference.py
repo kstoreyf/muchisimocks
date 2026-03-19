@@ -20,6 +20,28 @@ import data_loader
 import generate_params as genp
 
 
+def _build_tags_mask(statistics, config) -> list[str]:
+    """
+    Require `tags_mask` to be provided in the config.
+
+    `tags_mask` must be a list of strings with length == len(statistics),
+    aligned by index (tags_mask[i] applies to statistics[i]).
+    """
+    if "tags_mask" not in config:
+        raise KeyError("Config must include `tags_mask` (a list aligned with `statistics`).")
+
+    tags_mask = config["tags_mask"]
+    if isinstance(tags_mask, str):
+        raise TypeError("`tags_mask` must be a list (not a single string).")
+
+    tags_mask = list(tags_mask)
+    if len(tags_mask) != len(statistics):
+        raise ValueError(
+            f"tags_mask must have same length as statistics. Got {len(tags_mask)} vs {len(statistics)}."
+        )
+    return tags_mask
+
+
 def main():
     
     parser = argparse.ArgumentParser(description="Run inference with config files.")
@@ -78,9 +100,9 @@ def train_likefree_inference(config, overwrite=False):
     tag_noise = config.get("tag_noise", None)  # noise parameters
     run_mode = config["run_mode"]
     sweep_name = config["sweep_name"]
-    tag_data = config["tag_data"]
     tag_inf = config["tag_inf"]
     bx = config.get("bx", None)
+    tags_mask = _build_tags_mask(statistics, config)
 
     dir_sbi = f'{dir_results}/results_sbi/sbi{tag_inf}'
     fn_posterior = f"{dir_sbi}/posterior.p"
@@ -96,7 +118,7 @@ def train_likefree_inference(config, overwrite=False):
                 data_loader.load_data(data_mode, statistics, 
                                       tag_params, tag_biasparams,
                                       tag_noise=tag_noise,
-                                      tag_data=tag_data,
+                                      tags_mask=tags_mask,
                                       bx=bx)
     
     # turn parameters into nice theta for training
@@ -236,6 +258,7 @@ def test_likefree_inference(config, overwrite=False):
     tag_inf_train = config["tag_inf_train"]
     sweep_name = config["sweep_name"]
     n_test_eval = config.get("n_test_eval", None)
+    tags_mask = _build_tags_mask(statistics, config)
     #print("BEWARNED: manually setting n_test_eval to 100")
     #n_test_eval = 100
     
@@ -269,7 +292,7 @@ def test_likefree_inference(config, overwrite=False):
                 data_loader.load_data(data_mode, statistics,
                                       tag_params_test, tag_biasparams_test,
                                       tag_noise=tag_noise_test,
-                                      tag_data=tag_data_train, #this goes to mask
+                                      tags_mask=tags_mask,
                                       )
 
     param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams)
@@ -332,6 +355,7 @@ def test_likefree_inference_ood(config, overwrite=False):
     tag_mock = config['tag_mock']
     tag_data_test = config["tag_data_test"]
     n_test_eval = config.get("n_test_eval", None)
+    tags_mask = _build_tags_mask(statistics, config)
     
     if evaluate_mean:
         tag_test = f'{tag_data_test}_mean'
@@ -356,7 +380,7 @@ def test_likefree_inference_ood(config, overwrite=False):
     print(statistics, tag_params, tag_biasparams)
                 
     # tag_data_train goes to mask, NOTE this could be structured more clearly...
-    k, y, y_err = data_loader.load_data_ood(data_mode_test, statistics, tag_mock, tag_data=tag_data_train)
+    k, y, y_err = data_loader.load_data_ood(data_mode_test, statistics, tag_mock, tags_mask=tags_mask)
 
     param_names_train = data_loader.get_param_names(tag_params=tag_params, tag_biasparams=tag_biasparams)
 
@@ -402,7 +426,6 @@ def run_likelihood_inference(config):
     statistics = config['statistics']
     tag_params = config['tag_params']
     tag_biasparams = config['tag_biasparams']
-    tag_data = config.get('tag_data', None)
     tag_inf = config['tag_inf']
     cosmo_param_names_vary = config.get('cosmo_param_names_vary', [])
     bias_param_names_vary = config.get('bias_param_names_vary', [])
@@ -412,10 +435,12 @@ def run_likelihood_inference(config):
         assert 'p0' in tag_params, "If you're evaluating the mean, don't you want fixed cosmo?"
     
     # Load data and parameters
+    tags_mask = _build_tags_mask(statistics, config)
+
     k, y, y_err, idxs_params, params_df, cosmo_param_dict_fixed, biasparams_df, bias_param_dict_fixed, random_ints, random_ints_bias = \
         data_loader.load_data(data_mode, statistics,
-                              tag_params, tag_biasparams, 
-                              tag_data=tag_data, 
+                              tag_params, tag_biasparams,
+                              tags_mask=tags_mask,
                               )
 
     # for now only pk implemented, so just take first

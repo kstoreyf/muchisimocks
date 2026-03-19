@@ -251,24 +251,36 @@ def get_posterior_maxes(samples_equal, param_names):
 
 def get_samples(idx_obs, inf_method, tag_inf, tag_test='', tag_obs=None):
     """Load posterior samples for observation idx_obs (mn, sbi, emcee, dynesty, or fisher)."""
-    if inf_method == 'mn':
-        return get_samples_mn(idx_obs, tag_inf, tag_test=tag_test)
-    elif inf_method == 'sbi':
-        return get_samples_sbi(idx_obs, tag_inf, tag_test=tag_test)
-    elif inf_method == 'emcee':
-        return get_samples_emcee(idx_obs, tag_inf, tag_obs=tag_obs)
-    elif inf_method == 'dynesty':
-        return get_samples_dynesty(idx_obs, tag_inf, tag_obs=tag_obs)
-    elif inf_method == 'fisher':
-        return get_samples_fisher(idx_obs, tag_inf, tag_test=tag_test)
-    else:
-        raise ValueError(f'Method {inf_method} not recognized!')
+    try:
+        if inf_method == 'mn':
+            return get_samples_mn(idx_obs, tag_inf, tag_test=tag_test)
+        elif inf_method == 'sbi':
+            return get_samples_sbi(idx_obs, tag_inf, tag_test=tag_test)
+        elif inf_method == 'emcee':
+            return get_samples_emcee(idx_obs, tag_inf, tag_obs=tag_obs)
+        elif inf_method == 'dynesty':
+            return get_samples_dynesty(idx_obs, tag_inf, tag_obs=tag_obs)
+        elif inf_method == 'fisher':
+            return get_samples_fisher(idx_obs, tag_inf, tag_test=tag_test)
+        else:
+            raise ValueError(f'Method {inf_method} not recognized!')
+    except FileNotFoundError as e:
+        # Keep downstream callers (notebooks) readable: single-line message, no traceback.
+        fn = getattr(e, "filename", None)
+        fn_part = f": {fn}" if fn else f": {e}"
+        print(f"ERROR: missing samples (inf_method={inf_method}, tag_inf={tag_inf}, tag_test={tag_test}){fn_part}")
+        return np.array([]), np.array([], dtype=str)
         
 
 def get_moments_test_sbi(tag_inf, tag_test='', param_names=None):
     """Load SBI test posterior mean and covariances from saved samples."""
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
+    if not os.path.exists(fn_samples_test_pred):
+        # Some long-running runs save intermediate arrays as `_pred_inprogress.npy`.
+        fn_inprogress = f'{dir_sbi}/samples_test{tag_test}_pred_inprogress.npy'
+        if os.path.exists(fn_inprogress):
+            fn_samples_test_pred = fn_inprogress
     print(f"fn_samples_test_pred = {fn_samples_test_pred}")
     samples_arr = np.load(fn_samples_test_pred)
     param_names_all = np.loadtxt(f'{dir_sbi}/param_names.txt', dtype=str)
@@ -317,6 +329,10 @@ def get_samples_mn(idx_obs, tag_inf, tag_test=''):
 def get_samples_sbi(idx_obs, tag_inf, tag_test=''):
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
+    if not os.path.exists(fn_samples_test_pred):
+        fn_inprogress = f'{dir_sbi}/samples_test{tag_test}_pred_inprogress.npy'
+        if os.path.exists(fn_inprogress):
+            fn_samples_test_pred = fn_inprogress
     print(f"fn_samples = {fn_samples_test_pred}")
     samples_arr = np.load(fn_samples_test_pred)
     param_names = np.loadtxt(f'{dir_sbi}/param_names.txt', dtype=str)

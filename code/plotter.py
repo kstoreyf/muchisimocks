@@ -522,6 +522,229 @@ def plot_comp_mean_subplots(
     return None
 
 
+def plot_comp_mean_subplots_grid(
+    statistics_arr,
+    theta_pred_arr,
+    theta_true_arr,
+    covs_pred_arr,
+    param_names,
+    param_names_plot=None,
+    param_label_dict=None,
+    color_arr=None,
+    label_arr=None,
+    alpha=0.5,
+    N_plot=None,
+    unreparameterize=False,
+    title=None,
+    figsize=None,
+):
+    """
+    Plot predicted vs true (with vertical error bars) in a parameter grid.
+
+    Layout:
+    - rows: each entry of `statistics_arr`
+    - cols: each parameter in `param_names_plot`
+    """
+    # Handle default labels/colors
+    n_rows = len(statistics_arr)
+    if theta_pred_arr.ndim != 3 or theta_true_arr.ndim != 3:
+        raise ValueError(
+            "plot_comp_mean_subplots_grid expects theta_pred_arr/theta_true_arr with shape "
+            "[n_stats, n_samples, n_params]."
+        )
+    if covs_pred_arr.ndim != 4:
+        raise ValueError(
+            "plot_comp_mean_subplots_grid expects covs_pred_arr with shape "
+            "[n_stats, n_samples, n_params, n_params]."
+        )
+    if theta_pred_arr.shape[0] != n_rows or theta_true_arr.shape[0] != n_rows or covs_pred_arr.shape[0] != n_rows:
+        raise ValueError("plot_comp_mean_subplots_grid: statistics_arr length must match theta_pred_arr first dim.")
+
+    if param_names_plot is None:
+        param_names_plot = param_names
+    if param_label_dict is None:
+        param_label_dict = utils.param_label_dict
+
+    n_cols = len(param_names_plot)
+    if color_arr is None:
+        color_arr = ['salmon'] * n_rows
+    if label_arr is None:
+        label_arr = [None] * n_rows
+
+    # Handle unreparameterization (kept consistent with plot_comp_mean_subplots)
+    if unreparameterize:
+        params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
+        params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
+
+        if 'sigma8_cold' not in param_names:
+            print("Warning: unreparameterize=True but 'sigma8_cold' not in param_names. Skipping unreparameterization.")
+            unreparameterize = False
+
+        if unreparameterize:
+            theta_pred_arr = theta_pred_arr.copy()
+            theta_true_arr = theta_true_arr.copy()
+            covs_pred_arr = covs_pred_arr.copy()
+
+            idx_sigma8 = param_names.index('sigma8_cold')
+
+            param_names_new = param_names.copy()
+            reparam_to_orig = {}
+            for i, pn in enumerate(param_names):
+                if pn.startswith('sigma8_cold_x_') or pn.startswith('sigma8_cold_sq_x_'):
+                    if pn.startswith('sigma8_cold_sq_x_'):
+                        orig_param_name = pn.replace('sigma8_cold_sq_x_', '')
+                    else:
+                        orig_param_name = pn.replace('sigma8_cold_x_', '')
+
+                    if orig_param_name in params_sigma8 or orig_param_name in params_sigma8_squared:
+                        reparam_to_orig[i] = orig_param_name
+                        param_names_new[i] = orig_param_name
+
+            # Convert reparameterized columns back to original
+            for r in range(n_rows):
+                sigma8_vals = theta_pred_arr[r][:, idx_sigma8]
+                sigma8_true_vals = theta_true_arr[r][:, idx_sigma8]
+
+                for reparam_idx, orig_param_name in reparam_to_orig.items():
+                    if orig_param_name in params_sigma8:
+                        theta_pred_arr[r][:, reparam_idx] = theta_pred_arr[r][:, reparam_idx] / sigma8_vals
+                        theta_true_arr[r][:, reparam_idx] = theta_true_arr[r][:, reparam_idx] / sigma8_true_vals
+                    elif orig_param_name in params_sigma8_squared:
+                        theta_pred_arr[r][:, reparam_idx] = theta_pred_arr[r][:, reparam_idx] / (sigma8_vals ** 2)
+                        theta_true_arr[r][:, reparam_idx] = theta_true_arr[r][:, reparam_idx] / (sigma8_true_vals ** 2)
+
+                # Update covariance matrices (diagonal + rough off-diagonal scaling)
+                for j in range(len(covs_pred_arr[r])):
+                    cov = covs_pred_arr[r][j].copy()
+                    sigma8_val = sigma8_vals[j]
+
+                    for reparam_idx, orig_param_name in reparam_to_orig.items():
+                        if orig_param_name in params_sigma8:
+                            cov[reparam_idx, reparam_idx] = cov[reparam_idx, reparam_idx] / (sigma8_val ** 2)
+                            for k in range(len(param_names)):
+                                if k != reparam_idx:
+                                    if k == idx_sigma8:
+                                        cov[reparam_idx, k] = 0
+                                        cov[k, reparam_idx] = 0
+                                    else:
+                                        cov[reparam_idx, k] = cov[reparam_idx, k] / sigma8_val
+                                        cov[k, reparam_idx] = cov[k, reparam_idx] / sigma8_val
+                        elif orig_param_name in params_sigma8_squared:
+                            cov[reparam_idx, reparam_idx] = cov[reparam_idx, reparam_idx] / (sigma8_val ** 4)
+                            for k in range(len(param_names)):
+                                if k != reparam_idx:
+                                    if k == idx_sigma8:
+                                        cov[reparam_idx, k] = 0
+                                        cov[k, reparam_idx] = 0
+                                    else:
+                                        cov[reparam_idx, k] = cov[reparam_idx, k] / (sigma8_val ** 2)
+                                        cov[k, reparam_idx] = cov[k, reparam_idx] / (sigma8_val ** 2)
+
+                    covs_pred_arr[r][j] = cov
+
+            param_names = param_names_new
+
+    idxs_plot = [param_names.index(pn) for pn in param_names_plot]
+    param_labels = [param_label_dict[pn] for pn in param_names_plot]
+
+    if figsize is None:
+        row_height = 3.5
+        figsize = (3 * n_cols, row_height * n_rows)
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    axes = np.array(axes).reshape(n_rows, n_cols)
+
+    row_labels = [utils.get_stat_label(statistics_arr[r]) for r in range(n_rows)]
+
+    for r in range(n_rows):
+        for c, pp in enumerate(idxs_plot):
+            ax = axes[r, c]
+
+            pred_vals = theta_pred_arr[r][:, pp]
+            true_vals = theta_true_arr[r][:, pp]
+
+            # Per-sample sqrt(diag(cov))
+            # covs_pred_arr[r]: [n_samples, n_params, n_params]
+            errs = np.sqrt(np.diagonal(covs_pred_arr[r], axis1=-2, axis2=-1))[:, pp]
+
+            mask = ~(np.isnan(pred_vals) | np.isnan(true_vals) | np.isnan(errs))
+            pred_vals_clean = pred_vals[mask]
+            true_vals_clean = true_vals[mask]
+            errs_clean = errs[mask]
+
+            if len(pred_vals_clean) == 0:
+                ax.axis('off')
+                continue
+
+            if N_plot is not None and len(pred_vals_clean) > N_plot:
+                idxs = np.random.choice(len(pred_vals_clean), size=N_plot, replace=False)
+                pred_vals_clean = pred_vals_clean[idxs]
+                true_vals_clean = true_vals_clean[idxs]
+                errs_clean = errs_clean[idxs]
+
+            label = label_arr[r] if label_arr is not None else None
+            color = color_arr[r] if color_arr is not None else 'salmon'
+
+            (line, _, _) = ax.errorbar(
+                true_vals_clean,
+                pred_vals_clean,
+                yerr=errs_clean,
+                fmt='o',
+                color=color,
+                label=label,
+                alpha=alpha,
+                markersize=3,
+                capsize=2,
+                capthick=1,
+            )
+
+            # 1:1 line
+            min_val = min(np.min(true_vals_clean), np.min(pred_vals_clean))
+            max_val = max(np.max(true_vals_clean), np.max(pred_vals_clean))
+            ax.plot([min_val, max_val], [min_val, max_val], 'k--', lw=1.5, alpha=0.7)
+
+            # Put parameter label in upper-left corner of each panel.
+            ax.text(
+                0.02,
+                0.95,
+                rf'{param_labels[c]}',
+                transform=ax.transAxes,
+                ha='left',
+                va='top',
+                fontsize=12,
+                fontweight='bold',
+            )
+            if r == n_rows - 1:
+                ax.set_xlabel(rf'True {param_labels[c]}', fontsize=12)
+            if c == 0:
+                ax.set_ylabel(rf'Predicted {param_labels[c]}', fontsize=12)
+
+            ax.set_aspect('equal', adjustable='box')
+
+    if title is not None:
+        fig.suptitle(title, fontsize=16, y=0.98)
+
+    # Tight layout first, then place row subtitles centered above each row.
+    plt.tight_layout(rect=[0, 0, 1, 0.97] if title is not None else None)
+    for r in range(n_rows):
+        pos_left = axes[r, 0].get_position()
+        pos_right = axes[r, -1].get_position()
+        x_center = 0.5 * (pos_left.x0 + pos_right.x1)
+        y_top = pos_left.y1 + 0.01
+        fig.text(
+            x_center,
+            y_top,
+            row_labels[r],
+            ha='center',
+            va='bottom',
+            fontsize=13,
+            fontweight='bold',
+        )
+
+    plt.show()
+    return fig, axes
+
+
 def plot_hists_var(theta_true_arr, theta_pred_arr, var_pred_arr, param_labels,
                    label_arr=None, color_arr=None, n_bins=20, xlim_auto=True,
                    alpha=0.5, histtype='bar', lw=2):
@@ -872,7 +1095,12 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             tag_test = ''
         else:
             tag_test = tags_test[i]
-        samples, param_names_samples = utils.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
+        samples, param_names_samples = utils.get_samples(
+            idx_obs,
+            inf_method,
+            tags_inf[i],
+            tag_test=tag_test,
+        )
         
         # Check which requested parameters are available in this chain
         available_params = [pn for pn in param_names if pn in param_names_samples]

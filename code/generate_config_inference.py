@@ -1,5 +1,6 @@
 import os
 import yaml
+from pathlib import Path
 
 import utils
 
@@ -8,34 +9,37 @@ Generates a YAML configuration file for inference.
 '''
 
 
+# Resolve config output directories relative to repo root.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CONFIGS_TRAIN_DIR = REPO_ROOT / "configs" / "configs_train"
+DEFAULT_CONFIGS_TEST_DIR = REPO_ROOT / "configs" / "configs_test"
+DEFAULT_CONFIGS_RUNLIKE_DIR = REPO_ROOT / "configs" / "configs_runlike"
+
+
 def main():
-    overwrite = False
-    #overwrite = True
-    #generate_train_config(overwrite=overwrite)
-    #stat_arr = [['bispec'], ['pk', 'bispec']]
-    #stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
-    #stat_arr = [['pgm']]
-    #stat_arr = [['pk', 'pgm']]
-    #stat_arr = [['pk', 'bispec', 'pgm']]
-    #stat_arr = [['pk']]
-    #stat_arr = [['bispec']]
-    stat_arr = [['pk', 'bispec'], ['pk', 'bispec', 'pgm']]
-    #stat_arr = [['pk', 'bispec']]
-    #stat_arr = [['pk'], ['pgm'], ['bispec'], ['pk', 'pgm'], ['pk', 'bispec'], ['pk', 'bispec', 'pgm']]
-    #stat_arr = [['pk'],  ['pk', 'pgm'], ['pk', 'bispec'], ['pk', 'bispec', 'pgm']]
+    overwrite = True
+    # Match commonly-used combinations in submit scripts.
+    stat_arr = [
+        ['pk'],
+        ['pk', 'pgm'],
+        ['pk', 'bispec'],
+        ['pk', 'bispec', 'pgm'],
+    ]
     n_train_arr = [10000]
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
+    bx_arr = [1, 4, 32]
     for statistics in stat_arr:
         for n_train in n_train_arr:
-            #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            for bx in bx_arr:
+                #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
+                generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
+                #generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
     #generate_runlike_config(overwrite=overwrite)
     
     
-def generate_train_config(dir_config='../configs/configs_train',
+def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
                           overwrite=False,
-                          statistics=['pk'], n_train=10000):
+                          statistics=['pk'], n_train=10000, bx=1):
     """
     Generates a YAML configuration file for training.
     """
@@ -47,7 +51,12 @@ def generate_train_config(dir_config='../configs/configs_train',
     tag_noise = '_noise_unit_p5_n10000'
     #tag_mask = ''
     tag_mask = '_kb0.25'
-    bx = 1 # bx is bias parameters per cosmo (1x, 2x, 4x, 8x, 16x, 32x)
+    # bx is bias parameters per cosmo (1x, 2x, 4x, 8x, 16x, 32x)
+
+    # tags_mask is aligned with `statistics` (same order).
+    # For now the only active mask is the k-bispec cutoff encoded by `_kb0.25`.
+    tags_mask = [tag_mask if stat == 'bispec' else '' for stat in statistics]
+    tag_masks = ''.join(tags_mask)
 
     # running inferece params
     reparameterize = True
@@ -63,7 +72,7 @@ def generate_train_config(dir_config='../configs/configs_train',
     tag_paramsall = tag_params + tag_biasparams
     if tag_noise is not None:
         tag_paramsall += tag_noise
-    tag_data = '_'+data_mode + tag_stats + tag_mask + tag_paramsall
+    tag_data = '_'+data_mode + tag_stats + tag_masks + tag_paramsall
     
     # build tag
     # TODO - check this when doing sweeps!
@@ -93,7 +102,7 @@ def generate_train_config(dir_config='../configs/configs_train',
         "tag_params": tag_params,
         "tag_biasparams": tag_biasparams,
         "tag_noise": tag_noise,
-        "tag_mask": tag_mask,
+        "tags_mask": tags_mask,
         "n_train": n_train,
         "bx": bx,
         "run_mode": run_mode,
@@ -117,9 +126,9 @@ def generate_train_config(dir_config='../configs/configs_train',
         print(f"Training config file written: {fn_config}")
 
 
-def generate_test_config(dir_config='../configs/configs_test',
+def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                          overwrite=False, 
-                         statistics=['pk'], n_train=10000):
+                         statistics=['pk'], n_train=10000, bx=4):
     """
     Generates a YAML configuration file for testing.
     """
@@ -130,13 +139,12 @@ def generate_test_config(dir_config='../configs/configs_test',
     
     ### train params
     tag_params = '_p5_n10000'
-    bx=4
-    #tag_biasparams = '_biasnest_p4_n320000'
-    #tag_noise = None
-    tag_biasparams = '_biasnoisenest_p9_n320000'
-    tag_noise = '_noise_unit_p5_n10000'
-    tag_mask = '_kb0.25'
-    #tag_mask = ''
+    tag_biasparams = '_biasnest_p4_n320000'
+    tag_noise = None
+    # tag_biasparams = '_biasnoisenest_p9_n320000'
+    # tag_noise = '_noise_unit_p5_n10000'
+    #tag_mask = '_kb0.25'
+    tag_mask = ''
 
     reparameterize = True
     # For loading a model trained with wandb sweep; best of that sweep will be used
@@ -157,23 +165,26 @@ def generate_test_config(dir_config='../configs/configs_test',
     ### settings for coverage test
     evaluate_mean = False
     tag_params_test = '_coverage_p5_n1000'
-    tag_biasparams_test = '_biasnoisecoverage_p9_n1000'
-    tag_noise_test = '_noise_unit_coverage_p5_n1000'
+    # tag_biasparams_test = '_biasnoisecoverage_p9_n1000'
+    # tag_noise_test = '_noise_unit_coverage_p5_n1000'
+    tag_biasparams_test = '_biascoverage_p4_n1000'
+    tag_noise_test = None
     
     # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
     tag_stats = f'_{"_".join(statistics)}'    
-    
-    # NOTE for now just using one tag_mask for train & test bc i think they must be the same
-    # but keep alert in case i need to change this later
+
+    tags_mask = [tag_mask if stat == 'bispec' else '' for stat in statistics]
+    tag_masks = ''.join(tags_mask)
+
     tag_paramsall = tag_params + tag_biasparams
     if tag_noise is not None:
         tag_paramsall += tag_noise
-    tag_data_train = '_'+data_mode + tag_stats + tag_mask + tag_paramsall
+    tag_data_train = '_'+data_mode + tag_stats + tag_masks + tag_paramsall
     
     tag_paramsall_test = tag_params_test + tag_biasparams_test
     if tag_noise_test is not None:
         tag_paramsall_test += tag_noise_test
-    tag_data_test = '_'+data_mode + tag_stats + tag_mask + tag_paramsall_test
+    tag_data_test = '_'+data_mode + tag_stats + tag_masks + tag_paramsall_test
 
     # build tag
     tag_inf_train = tag_data_train
@@ -203,7 +214,7 @@ def generate_test_config(dir_config='../configs/configs_test',
         "tag_params": tag_params,
         "tag_biasparams": tag_biasparams,
         "tag_noise": tag_noise,
-        "tag_mask": tag_mask,
+        "tags_mask": tags_mask,
         "tag_params_test": tag_params_test,
         "tag_biasparams_test": tag_biasparams_test,
         "tag_noise_test": tag_noise_test,
@@ -233,9 +244,9 @@ def generate_test_config(dir_config='../configs/configs_test',
         print(f"Testing config file written: {fn_config}")
         
         
-def generate_test_config_ood(dir_config='../configs/configs_test',
+def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                          overwrite=False, 
-                         statistics=['pk'], n_train=10000):
+                         statistics=['pk'], n_train=10000, bx=1):
     """
     Generates a YAML configuration file for testing.
     """
@@ -246,11 +257,8 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     
     ### train params
     tag_params = '_p5_n10000'
-    bx=1
-    tag_biasparams = '_biasnest_p4_n320000'
-    tag_noise = None
-    #tag_biasparams = '_biasnoisenest_p9_n320000'
-    #tag_noise = '_noise_unit_p5_n10000'
+    tag_biasparams = '_biasnoisenest_p9_n320000'
+    tag_noise = '_noise_unit_p5_n10000'
     tag_mask = '_kb0.25'
     #tag_mask = ''
 
@@ -272,11 +280,13 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     ### train tags
     # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
     tag_stats = f'_{"_".join(statistics)}'    
+    tags_mask = [tag_mask if stat == 'bispec' else '' for stat in statistics]
+    tag_masks = ''.join(tags_mask)
     
     tag_paramsall = tag_params + tag_biasparams
     if tag_noise is not None:
         tag_paramsall += tag_noise
-    tag_data_train = '_'+data_mode + tag_stats + tag_mask + tag_paramsall
+    tag_data_train = '_'+data_mode + tag_stats + tag_masks + tag_paramsall
 
     # build tag
     tag_inf_train = tag_data_train
@@ -294,9 +304,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
         sweep_name = None
     
     ### test tags
-    # NOTE for now just using one tag_mask for train & test bc i think they must be the same
-    # but keep alert in case i need to change this later
-    tag_data_test = '_'+data_mode_test + tag_stats + tag_mask + tag_mock
+    tag_data_test = '_'+data_mode_test + tag_stats + tag_masks + tag_mock
     
     if evaluate_mean:
         tag_mean = '_mean'
@@ -311,7 +319,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
         "tag_params": tag_params,
         "tag_biasparams": tag_biasparams,
         "tag_noise": tag_noise,
-        "tag_mask": tag_mask,
+        "tags_mask": tags_mask,
         "n_train": n_train,
         "bx": bx,
         "evaluate_mean": evaluate_mean,
@@ -339,7 +347,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
         print(f"Testing config file written: {fn_config}")
 
 
-def generate_runlike_config(dir_config='../configs/configs_runlike', overwrite=False):
+def generate_runlike_config(dir_config=str(DEFAULT_CONFIGS_RUNLIKE_DIR), overwrite=False):
     """
     Generates a YAML configuration file for likelihood-based inference.
     """

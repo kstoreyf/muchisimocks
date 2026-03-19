@@ -23,11 +23,16 @@ def _get_bias_param_cols(biasparams_df):
 
 def load_data(data_mode, statistics, tag_params, tag_biasparams,
               tag_noise=None,
-              tag_data=None,
+              tags_mask=None,
               kwargs={}, bx=None, n_cosmo_max=None):
     
     k, y, y_err = [], [], []
-    for statistic in statistics:
+    if tags_mask is None:
+        tags_mask = [''] * len(statistics)
+    if len(tags_mask) != len(statistics):
+        raise ValueError(f"Expected tags_mask length {len(statistics)}, got {len(tags_mask)}.")
+
+    for i_stat, statistic in enumerate(statistics):
         # idxs_params should be the same for all so will just grab last one
         if data_mode == 'muchisimocks':
             k_i, y_i, y_err_i, idxs_params = load_data_muchisimocks(statistic,
@@ -41,11 +46,8 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
         else:
             raise ValueError(f"Data mode {data_mode} not recognized!")
         print(f"Loaded {statistic} data with shape {y_i.shape}")
-        if tag_data is None:
-            print("No tag_data provided, so not masking data")
-        else:
-            k_i, y_i, y_err_i = mask_data(statistic, tag_data, k_i, y_i, y_err_i)
-            print(k_i.shape, y_i.shape, y_err_i.shape)
+        k_i, y_i, y_err_i = mask_data(statistic, tags_mask[i_stat], k_i, y_i, y_err_i)
+        print(k_i.shape, y_i.shape, y_err_i.shape)
 
         k.append(k_i)
         y.append(y_i)
@@ -55,23 +57,24 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
     return k, y, y_err, idxs_params, params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
 
 
-def load_data_ood(data_mode, statistics, tag_mock, tag_data=None, kwargs=None):
-    """Load OOD data (e.g. shame) for given statistics and tag_mock; optional tag_data mask."""
+def load_data_ood(data_mode, statistics, tag_mock, tags_mask=None, kwargs=None):
+    """Load OOD data (e.g. shame) for given statistics and tag_mock; tags_mask controls bin masking."""
     if kwargs is None:
         kwargs = {}
+    if tags_mask is None:
+        tags_mask = [''] * len(statistics)
+    if len(tags_mask) != len(statistics):
+        raise ValueError(f"Expected tags_mask length {len(statistics)}, got {len(tags_mask)}.")
+
     k, y, y_err = [], [], []
-    for statistic in statistics:
+    for i_stat, statistic in enumerate(statistics):
         # idxs_params should be the same for all so will just grab last one
         if data_mode == 'shame':
             k_i, y_i, y_err_i = load_data_shame(statistic, tag_mock, **kwargs)
         else:
             raise ValueError(f"Data mode {data_mode} not recognized!")
         print(f"Loaded {statistic} data with shape {y_i.shape}")
-        if tag_data is None:
-            print("No tag_data provided, so not masking data")
-        else:
-            # tag_data is from training data!
-            k_i, y_i, y_err_i = mask_data(statistic, tag_data, k_i, y_i, y_err_i)
+        k_i, y_i, y_err_i = mask_data(statistic, tags_mask[i_stat], k_i, y_i, y_err_i)
 
         k.append(k_i)
         y.append(y_i)
@@ -174,14 +177,13 @@ def get_bias_indices_for_idx(idx_mock, modecosmo='lh', params_df=None, biasparam
     return idxs_bias
 
 
-def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
-    if statistic == 'pk':
-        mask = get_Pk_mask(tag_data, tag_mask=tag_mask, k=k, Pk=y)
+def mask_data(statistic, tag_mask, k, y, y_err):
+    if statistic in ('pk', 'pklin'):
+        mask = get_Pk_mask(tag_mask=tag_mask, k=k)
     elif statistic == 'pgm':
-        mask = get_Pgm_mask(tag_data, tag_mask=tag_mask, k=k, Pgm=y)
+        mask = get_Pgm_mask(tag_mask=tag_mask, k=k)
     elif statistic == 'bispec':
-        print(k.shape, y.shape)
-        mask = get_bispec_mask(tag_data, tag_mask=tag_mask, k=k, bispec=y)
+        mask = get_bispec_mask(tag_mask=tag_mask, k=k, bispec=y)
     else:
         print("No mask for this statistic, using all data")
         mask = [True]*y.shape[-1]
@@ -205,104 +207,83 @@ def mask_data(statistic, tag_data, k, y, y_err, tag_mask=''):
 
 # TODO make mask saving more robust
 # used to both remove nonpositive data, and to select certain k_bins
-def get_Pk_mask(tag_data, tag_mask='', k=None, Pk=None):
+def get_Pk_mask(tag_mask='', k=None):
     dir_masks = '../data/masks'
-    # if tag_mask is None:
-    #     tag_mask = ''
-    # need tag_data bc we're checking for any negatives and that depends on the data!
-    fn_mask = f'{dir_masks}/mask_pk{tag_data}{tag_mask}.txt'
-    print(f"fn_mask: {fn_mask}")
+    # Mask depends only on the intended bin selection (tag_mask), not on data values.
+    fn_mask = f'{dir_masks}/mask_pk{tag_mask}.txt'
     if os.path.exists(fn_mask):
-        print(f"Loading from {fn_mask} (already exists)")
         return np.loadtxt(fn_mask, dtype=bool)
     else:
-        assert k is not None, "must pass either Pk or k, if mask doesn't yet exist!"
-        
-        # Start with base mask: keep positive values if Pk provided, otherwise keep all
-        if Pk is not None:
-            mask = np.all(Pk > 0, axis=0)
-        else:
-            print("No Pk provided and no mask exists, using all bins")
-            mask = np.ones(len(k), dtype=bool)
+        assert k is not None, "must pass k, if mask doesn't yet exist!"
+        k_arr = np.asarray(k)
+        mask = np.ones(k_arr.shape[-1], dtype=bool)
         # Apply kmax cutoff if specified
         if 'kmaxpk' in tag_mask or 'kp' in tag_mask:
             match = re.search(r'(?:kmaxpk|kp)([\d.]+)', tag_mask)
             if match:
                 kmax = float(match.group(1))
-                mask = mask & (k < kmax)
+                if k_arr.ndim == 1:
+                    mask = mask & (k_arr < kmax)
+                elif k_arr.ndim == 2:
+                    mask = mask & np.all(k_arr < kmax, axis=0)
+                else:
+                    raise ValueError(f"Unexpected k shape for pk masking: {k_arr.shape}")
             else:
                 raise ValueError(f"Could not extract kmax value from tag_mask: {tag_mask}")
-        
-        print(f"Saving mask to {fn_mask}")
+
         np.savetxt(fn_mask, mask.astype(int), fmt='%i')
-    print(f"Mask masks out {np.sum(~mask)} Pk bins")
     return mask
 
 
-def get_Pgm_mask(tag_data, tag_mask='', k=None, Pgm=None):
+def get_Pgm_mask(tag_mask='', k=None):
     dir_masks = '../data/masks'
-    # if tag_mask is None:
-    #     tag_mask = ''
-    # need tag_data bc we're checking for any negatives and that depends on the data!
-    fn_mask = f'{dir_masks}/mask_pgm{tag_data}{tag_mask}.txt'
-    print(f"fn_mask: {fn_mask}")
+    fn_mask = f'{dir_masks}/mask_pgm{tag_mask}.txt'
     if os.path.exists(fn_mask):
-        print(f"Loading from {fn_mask} (already exists)")
         return np.loadtxt(fn_mask, dtype=bool)
     else:
         assert k is not None, "must pass either Pk or k, if mask doesn't yet exist!"
-        
-        # Start with base mask: remove zero values if Pgm provided (can be neg), otherwise keep all
-        if Pgm is not None:
-            # remove zero values
-            tol = 1e-6
-            mask = np.all(np.abs(Pgm)>tol, axis=0)
-        else:
-            print("No Pgm provided and no mask exists, using all bins")
-            mask = np.ones(len(k), dtype=bool)
+        k_arr = np.asarray(k)
+        mask = np.ones(k_arr.shape[-1], dtype=bool)
         # Apply kmax cutoff if specified
         if 'kmaxpgm' in tag_mask or 'kpgm' in tag_mask:
             match = re.search(r'(?:kmaxpgm|kpgm)([\d.]+)', tag_mask)
             if match:
                 kmax = float(match.group(1))
-                mask = mask & (k < kmax)
+                if k_arr.ndim == 1:
+                    mask = mask & (k_arr < kmax)
+                elif k_arr.ndim == 2:
+                    mask = mask & np.all(k_arr < kmax, axis=0)
+                else:
+                    raise ValueError(f"Unexpected k shape for pgm masking: {k_arr.shape}")
             else:
                 raise ValueError(f"Could not extract kmax value from tag_mask: {tag_mask}")
-        
-        print(f"Saving mask to {fn_mask}")
+
         np.savetxt(fn_mask, mask.astype(int), fmt='%i')
-    print(f"Mask masks out {np.sum(~mask)} Pgm bins")
     return mask
 
 
 
-def get_bispec_mask(tag_data, tag_mask='', k=None, bispec=None):
+def get_bispec_mask(tag_mask='', k=None, bispec=None):
     dir_masks = '../data/masks'
-    #fn_mask = f'{dir_masks}/mask{tag_data}{tag_mask}.txt'
-    fn_mask = f'{dir_masks}/mask_bispec{tag_data}{tag_mask}.txt'
-    if tag_data is None:
-        return np.ones(k.shape[1], dtype=int)
-    print(f"fn_mask: {fn_mask}")
+    fn_mask = f'{dir_masks}/mask_bispec{tag_mask}.txt'
     if os.path.exists(fn_mask):
-        print(f"Loading from {fn_mask} (already exists)")
         return np.loadtxt(fn_mask, dtype=bool)
     else:
-        if 'kmaxbispec' in tag_data or 'kb' in tag_data:
-            match = re.search(r'(?:kmaxbispec|kb)([\d.]+)', tag_data)
+        if 'kmaxbispec' in tag_mask or 'kb' in tag_mask:
+            match = re.search(r'(?:kmaxbispec|kb)([\d.]+)', tag_mask)
             if match:
                 kmax = float(match.group(1))
             else:
-                raise ValueError(f"Could not extract kmax value from tag_data: {tag_data}")
-            # print(kmax)
-            # print(np.array(k).T)
+                raise ValueError(f"Could not extract kmax value from tag_mask: {tag_mask}")
             mask = np.all(np.array(k).T<kmax, axis=1)
         else:
             assert k is not None, "must pass k, if mask doesn't yet exist!"
-            print(f"No mask exists for {tag_data} and can't interpret it, using all bins")
-            mask = np.ones(k.shape[1], dtype=int)
-        print(f"Saving mask to {fn_mask}")
+            if bispec is not None:
+                mask = np.ones(np.asarray(bispec).shape[-1], dtype=int)
+            else:
+                k_arr = np.asarray(k)
+                mask = np.ones(k_arr.shape[-1] if k_arr.ndim > 1 else k_arr.shape[0], dtype=int)
         np.savetxt(fn_mask, mask.astype(int), fmt='%i')
-    print(f"Mask masks out {np.sum(~mask.astype(bool))} bispec bins")
     return mask
 
 
@@ -412,13 +393,6 @@ def load_bias_params(tag_biasparams, dir_params='../data/params', bx=None):
         biasparams_df = biasparams_df[biasparams_df['nest_layer'] <= nest_level].copy()
     return biasparams_df, biasparams_dict_fixed
 
-
-#
-# Noise parameters previously lived in a separate Anoise parameter set.
-# They are now stored inside the bias parameter dataframe.
-
-
-
     
 def param_dfs_to_theta(idxs_params, params_df, biasparams_df, n_rlzs_per_cosmo=1):
     """
@@ -489,8 +463,16 @@ def load_theta_test(tag_params_test, tag_biasparams_test,
         msg = "If all fixed parameters in test set, need to specify which parameters to provide"
         assert cosmo_param_names_vary is not None and bias_param_names_vary is not None, msg
         # if both tests sets are entirely fixed, our theta is just the fixed data, repeated for each observation
-        theta_test = [param_dict_fixed_test[pname] for pname in cosmo_param_names_vary]
-        theta_test.extend([biasparams_dict_fixed_test[pname] for pname in bias_param_names_vary])
+        # Be robust if train/test parameter sets differ (e.g. noise params present in
+        # training bias tags but absent from fixed OOD bias params).
+        theta_test = [
+            param_dict_fixed_test[pname] if pname in param_dict_fixed_test else np.nan
+            for pname in cosmo_param_names_vary
+        ]
+        theta_test.extend([
+            biasparams_dict_fixed_test[pname] if pname in biasparams_dict_fixed_test else np.nan
+            for pname in bias_param_names_vary
+        ])
     else:
         # for when have a LH of varied bias parameters
         idxs_params = get_idxs_params(tag_params_test, tag_biasparams_test)
@@ -500,22 +482,10 @@ def load_theta_test(tag_params_test, tag_biasparams_test,
     
 
 def load_theta_ood(data_mode, tag_mock,
-                   cosmo_param_names_vary=None, bias_param_names_vary=None, noise_param_names_vary=None,):
+                   cosmo_param_names_vary=None, bias_param_names_vary=None):
     param_dict = load_params_ood(data_mode, tag_mock)
     theta_test = [param_dict[pname] if pname in param_dict else np.nan for pname in cosmo_param_names_vary]
     theta_test.extend([param_dict[pname] if pname in param_dict else np.nan for pname in bias_param_names_vary])
-    # if 'An1' in tag_mock:
-    #     A_noise = 1.0
-    #     theta_test.extend([A_noise])
-    # elif 'nbar' in tag_mock:
-    #     nbar = float(tag_mock.split('_nbar')[-1])
-    #     nbar_fiducial = 2.2e-4 # TODO get from noise field generation script
-    #     A_noise = 1.0 / np.sqrt(nbar/nbar_fiducial)
-    #     print(nbar, A_noise)
-    #     theta_test.extend([A_noise])
-    # else:
-    # we dont know true noise params
-    #theta_test.extend([param_dict[pname] if pname in param_dict else np.nan for pname in noise_param_names_vary])
     return np.array(theta_test)
 
     

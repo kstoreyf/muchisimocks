@@ -3,13 +3,13 @@
 #n_train_arr=(500 1000 2000 4000 6000 8000 10000)
 n_train_arr=(10000)
 #tag_stats_arr=("_pk" "_bispec" "_pk_bispec") 
-#tag_stats_arr=("_pk") 
+tag_stats_arr=("_pk") 
 #tag_stats_arr=("_bispec" "_pk_bispec") 
 #tag_stats_arr=("_pk_bispec")
 #tag_stats_arr=("_pk_pgm")
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_stats_arr=("_pgm")
-tag_stats_arr=("_pk" "_pk_pgm") 
+#tag_stats_arr=("_pk" "_pk_pgm") 
 #tag_stats_arr=("_pk" "_pgm" "_bispec" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
 
 for n_train in "${n_train_arr[@]}"; do
@@ -25,7 +25,7 @@ for n_train in "${n_train_arr[@]}"; do
         tag_data_train="_muchisimocks${tag_stats}${tag_mask}${tag_params}${tag_biasparams}${tag_noise}"
         tag_rp="_rp"
         #tag_rp=""
-        bx=1
+        bx=32
         tag_inf_train="_bx${bx}_ntrain${n_train}"
         tag_inf="${tag_data_train}${tag_rp}${tag_inf_train}"
 
@@ -34,22 +34,23 @@ for n_train in "${n_train_arr[@]}"; do
         # tag_params_test="_shame_p0_n1000"
         # tag_biasparams_test="_biasshame_p0_n1"
         # tag_mean="_mean"
-        #tag_mean=""
-        #tag_noise_test=""
+        # tag_mean=""
+        # tag_noise_test=""
         ### coverage
-        # tag_params_test="_coverage_p5_n1000"
+        tag_params_test="_coverage_p5_n1000"
+        tag_mean=""
         # tag_biasparams_test="_biasnoisecoverage_p9_n1000"
         # tag_noise_test="_noise_unit_coverage_p5_n1000"
-        # tag_mean=""
         ## no noise
-        # tag_noise_test=""
+        tag_biasparams_test="_biascoverage_p4_n1000"
+        tag_noise_test=""
         ### Muchisimocks test set 
-        #tag_data_test="_muchisimocks${tag_stats}${tag_mask}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_mean}"
+        tag_data_test="_muchisimocks${tag_stats}${tag_mask}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_mean}"
 
         ### OOD test set
-        data_mode="shame" 
-        tag_mock="_nbar0.00022"
-        tag_data_test="_shame${tag_stats}${tag_mask}${tag_mock}"
+        # data_mode="shame" 
+        # tag_mock="_nbar0.00022"
+        # tag_data_test="_shame${tag_stats}${tag_mask}${tag_mock}"
 
         config_test_file="../configs/configs_test/config_TRAIN${tag_inf}_TEST${tag_data_test}.yaml"
 
@@ -63,9 +64,9 @@ for n_train in "${n_train_arr[@]}"; do
 #SBATCH --qos=regular
 #SBATCH --job-name=${job_name}
 #SBATCH --output=${code_dir}/logs/${job_name}.out
-#SBATCH --time=0:20:00 # quick tests (e.g. shame)
+##SBATCH --time=0:20:00 # quick tests (e.g. shame)
 ##SBATCH --time=1:30:00 #1h for testing on cosmic var test set or single OOD
-##SBATCH --time=24:00:00 #24h for testing on coverage test set (24h is max time limit; some dont converge)
+#SBATCH --time=24:00:00 #24h for testing on coverage test set (24h is max time limit; some dont converge)
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=40G
