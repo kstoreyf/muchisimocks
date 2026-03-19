@@ -15,7 +15,7 @@ import bacco.probabilistic_bias as pb
 
 import sys
 # sys.path.append('/dipc/kstoreyf/muchisimocks/code')  # Check that it works without this (e.g. PYTHONPATH or install)
-import utils
+import utils_model
 import compute_statistics as cs
 
 
@@ -31,7 +31,7 @@ def run_density_to_mesh():
     '''
     data_mode = 'shame'
     box_size_mock = 1024.0
-    cosmo = utils.get_cosmo(utils.cosmo_dict_shame)
+    cosmo = utils_model.get_cosmo(utils_model.cosmo_dict_shame)
 
     dir_sim0 = '/cosmos_storage/simulations/BaccoSims/Rings/N3072_L1024/Planck_N3072_L1024.0_output/0.00'
     fn_dens0_mesh = f'../data/data_{data_mode}/dens_mesh_phase0.npy'
@@ -96,7 +96,7 @@ def run_tracer():
     )
     
     # ok to assume we know cosmo bc just use for periodic box correction
-    cosmo = utils.get_cosmo(utils.cosmo_dict_shame)
+    cosmo = utils_model.get_cosmo(utils_model.cosmo_dict_shame)
     #cosmo = None #feel like should be assuming i don't know cosmo?
 
     for statistic in statistics:
@@ -248,7 +248,7 @@ def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None,
     print(f"High-res mesh shape: {cat_mesh_ngorig.shape}")
     
     # Remove high-k modes to downsample
-    cat_field_kcut = utils.remove_highk_modes(cat_mesh_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
+    cat_field_kcut = ucos.remove_highk_modes(cat_mesh_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
     
     # tested in data_creation_pipeline that doing kcut then deconvolve is basically equivalent to deconvolve then kcut,
     # and much faster
@@ -306,7 +306,7 @@ def process_sim_to_mesh(dir_sim, box_size_mock, fn_dens_mesh=None,
                                     )
     
     # Remove high-k modes to downsample
-    dens_field_kcut = utils.remove_highk_modes(dens_field_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
+    dens_field_kcut = ucos.remove_highk_modes(dens_field_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
     
     # tested in data_creation_pipeline that doing kcut then deconvolve is basically equivalent to deconvolve then kcut,
     # and much faster
@@ -324,7 +324,7 @@ def process_sim_to_mesh(dir_sim, box_size_mock, fn_dens_mesh=None,
 def compute_pk(tracer_field, box_size_mock, cosmo=None, fn_stat=None,):
     if cosmo is None:
         print("No cosmology provided, using Quijote cosmology for p(k) calc")
-        cosmo = utils.get_cosmo(utils.cosmo_dict_quijote)
+        cosmo = utils_model.get_cosmo(utils_model.cosmo_dict_quijote)
         print(f"Using cosmology: {cosmo}")
     pk_obj = cs.compute_pk(tracer_field, cosmo, box_size_mock, fn_stat=fn_stat)
     return pk_obj
@@ -340,7 +340,7 @@ def compute_bispectrum(tracer_field, box_size_mock, n_grid, fn_stat=None, n_thre
 def compute_pgm(tracer_field, matter_density_field, box_size_mock, n_grid_mock_orig, cosmo=None, fn_stat=None):
     if cosmo is None:
         print("No cosmology provided, using Quijote cosmology for p(k) calc")
-        cosmo = utils.get_cosmo(utils.cosmo_dict_quijote)
+        cosmo = utils_model.get_cosmo(utils_model.cosmo_dict_quijote)
         print(f"Using cosmology: {cosmo}")
     matter_density_field_norm = matter_density_field/np.sum(matter_density_field)
     pgm_obj = cs.compute_pgm(tracer_field, matter_density_field_norm, cosmo, box_size_mock, fn_stat=fn_stat)

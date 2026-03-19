@@ -2,7 +2,7 @@ import os
 import yaml
 from pathlib import Path
 
-import utils
+import utils_model
 
 '''
 Generates a YAML configuration file for inference.
@@ -17,7 +17,7 @@ DEFAULT_CONFIGS_RUNLIKE_DIR = REPO_ROOT / "configs" / "configs_runlike"
 
 
 def main():
-    overwrite = True
+    overwrite = False
     # Match commonly-used combinations in submit scripts.
     stat_arr = [
         ['pk'],
@@ -32,14 +32,14 @@ def main():
         for n_train in n_train_arr:
             for bx in bx_arr:
                 #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
-                generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
-                #generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
+                #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
+                generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
     #generate_runlike_config(overwrite=overwrite)
     
     
 def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
                           overwrite=False,
-                          statistics=['pk'], n_train=10000, bx=1):
+                          statistics=['pk'], n_train=10000, bx=32):
     """
     Generates a YAML configuration file for training.
     """
@@ -128,7 +128,7 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
 
 def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                          overwrite=False, 
-                         statistics=['pk'], n_train=10000, bx=4):
+                         statistics=['pk'], n_train=10000, bx=32):
     """
     Generates a YAML configuration file for testing.
     """
@@ -157,18 +157,17 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     data_mode_test = 'muchisimocks'
     idxs_obs = None # if none, all (unless evaluate mean)
     ### settings for fixed cosmo
-    #evaluate_mean = True
-    #tag_params_test = '_shame_p0_n1000'
-    #tag_biasparams_test = '_biasshame_p0_n1'
-    # tag_noise_test = None
-    # tag_Anoise_test = None
-    ### settings for coverage test
-    evaluate_mean = False
-    tag_params_test = '_coverage_p5_n1000'
-    # tag_biasparams_test = '_biasnoisecoverage_p9_n1000'
-    # tag_noise_test = '_noise_unit_coverage_p5_n1000'
-    tag_biasparams_test = '_biascoverage_p4_n1000'
+    evaluate_mean = True
+    tag_params_test = '_shame_p0_n1000'
+    tag_biasparams_test = '_biasshame_p0_n1'
     tag_noise_test = None
+    ### settings for coverage test
+    #evaluate_mean = False
+    #tag_params_test = '_coverage_p5_n1000'
+    #tag_biasparams_test = '_biascoverage_p4_n1000'
+    #tag_noise_test = None    # tag_biasparams_test = '_biasnoisecoverage_p9_n1000'
+    # tag_noise_test = '_noise_unit_coverage_p5_n1000'
+
     
     # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
     tag_stats = f'_{"_".join(statistics)}'    
@@ -246,7 +245,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         
 def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                          overwrite=False, 
-                         statistics=['pk'], n_train=10000, bx=1):
+                         statistics=['pk'], n_train=10000, bx=32):
     """
     Generates a YAML configuration file for testing.
     """
@@ -257,9 +256,12 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     
     ### train params
     tag_params = '_p5_n10000'
-    tag_biasparams = '_biasnoisenest_p9_n320000'
-    tag_noise = '_noise_unit_p5_n10000'
-    tag_mask = '_kb0.25'
+    #tag_biasparams = '_biasnoisenest_p9_n320000'
+    #tag_noise = '_noise_unit_p5_n10000'
+    tag_biasparams = '_biasnest_p4_n320000'
+    tag_noise = None
+    #tag_mask = '_kb0.25'
+    tag_mask = ''
     #tag_mask = ''
 
     reparameterize = True
@@ -361,8 +363,8 @@ def generate_runlike_config(dir_config=str(DEFAULT_CONFIGS_RUNLIKE_DIR), overwri
     # Parameters to vary
     n_cosmo_params_vary = 5  # Number of cosmological parameters to vary
     n_bias_params_vary = 0  # Number of bias parameters to vary
-    cosmo_param_names_vary = utils.cosmo_param_names_ordered[:n_cosmo_params_vary]
-    bias_param_names_vary = utils.biasparam_names_ordered[:n_bias_params_vary]
+    cosmo_param_names_vary = utils_model.cosmo_param_names_ordered[:n_cosmo_params_vary]
+    bias_param_names_vary = utils_model.biasparam_names_ordered[:n_bias_params_vary]
     mcmc_framework = 'dynesty'  # or 'emcee'
     evaluate_mean = True
     #idxs_obs = [0]  # or None for all or evaluate_mean=True

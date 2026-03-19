@@ -8,7 +8,6 @@ import time
 import bacco
 
 import paths
-import utils
 
 
 def main():

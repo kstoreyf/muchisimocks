@@ -9,15 +9,16 @@ import time
 from scipy.stats import qmc
 import gethypercube
 
-import utils
+import utils_model
+import utils_inference
 
 
 PARAM_NAMES_ORDERED = {
     "cosmo": ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryon', 'ns', 'neutrino_mass', 'w0', 'wa'],
-    "bias": utils.biasparam_names_ordered,
+    "bias": utils_model.biasparam_names_ordered,
     # Noise amplitude parameter sets (two “options”, treated like distinct parameter sets)
     "Anoisegaussian": ["An_gaussian"],
-    "Anoisemult": utils.noiseparam_names_ordered,
+    "Anoisemult": utils_model.noiseparam_names_ordered,
 }
 
 BOUNDS = {
@@ -102,7 +103,7 @@ PARAM_SETS_LH = {
         n_params_vary=5,
         n_samples=10_000,
         tag_bounds="",
-        fiducial_dict=utils.cosmo_dict_quijote,
+        fiducial_dict=utils_model.cosmo_dict_quijote,
         seed=42,
     ),
     # Test cosmology LH over "coverage" bounds
@@ -111,7 +112,7 @@ PARAM_SETS_LH = {
         n_params_vary=5,
         n_samples=1_000,
         tag_bounds="_coverage",
-        fiducial_dict=utils.cosmo_dict_quijote,
+        fiducial_dict=utils_model.cosmo_dict_quijote,
         seed=42,
     ),
     # Test cosmology LH at fixed shame cosmology
@@ -120,7 +121,7 @@ PARAM_SETS_LH = {
         n_params_vary=5,
         n_samples=1_000,
         tag_bounds="_shame",
-        fiducial_dict=utils.cosmo_dict_shame,
+        fiducial_dict=utils_model.cosmo_dict_shame,
         seed=42,
     ),
     # Bias SHAMe, single fixed point
@@ -129,7 +130,7 @@ PARAM_SETS_LH = {
         n_params_vary=0,
         n_samples=1,
         tag_bounds="_biasshame",
-        fiducial_dict=utils.bias_dict_shame["_nbar0.00022"],
+        fiducial_dict=utils_model.bias_dict_shame["_nbar0.00022"],
         seed=42,
     ),
     # Bias SHAMe, bl=0, single fixed point 
@@ -138,7 +139,7 @@ PARAM_SETS_LH = {
         n_params_vary=0,
         n_samples=1,
         tag_bounds="_biasshamebl0",
-        fiducial_dict=utils.bias_dict_shame["_nbar0.00022_bl0"],
+        fiducial_dict=utils_model.bias_dict_shame["_nbar0.00022_bl0"],
         seed=42,
     ),
     # Bias coverage test set
@@ -167,7 +168,7 @@ PARAM_SETS_NESTED = {
     "biasnest_p4_n320000": dict(
         bounds_type="bias",
         n_cosmo=10_000,
-        n_factors=utils.n_factor_arr,  # [1,2,4,8,16,32]
+        n_factors=utils_model.n_factor_arr,  # [1,2,4,8,16,32]
         n_params_vary=4,
         tag_bounds="_biasnest",
         fiducial_dict={"b1": 1.0, "b2": 0.0, "bs2": 0.0, "bl": 0.0},
@@ -178,7 +179,7 @@ PARAM_SETS_NESTED = {
         bounds_type="biasnoise",
         anoise_option="Anmult",
         n_cosmo=10_000,
-        n_factors=utils.n_factor_arr,  # [1,2,4,8,16,32]
+        n_factors=utils_model.n_factor_arr,  # [1,2,4,8,16,32]
         n_params_vary=9,
         tag_bounds="_biasnoisenest",
         fiducial_dict={
@@ -206,7 +207,7 @@ PARAM_SETS_FISHER = {
         bounds_type="cosmo",
         n_params_vary=5,
         tag_bounds="_quijote",
-        fiducial_dict=utils.cosmo_dict_quijote,
+        fiducial_dict=utils_model.cosmo_dict_quijote,
         delta_fracextent=0.05,
         n_deltas_per_side=2,
         overwrite=False,
@@ -270,7 +271,7 @@ def generate_params_LH(
         generate_LH(param_names_vary, bounds_dict, 
                     n_samples, fn_params, seed=seed)
         fn_rands = f'{dir_params}/randints{tag_params}.npy'
-        utils.generate_randints(n_samples, fn_rands)
+        utils_inference.generate_randints(n_samples, fn_rands)
         
     param_names_fixed = [pn for pn in param_names_ordered if pn not in param_names_vary]
     if len(param_names_fixed) > 0:
@@ -313,7 +314,7 @@ def generate_params_nested_LH(
 
     generate_nested_LH(param_names_vary, bounds_dict, m_layers, fn_params, seed=seed)
     fn_rands = f'{dir_params}/randints{tag_params}.npy'
-    utils.generate_randints(n_total, fn_rands)
+    utils_inference.generate_randints(n_total, fn_rands)
         
     param_names_fixed = [pn for pn in param_names_ordered if pn not in param_names_vary]
     if len(param_names_fixed) > 0:
@@ -345,10 +346,10 @@ def generate_params_fisher(
     bounds_dict = get_bounds(bounds_type, anoise_option=anoise_option)
     if bounds_type == 'cosmo':
         # for now we will always select the varying params in this order, for easy reproducibility
-        param_names_vary = utils.cosmo_param_names_ordered[:n_params_vary]
+        param_names_vary = utils_model.cosmo_param_names_ordered[:n_params_vary]
         param_names_ordered = get_param_names_ordered("cosmo")
     elif bounds_type == 'bias':
-        param_names_vary = utils.biasparam_names_ordered[:n_params_vary]
+        param_names_vary = utils_model.biasparam_names_ordered[:n_params_vary]
         param_names_ordered = get_param_names_ordered("bias")
     else:
         raise ValueError("bounds_type must be 'cosmo' or 'bias'")
@@ -477,7 +478,7 @@ def generate_nested_LH(param_names_vary, bounds_dict, m_layers, fn_params, seed=
     nest_layer = np.empty(n_total, dtype=int)
     prev_factor = 0
     for factor in n_factors:
-        nest_layer[prev_factor * n_cosmo : factor * n_cosmo] = utils.n_factor_to_nest_level[factor]
+        nest_layer[prev_factor * n_cosmo : factor * n_cosmo] = utils_model.n_factor_to_nest_level[factor]
         prev_factor = factor
 
     param_df = pd.DataFrame(full_design, columns=param_names_vary)

@@ -13,7 +13,8 @@ import pandas as pd
 import yaml
 
 import paths
-import utils
+import utils_inference
+import utils_model
 import sbi_model
 import scaler_custom as scl
 import data_loader
@@ -152,9 +153,9 @@ def train_likefree_inference(config, overwrite=False):
 
     if reparameterize:
         print("Reparameterizing theta...")
-        theta, param_names = utils.reparameterize_theta(theta, param_names)
+        theta, param_names = utils_inference.reparameterize_theta(theta, param_names)
         # Also update bounds for reparameterized parameters
-        dict_bounds = utils.reparameterize_bounds(dict_bounds)
+        dict_bounds = utils_inference.reparameterize_bounds(dict_bounds)
         print('theta shape after reparameterization:', theta.shape)
         print('param_names after reparameterization:', param_names)
         print('Updated bounds:', dict_bounds)
@@ -184,7 +185,7 @@ def train_likefree_inference(config, overwrite=False):
     if n_train is None:
         n_train = len(random_ints_cosmo)
     idxs_cosmo_subset = random_ints_cosmo[:n_train]
-    idxs_cosmo_train, idxs_cosmo_val, _ = utils.idxs_train_val_test(idxs_cosmo_subset, frac_train=0.9, frac_val=0.1, frac_test=0.0)
+    idxs_cosmo_train, idxs_cosmo_val, _ = utils_inference.idxs_train_val_test(idxs_cosmo_subset, frac_train=0.9, frac_val=0.1, frac_test=0.0)
 
     # for each row in the index metadata of the full dataset, 
     # if our intended training idx is in it, keep
@@ -476,7 +477,7 @@ def run_likelihood_inference(config):
     ys_err_obs_scaled = scaler_y.scale_error(ys_err_obs, ys_obs)
 
     dir_emus_lbias = '/home/kstoreyf/external' #hyperion path
-    emu, emu_bounds, emu_param_names_all = utils.load_emu(dir_emus_lbias=dir_emus_lbias)    
+    emu, emu_bounds, emu_param_names_all = utils_model.load_emu(dir_emus_lbias=dir_emus_lbias)
     
     for i in range(len(ys_obs)):
         if evaluate_mean:

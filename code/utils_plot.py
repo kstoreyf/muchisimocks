@@ -8,13 +8,68 @@ inside the bias parameter dataframe (no separate Anoise tag needed).
 
 from __future__ import annotations
 
-from typing import Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Iterable, List, Optional, Sequence, Union
 
 import numpy as np
 from pathlib import Path
 
 import data_loader
-import utils
+import utils_inference
+
+param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
+                'sigma8_cold': r'$\sigma_{8}$',
+                'sigma_8': r'$\sigma_{8}$',
+                'hubble': r'$h$',
+                'h': r'$h$',
+                'ns': r'$n_\mathrm{s}$',
+                'n_s': r'$n_\mathrm{s}$',
+                'omega_baryon': r'$\Omega_\mathrm{b}$',
+                'omega_m': r'$\Omega_\mathrm{m}$',
+                'b1': r'$b_1$',
+                'b2': r'$b_2$',
+                'bs2': r'$b_{s^2}$',
+                'bl': r'$b_{\Delta}$',
+                'An_gaussian': r'$A_\mathrm{noise}$',
+                'An_homog': r'$A_\mathrm{noise}^{\mathrm{homog}}$',
+                'An_b1': r'$A_\mathrm{noise}^{b_1}$',
+                'An_b2': r'$A_\mathrm{noise}^{b_2}$',
+                'An_bs2': r'$A_\mathrm{noise}^{bs_2}$',
+                'An_bl': r'$A_\mathrm{noise}^{\Delta}$',
+                'sigma8xb1': r'$\sigma_8 \times b_1$',
+                'sigma8_cold_x_b1': r'$\sigma_8 b_1$',
+                'sigma8_cold_x_An_b1': r'$\sigma_8 A_\mathrm{noise}^{b_1}$',
+                'sigma8_cold_x_bl': r'$\sigma_8 b_{\Delta}$',
+                'sigma8_cold_x_An_bl': r'$\sigma_8 A_\mathrm{noise}^{\Delta}$',
+                'sigma8_cold_sq_x_b2': r'$\sigma_8^2 b_2$',
+                'sigma8_cold_sq_x_bs2': r'$\sigma_8^2 b_{s^2}$',
+                'sigma8_cold_sq_x_An_b2': r'$\sigma_8^2 A_\mathrm{noise}^{b_2}$',
+                'sigma8_cold_sq_x_An_bs2': r'$\sigma_8^2 A_\mathrm{noise}^{bs_2}$',
+                }
+
+color_dict_methods = {'mn': 'blue', 'sbi': 'green', 'emcee': 'purple', 'dynesty': 'red'}
+label_dict_methods = {'mn': 'Moment Network', 'sbi': 'SBI', 'emcee': 'MCMC (emcee)', 'dynesty': 'MCMC (dynesty)', 'fisher': 'Fisher'}
+labels_pnn = ['$1 1$', '$1 \\delta$', '$1 \\delta^2$', '$1 s^2$', '$ 1 \\nabla^2\\delta$', '$\\delta \\delta$', '$\\delta \\delta^2$', '$\\delta s^2$', '$\\delta \\nabla^2\\delta$', '$\\delta^2 \\delta^2$', '$\\delta^2 s^2$', '$\\delta^2 \\nabla^2\\delta$', '$s^2 s^2$', '$s^2 \\nabla^2\\delta$', '$\\nabla^2\\delta \\nabla^2\\delta$']
+labels_statistics = {'pk': '$P_\\mathrm{gg}(k)$', 'bispec': '$B(k_1,k_2,k_3)$', 'pgm': '$P_\\mathrm{gm}(k)$'}
+color_dict_statistics = {('pk',): '#54afd6', ('bispec',): '#e14e4e', ('pgm',): '#d18b13', ('pk', 'bispec'): '#b0198f', ('pk', 'pgm'): '#327a3c', ('pk', 'bispec', 'pgm'): '#5e2e1f'}
+labels_biasparams = {
+    '_biaszen_p4_n10000': r'1x $\{b\}$ per cosmo',
+    '_biaszen_p4_n50000': r'5x $\{b\}$ per cosmo',
+    '_biaszen_p4_n100000': r'10x $\{b\}$ per cosmo',
+    '_biaszen_p4_n200000': r'20x $\{b\}$ per cosmo',
+}
+
+
+def get_stat_label(statistics):
+    labels = [labels_statistics[stat] for stat in statistics]
+    return ' + '.join(labels)
+
+
+def get_stat_colors(statistics_arr):
+    colors = []
+    for statistics in statistics_arr:
+        key = tuple(statistics)
+        colors.append(color_dict_statistics.get(key, '#808080'))
+    return colors
 
 
 def _ensure_list(x: Union[str, Sequence[str], None], n: int) -> List[Optional[str]]:
@@ -81,8 +136,8 @@ def setup_inference_tags(
                 f"_{data_mode}{tag_stats}{tags_mask[i]}{tag_params}{tag_biasparams}{tag_noise}{tag_reparam}{tag_num}"
             )
 
-    labels = [utils.get_stat_label(stat) for stat in statistics_arr]
-    colors = utils.get_stat_colors(statistics_arr)
+    labels = [get_stat_label(stat) for stat in statistics_arr]
+    colors = get_stat_colors(statistics_arr)
 
     return tags_inf, labels, colors, tag_stats_arr
 
@@ -187,6 +242,40 @@ def setup_shame_mock_test_tags(
     return [f"_{data_mode_test}{tag_stats}{tag_mock}" for tag_stats in tag_stats_arr]
 
 
+def _covs_pred_to_per_sample(
+    cov_raw: np.ndarray,
+    n_samples: int,
+    P: int,
+    tag_inf: str,
+) -> np.ndarray:
+    """
+    Covariances from ``get_moments_test_sbi`` are either pooled ``(P, P)`` or
+    per-test ``(n_samples, P, P)``. Grid plotting needs the latter.
+    """
+    c = np.asarray(cov_raw)
+    if c.size == 0:
+        return np.full((n_samples, P, P), np.nan, dtype=float)
+    if c.ndim == 2:
+        if c.shape != (P, P):
+            raise ValueError(
+                f"Covariance shape {c.shape} != ({P}, {P}) for param_names_show; "
+                f"tag_inf={tag_inf!r}"
+            )
+        return np.broadcast_to(c, (n_samples, P, P)).copy()
+    if c.ndim == 3:
+        if c.shape[1:] != (P, P):
+            raise ValueError(
+                f"Per-sample covariance {c.shape} incompatible with P={P}; tag_inf={tag_inf!r}"
+            )
+        if c.shape[0] != n_samples:
+            raise ValueError(
+                f"Covariance n_samples {c.shape[0]} != {n_samples} from theta/pred; "
+                f"tag_inf={tag_inf!r}"
+            )
+        return c.copy()
+    raise ValueError(f"Unexpected covariance ndim {c.ndim} shape {c.shape}; tag_inf={tag_inf!r}")
+
+
 def load_test_predictions(
     tags_inf: Sequence[str],
     tags_data_test: Sequence[str],
@@ -204,18 +293,22 @@ def load_test_predictions(
 
     This mirrors the older notebook logic, but uses the updated API
     (no tag_Anoise, and noise parameters are part of bias parameters).
+
+    Returned ``covs_pred_arr`` has shape ``(n_chains, n_samples, P, P)`` with
+    ``P = len(param_names_show)``, suitable for ``plot_comp_mean_subplots_grid``
+    (pooled ``(P, P)`` covariances are broadcast to every test row).
     """
     n = len(tags_inf)
     tags_biasparams_test_list = _ensure_list(tags_biasparams_test, n)
 
     if param_names_show is None:
-        _theta0, _cov0, param_names = utils.get_moments_test_sbi(tags_inf[0], tag_test=tags_data_test[0])
+        _theta0, _cov0, param_names = utils_inference.get_moments_test_sbi(tags_inf[0], tag_test=tags_data_test[0])
         param_names_show = list(param_names)
 
     theta_true_arr, theta_pred_arr, vars_pred_arr, covs_pred_arr = [], [], [], []
 
     for i in range(n):
-        _theta_test_pred, _covs_test_pred, param_names_chain = utils.get_moments_test_sbi(
+        _theta_test_pred, _covs_test_pred, param_names_chain = utils_inference.get_moments_test_sbi(
             tags_inf[i], tag_test=tags_data_test[i], param_names=param_names_show
         )
 
@@ -230,11 +323,17 @@ def load_test_predictions(
         if theta_test.ndim == 1:
             n_samples = n_test_eval if n_test_eval is not None else _theta_test_pred.shape[0]
             theta_test = np.tile(theta_test, (n_samples, 1))
+            _theta_test_pred = _theta_test_pred[:n_samples]
+            if _covs_test_pred.ndim == 3:
+                _covs_test_pred = _covs_test_pred[:n_samples]
         elif n_test_eval is not None:
             theta_test = theta_test[:n_test_eval]
+            _theta_test_pred = _theta_test_pred[:n_test_eval]
+            if _covs_test_pred.ndim == 3:
+                _covs_test_pred = _covs_test_pred[:n_test_eval]
 
         if tag_reparam:
-            theta_test, param_names_test_reparam = utils.reparameterize_theta(theta_test, list(param_names_vary))
+            theta_test, param_names_test_reparam = utils_inference.reparameterize_theta(theta_test, list(param_names_vary))
         else:
             param_names_test_reparam = list(param_names_vary)
 
@@ -263,36 +362,39 @@ def load_test_predictions(
         theta_true_arr.append(np.array(theta_true_inf).T)
         theta_pred_arr.append(np.array(theta_pred_inf).T)
         vars_pred_arr.append(np.array(vars_pred_inf).T)
-        covs_pred_arr.append(_covs_test_pred)
+        P = len(param_names_show)
+        n_samples = theta_test.shape[0]
+        covs_pred_arr.append(
+            _covs_pred_to_per_sample(_covs_test_pred, n_samples, P, tags_inf[i])
+        )
+
+    cov_shapes = {tuple(a.shape) for a in covs_pred_arr}
+    if len(cov_shapes) > 1:
+        raise ValueError(
+            "load_test_predictions: per-chain (n_samples, P, P) cov shapes differ — "
+            f"cannot stack for grid plots: {sorted(cov_shapes)}"
+        )
+    covs_stacked = np.stack(covs_pred_arr, axis=0)
 
     return (
         np.array(theta_true_arr),
         np.array(theta_pred_arr),
         np.array(vars_pred_arr),
-        np.array(covs_pred_arr),
+        covs_stacked,
         list(param_names_show),
     )
 
 
-def _sbi_samples_paths(tag_inf: str, tag_test: str) -> Tuple[Path, Path]:
-    """
-    Build the paths that `utils.get_samples_sbi` would load.
-
-    Returned paths are (pred.npy, pred_inprogress.npy).
-    """
-    # Build absolute paths from this file's location so callers don't have to
-    # care what the current working directory is.
+def _sbi_samples_pred_path(tag_inf: str, tag_test: str) -> Path:
+    """Path to finalized test predictions (`samples_test*_pred.npy`) that loaders use."""
     repo_root = Path(__file__).resolve().parents[1]
     dir_sbi = repo_root / "results" / "results_sbi" / f"sbi{tag_inf}"
-    fn_pred = dir_sbi / f"samples_test{tag_test}_pred.npy"
-    fn_inprogress = dir_sbi / f"samples_test{tag_test}_pred_inprogress.npy"
-    return fn_pred, fn_inprogress
+    return dir_sbi / f"samples_test{tag_test}_pred.npy"
 
 
 def sbi_samples_exist(tag_inf: str, tag_test: str) -> bool:
-    """Whether SBI posterior samples for this tag_test exist (pred or in-progress)."""
-    fn_pred, fn_inprogress = _sbi_samples_paths(tag_inf, tag_test)
-    return fn_pred.exists() or fn_inprogress.exists()
+    """Whether finalized SBI posterior samples for this tag_test exist on disk."""
+    return _sbi_samples_pred_path(tag_inf, tag_test).exists()
 
 
 def filter_available_chains(

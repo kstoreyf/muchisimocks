@@ -6,8 +6,7 @@ import numpy as np
 import pathlib
 import time
 
-import utils
-
+import utils_model
 
 
 ### Emcee
@@ -24,7 +23,7 @@ def log_likelihood(theta):
     cosmo_params = _cosmo_param_dict_fixed.copy()
     for cosmo_param_name in _cosmo_param_names_vary:
         i_param = _param_names_vary.index(cosmo_param_name)
-        cosmo_param_name_emu = utils.param_name_to_param_name_emu(cosmo_param_name)
+        cosmo_param_name_emu = utils_model.param_name_to_param_name_emu(cosmo_param_name)
         cosmo_params[cosmo_param_name_emu] = theta[i_param]
                 
     expfactor = 1.0 # careful, may need to change at some point!
@@ -80,7 +79,7 @@ def evaluate_mcmc(idx_obs, pk_data, cov_inv, scaler,
 
     # for some reason using "update" does not work, at least if one dict is empty
     dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
-    _bias_param_names_ordered = utils.biasparam_names_ordered
+    _bias_param_names_ordered = utils_model.biasparam_names_ordered
     _pk_data, _cov_inv, _scaler = pk_data, cov_inv, scaler
     _emu, _k, _dict_bounds, = emu, k, dict_bounds
     _cosmo_param_dict_fixed, _bias_param_dict_fixed = cosmo_param_dict_fixed, bias_param_dict_fixed

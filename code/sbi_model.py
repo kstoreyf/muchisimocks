@@ -19,7 +19,7 @@ import torch
 
 import scaler_custom as scl
 import generate_params as genp
-import utils
+import utils_inference
 
 
 class SBIModel():
@@ -297,7 +297,7 @@ class SBIModel():
                 
         for i, statistic in enumerate(self.statistics):
             
-            func_scaler_y = utils.statistics_scaler_funcs[statistic]
+            func_scaler_y = utils_inference.statistics_scaler_funcs[statistic]
             
             scaler_y = scl.Scaler(func_scaler_y)
             print("statistic:", statistic)

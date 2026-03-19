@@ -6,7 +6,8 @@ from pathlib import Path
 import re
 
 import paths
-import utils
+import utils_model
+import utils_inference
 
 NESTED_META_COLS = ['idx_cosmo', 'nest_layer']
 
@@ -40,9 +41,6 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
                                             tag_noise=tag_noise,
                                             bx=bx, n_cosmo_max=n_cosmo_max,
                                             **kwargs)
-        elif data_mode == 'emu':
-            k_i, y_i, y_err_i, idxs_params = load_data_emu(statistic,
-                                            tag_params, tag_biasparams, **kwargs)
         else:
             raise ValueError(f"Data mode {data_mode} not recognized!")
         print(f"Loaded {statistic} data with shape {y_i.shape}")
@@ -314,7 +312,7 @@ def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
     if data_mode == 'shame':
         # needed this line bc was getting error message
         import bacco
-        cosmo_mock = utils.get_cosmo(utils.cosmo_dict_shame)
+        cosmo_mock = utils_model.get_cosmo(utils_model.cosmo_dict_shame)
 
         param_dict = {}
         for k, v in cosmo_mock.pars.items():
@@ -323,9 +321,9 @@ def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
                 kname = 'sigma8_cold'
             param_dict[kname] = v
 
-        if tag_mock not in utils.bias_dict_shame:
+        if tag_mock not in utils_model.bias_dict_shame:
             raise ValueError(f"tag_mock {tag_mock} not recognized for shame OOD data!")
-        param_dict.update(utils.bias_dict_shame[tag_mock])
+        param_dict.update(utils_model.bias_dict_shame[tag_mock])
         return param_dict
     else:
         raise ValueError(f"Data mode {data_mode} not recognized!")
@@ -389,7 +387,7 @@ def load_bias_params(tag_biasparams, dir_params='../data/params', bx=None):
     # Original index is preserved so stat filenames still match.
     if (biasparams_df is not None and bx is not None
             and 'nest_layer' in biasparams_df.columns):
-        nest_level = utils.n_factor_to_nest_level[bx]
+        nest_level = utils_model.n_factor_to_nest_level[bx]
         biasparams_df = biasparams_df[biasparams_df['nest_layer'] <= nest_level].copy()
     return biasparams_df, biasparams_dict_fixed
 
@@ -419,12 +417,12 @@ def param_dfs_to_theta(idxs_params, params_df, biasparams_df, n_rlzs_per_cosmo=1
         bias_param_cols = _get_bias_param_cols(biasparams_df)
         param_names.extend(bias_param_cols)
         theta_bias_orig = np.array([biasparams_df.loc[idx_bias, bias_param_cols].values for _, idx_bias, _ in idxs_params])
-        theta_bias = utils.repeat_arr_rlzs(theta_bias_orig, n_rlzs=n_rlzs_per_cosmo)
+        theta_bias = utils_inference.repeat_arr_rlzs(theta_bias_orig, n_rlzs=n_rlzs_per_cosmo)
         return theta_bias, param_names
     if biasparams_df is None:
         param_names.extend(params_df.columns.tolist())
         theta_cosmo_orig = np.array([params_df.loc[idx_mock].values for idx_mock, _, _ in idxs_params])
-        theta_cosmo = utils.repeat_arr_rlzs(theta_cosmo_orig, n_rlzs=n_rlzs_per_cosmo)
+        theta_cosmo = utils_inference.repeat_arr_rlzs(theta_cosmo_orig, n_rlzs=n_rlzs_per_cosmo)
         return theta_cosmo, param_names
 
     # Add parameter names from all DataFrames
@@ -442,7 +440,7 @@ def param_dfs_to_theta(idxs_params, params_df, biasparams_df, n_rlzs_per_cosmo=1
     # TODO test/check this part! not using bc haven't been using emulated set
     # Apply realization repetition if needed
     if n_rlzs_per_cosmo > 1:
-        theta = utils.repeat_arr_rlzs(theta, n_rlzs=n_rlzs_per_cosmo)
+        theta = utils_inference.repeat_arr_rlzs(theta, n_rlzs=n_rlzs_per_cosmo)
     
     return theta, param_names
     
@@ -529,58 +527,6 @@ def get_param_names(tag_params=None, tag_biasparams=None, dir_params='../data/pa
     return param_names
 
 
-def load_data_emu(statistic, tag_params, tag_biasparams, tag_errG='', tag_datagen='', tag_noiseless='',
-                    n_rlzs_per_cosmo=1, tag_mask=''):
-    
-    assert statistic=='pk', "Only implemented for pk for emu"
-    tag_mocks = tag_params + tag_biasparams
-
-    assert tag_errG is not None, "tag_errG must be specified"
-    dir_emuPk = f'../data/emuPks/emuPks{tag_mocks}'
-    
-    assert tag_noiseless in ['', '_noiseless'], "tag_noiseless must be '_noiseless' or ''"
-    if 'noiseless' in tag_noiseless:
-        assert n_rlzs_per_cosmo==1, "Why would you want multiple realizations per cosmo if using noiseless?"
-        fn_emuPk = f'{dir_emuPk}/emuPks.npy'
-    else:
-        fn_emuPk = f'{dir_emuPk}/emuPks_noisy{tag_datagen}.npy'
-    fn_emuk = f'{dir_emuPk}/emuPks_k.txt'
-    fn_emuPkerrG = f'{dir_emuPk}/emuPks_errgaussian{tag_errG}.npy'
-    #fn_emuPk_params = f'{dir_emuPk}/params_lh{tag_params}.txt'
-    #fn_bias_vector = f'{dir_emuPk}/bias_params.txt'
-
-    Pk = np.load(fn_emuPk, allow_pickle=True)   
-    k = np.genfromtxt(fn_emuk)
-    print(fn_emuPk)
-    print(Pk.shape)
-
-    #params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed = load_params(tag_params, tag_biasparams)
-    #theta_noiseless = np.genfromtxt(fn_emuPk_params, delimiter=',', names=True)
-    #print("theta_noiseless", theta_noiseless.shape)
-    #param_names = theta_noiseless.dtype.names
-    #theta_noiseless = np.array([list(tup) for tup in theta_noiseless]) # from tuples to 2d array
-    
-    # if we have more than 1 rlz per cosmo, repeat the error arrays to get the right number
-    #theta = utils.repeat_arr_rlzs(theta_noiseless, n_rlzs=n_rlzs_per_cosmo)
-    gaussian_error_pk_orig = np.load(fn_emuPkerrG, allow_pickle=True)
-    gaussian_error_pk = utils.repeat_arr_rlzs(gaussian_error_pk_orig, n_rlzs=n_rlzs_per_cosmo)
-    assert gaussian_error_pk.shape[0] == Pk.shape[0], "Number of pks and errors should be the same, something is wrong"
-    
-    # doing this to align with load_data_muchisimocks; reconsider how to do in emu case
-    #idxs_params = np.arange(Pk.shape[0])
-    idxs_params = np.array([(idx_LH, idx_LH) for idx_LH in range(Pk.shape[0])])
-    # mask = np.all(Pk>0, axis=0)
-    # print("mask")
-    # print(mask)
-    # Pk = Pk[:,mask]
-    # gaussian_error_pk = gaussian_error_pk[:,mask]
-    # k = k[mask]
-    # print(len(k))
-
-    return k, Pk, gaussian_error_pk, idxs_params
-
-
-
 def get_dir_statistics(statistic, tag_params, tag_biasparams, tag_noise=None):
     tag_mocks = ''.join([t for t in [tag_params, tag_biasparams, tag_noise] if t is not None])
     dir_statistics = paths.statistics_dir(statistic, tag_mocks)
@@ -622,7 +568,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
         has_anoisemult_params = False
     else:
         has_anoisemult_params = any(
-            col in biasparams_df.columns for col in utils.noiseparam_names_ordered
+            col in biasparams_df.columns for col in utils_model.noiseparam_names_ordered
         )
 
     if os.path.exists(dir_statistics):
@@ -641,7 +587,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
             if tag_Anoise is not None:
                 reason_bits.append("tag_Anoise is set")
             if has_anoisemult_params and biasparams_df is not None:
-                present = [c for c in utils.noiseparam_names_ordered if c in biasparams_df.columns]
+                present = [c for c in utils_model.noiseparam_names_ordered if c in biasparams_df.columns]
                 reason_bits.append(f"bias params include multiplicative noise columns {present}")
             reason = "; ".join(reason_bits) if reason_bits else "unknown reason"
             raise FileNotFoundError(
@@ -862,15 +808,15 @@ def _process_pnn_cosmology(idx_LH, statistic, stat_name, dir_statistics,
         else:
             bias_params_dict = {}
         bias_params_dict.update(biasparams_dict_fixed)
-        bias_params = [bias_params_dict[bpn] for bpn in utils.biasparam_names_ordered]
+        bias_params = [bias_params_dict[bpn] for bpn in utils_model.biasparam_names_ordered]
         
         # Convert pnn to pk or pgm
         if statistic == 'pk':
-            stat = utils.pnn_to_pk(pnn_obj, bias_params, pk_type='pk')
+            stat = utils_model.pnn_to_pk(pnn_obj, bias_params, pk_type='pk')
         elif statistic == 'pklin':
-            stat = utils.pnn_to_pk(pnn_obj, bias_params, pk_type='pk_theory_lin')
+            stat = utils_model.pnn_to_pk(pnn_obj, bias_params, pk_type='pk_theory_lin')
         elif statistic == 'pgm':
-            stat = utils.pnn_to_pgm(pnn_obj, bias_params, pk_type='pk')
+            stat = utils_model.pnn_to_pgm(pnn_obj, bias_params, pk_type='pk')
         else:
             raise ValueError(f"Statistic {statistic} not supported for pnn mode")
         

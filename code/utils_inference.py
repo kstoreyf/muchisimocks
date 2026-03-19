@@ -1,17 +1,40 @@
 """Inference- and sampling-related helpers for muchisimocks.
 
-This file re-exports the inference utilities from ``utils`` so that
-callers can import them from a more focused module:
-
-    from code.utils_inference import get_samples, chi2, figure_of_merit
-
-The single source of truth for these definitions currently lives in
-``utils.py``; if we later move code here, imports from this module
-will keep working.
+This file is the canonical home for inference utilities so callers can
+import them from a focused module.
 """
 
 import os
 import numpy as np
+
+statistics_scaler_funcs = {'pk': 'log_minmax', 'bispec': 'minmax', 'pgm': 'log_minmax_const'}
+
+
+def get_posterior_maxes(samples_equal, param_names):
+    import getdist
+    samps = getdist.MCSamples(names=param_names)
+    samps.setSamples(samples_equal)
+    maxes = []
+    for i, pn in enumerate(param_names):
+        xvals = np.linspace(min(samples_equal[:, i]), max(samples_equal[:, i]), 1000)
+        dens = samps.get1DDensity(pn)
+        probs = dens(xvals)
+        posterior_max = xvals[np.argmax(probs)]
+        maxes.append(posterior_max)
+    return maxes
+
+
+def generate_randints(n_samples, fn_rands, rng=None, overwrite=False):
+    if os.path.exists(fn_rands) and not overwrite:
+        print(f"Loading from {fn_rands} (already exists)")
+        return np.load(fn_rands, allow_pickle=True)
+    if rng is None:
+        rng = np.random.default_rng(42)
+    random_ints = np.arange(n_samples)
+    rng.shuffle(random_ints)
+    np.save(fn_rands, random_ints)
+    print(f"Saved random ints to {fn_rands}")
+    return random_ints
 
 
 def idxs_train_val_test(random_ints, frac_train=0.8, frac_val=0.1, frac_test=0.1,
@@ -44,72 +67,65 @@ def split_train_val_test(arr, idxs_train, idxs_val, idxs_test):
 
 def get_samples(idx_obs, inf_method, tag_inf, tag_test='', tag_obs=None):
     """Load posterior samples for observation idx_obs (mn, sbi, emcee, dynesty, or fisher)."""
-    if inf_method == 'mn':
-        return get_samples_mn(idx_obs, tag_inf, tag_test=tag_test)
-    elif inf_method == 'sbi':
-        return get_samples_sbi(idx_obs, tag_inf, tag_test=tag_test)
-    elif inf_method == 'emcee':
-        return get_samples_emcee(idx_obs, tag_inf, tag_obs=tag_obs)
-    elif inf_method == 'dynesty':
-        return get_samples_dynesty(idx_obs, tag_inf, tag_obs=tag_obs)
-    elif inf_method == 'fisher':
-        return get_samples_fisher(idx_obs, tag_inf, tag_test=tag_test)
-    else:
-        raise ValueError(f'Method {inf_method} not recognized!')
+    try:
+        if inf_method == 'sbi':
+            return get_samples_sbi(idx_obs, tag_inf, tag_test=tag_test)
+        elif inf_method == 'emcee':
+            return get_samples_emcee(idx_obs, tag_inf, tag_obs=tag_obs)
+        elif inf_method == 'dynesty':
+            return get_samples_dynesty(idx_obs, tag_inf, tag_obs=tag_obs)
+        elif inf_method == 'fisher':
+            return get_samples_fisher(idx_obs, tag_inf, tag_test=tag_test)
+        else:
+            raise ValueError(f'Method {inf_method} not recognized!')
+    except FileNotFoundError as e:
+        fn = getattr(e, "filename", None)
+        fn_part = f": {fn}" if fn else f": {e}"
+        print(f"ERROR: missing samples (inf_method={inf_method}, tag_inf={tag_inf}, tag_test={tag_test}){fn_part}")
+        return np.array([]), np.array([], dtype=str)
 
 
 def get_moments_test_sbi(tag_inf, tag_test='', param_names=None):
     """Load SBI test posterior mean and covariances from saved samples."""
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
-    print(f"fn_samples_test_pred = {fn_samples_test_pred}")
-    samples_arr = np.load(fn_samples_test_pred)
-    param_names_all = np.loadtxt(f'{dir_sbi}/param_names.txt', dtype=str)
-    if param_names is None:
-        param_names = param_names_all
-    i_pn = [list(param_names_all).index(pn) for pn in param_names]
-
-    if samples_arr.ndim == 2:
-        samples_arr = samples_arr[:,i_pn]
-        theta_test_pred = np.mean(samples_arr, axis=0)
-        covs_test_pred = np.cov(samples_arr.T)
-    elif samples_arr.ndim == 3:
-        samples_arr = samples_arr[:,:,i_pn]
-        theta_test_pred = np.mean(samples_arr, axis=0)
-        covs_test_pred = np.array([np.cov(samples_arr[:, i, :].T) for i in range(samples_arr.shape[1])])
-    else:
-        raise ValueError(f"Samples shape {samples_arr.shape} is weird!")
-    return theta_test_pred, covs_test_pred, param_names
-
-
-def get_moments_test_mn(tag_inf, tag_test=''):
-    dir_mn = f'../results/results_moment_network/mn{tag_inf}'
-    theta_test_pred = np.load(f'{dir_mn}/theta_test{tag_test}_pred.npy')
-    covs_test_pred = np.load(f'{dir_mn}/covs_test{tag_test}_pred.npy')
-    return theta_test_pred, covs_test_pred
-
-
-def get_samples_mn(idx_obs, tag_inf, tag_test=''):
-    rng = np.random.default_rng(42)
-    dir_mn = f'../results/results_moment_network/mn{tag_inf}'
-    theta_test_pred = np.load(f'{dir_mn}/theta_test{tag_test}_pred.npy')
-    covs_test_pred = np.load(f'{dir_mn}/covs_test{tag_test}_pred.npy')
-
+    fn_param_names = f'{dir_sbi}/param_names.txt'
     try:
-        samples = rng.multivariate_normal(theta_test_pred[idx_obs],
-                                          covs_test_pred[idx_obs], int(1e6),
-                                          check_valid='raise')
-    except ValueError:
-        print("Covariance matrix not PSD! (sampling anyway)")
-        samples = rng.multivariate_normal(theta_test_pred[idx_obs],
-                                          covs_test_pred[idx_obs], int(1e6),
-                                          check_valid='ignore')
-    return samples
+        if not os.path.exists(fn_samples_test_pred):
+            raise FileNotFoundError(fn_samples_test_pred)
+        if not os.path.exists(fn_param_names):
+            raise FileNotFoundError(fn_param_names)
+
+        print(f"fn_samples_test_pred = {fn_samples_test_pred}")
+        samples_arr = np.load(fn_samples_test_pred)
+        param_names_all = np.loadtxt(fn_param_names, dtype=str)
+        if param_names is None:
+            param_names = param_names_all
+        i_pn = [list(param_names_all).index(pn) for pn in param_names]
+
+        if samples_arr.ndim == 2:
+            samples_arr = samples_arr[:, i_pn]
+            theta_test_pred = np.mean(samples_arr, axis=0)
+            covs_test_pred = np.cov(samples_arr.T)
+        elif samples_arr.ndim == 3:
+            samples_arr = samples_arr[:, :, i_pn]
+            theta_test_pred = np.mean(samples_arr, axis=0)
+            covs_test_pred = np.array([np.cov(samples_arr[:, i, :].T) for i in range(samples_arr.shape[1])])
+        else:
+            raise ValueError(f"Samples shape {samples_arr.shape} is weird!")
+        return theta_test_pred, covs_test_pred, param_names
+    except FileNotFoundError as e:
+        fn = getattr(e, "filename", None)
+        fn_part = f": {fn}" if fn else f": {e}"
+        print(f"ERROR: missing samples (get_moments_test_sbi, tag_inf={tag_inf}, tag_test={tag_test}){fn_part}")
+        return np.array([]), np.array([]), np.array([], dtype=str)
 
 
 def get_samples_sbi(idx_obs, tag_inf, tag_test=''):
     dir_sbi = f'../results/results_sbi/sbi{tag_inf}'
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test}_pred.npy'
+    if not os.path.exists(fn_samples_test_pred):
+        raise FileNotFoundError(fn_samples_test_pred)
     print(f"fn_samples = {fn_samples_test_pred}")
     samples_arr = np.load(fn_samples_test_pred)
     param_names = np.loadtxt(f'{dir_sbi}/param_names.txt', dtype=str)
@@ -282,14 +298,46 @@ def compute_fisher_matrix(derivatives, covariance_matrix, param_names):
                                          np.dot(cov_inv, derivatives[param_j]))
     return fisher_matrix
 
+
+def chi2(theta_true, theta_pred, covs_pred):
+    chi2s = []
+    if covs_pred.ndim == 3:
+        for t_true, t_pred, cov_pred in zip(theta_true, theta_pred, covs_pred):
+            diff = t_true - t_pred
+            cov_pred_inv = np.linalg.inv(cov_pred)
+            chi2_i = diff.T @ cov_pred_inv @ diff
+            chi2s.append(chi2_i.item())
+    elif covs_pred.ndim == 2:
+        diff = theta_true - theta_pred
+        cov_pred_inv = np.linalg.inv(covs_pred)
+        chi2_i = diff.T @ cov_pred_inv @ diff
+        chi2s.append(chi2_i.item())
+    else:
+        raise ValueError(f"covs_pred shape {covs_pred.shape} is weird!")
+    return chi2s if len(chi2s) > 1 else chi2s[0]
+
+
+def mse(theta_true, theta_pred):
+    return np.mean((theta_true - theta_pred) ** 2, axis=-1)
+
+
+def figure_of_merit(covs_pred):
+    foms = []
+    if covs_pred.ndim == 3:
+        for cov_pred in covs_pred:
+            foms.append(1 / np.sqrt(np.linalg.det(cov_pred)))
+    elif covs_pred.ndim == 2:
+        foms = 1 / np.sqrt(np.linalg.det(covs_pred))
+    else:
+        raise ValueError(f"covs_pred shape {covs_pred.shape} is weird!")
+    return foms
+
 __all__ = [
     "idxs_train_val_test",
     "split_train_val_test",
     "get_posterior_maxes",
     "get_samples",
     "get_moments_test_sbi",
-    "get_moments_test_mn",
-    "get_samples_mn",
     "get_samples_sbi",
     "get_samples_emcee",
     "get_samples_dynesty",
@@ -301,5 +349,7 @@ __all__ = [
     "chi2",
     "mse",
     "figure_of_merit",
+    "statistics_scaler_funcs",
+    "generate_randints",
 ]
 

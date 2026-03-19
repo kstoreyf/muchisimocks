@@ -11,7 +11,7 @@ import bacco
 import bacco.probabilistic_bias as pb
 
 import paths
-import utils
+import utils_model
 
 pyfftw.config.NUM_THREADS = 8
 print("pyfftw nthreads", pyfftw.config.NUM_THREADS)
@@ -200,7 +200,7 @@ def run_single(param_dict, seed, idx_mock, dir_mocks,
 
     ## Start cosmology class
     expfactor = 1.0
-    cosmo = utils.get_cosmo(param_dict, a_scale=expfactor, sim_name='quijote')
+    cosmo = utils_model.get_cosmo(param_dict, a_scale=expfactor, sim_name='quijote')
     print(cosmo.pars, flush=True)
 
     # We also need the parameters in this order in a text file for m2m
@@ -292,7 +292,7 @@ def run_single(param_dict, seed, idx_mock, dir_mocks,
         # here we load them in normally, no re-indexing
         print(f"Loading in velocities from {fn_vel} and applying k-cut", flush=True)
         velocities = np.load(fn_vel)
-        velocities_kcut = utils.remove_highk_modes_velocity(velocities, box_size, n_grid_target)
+        velocities_kcut = utils_model.remove_highk_modes_velocity(velocities, box_size, n_grid_target)
         np.save(f'{dir_LH}/pred_vel_kcut.npy', velocities_kcut, allow_pickle=True) 
         print(f"Saved k-cut velocity field to {fn_vel_kcut}", flush=True)  
                      
@@ -404,7 +404,7 @@ def predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim,
     bias_terms_eul_pred_kcut = []
     for bias_term in bias_terms_eul_pred:
         assert bias_term.shape == (n_grid, n_grid, n_grid), "bias term shape not as expected"
-        bias_term_kcut = utils.remove_highk_modes(bias_term, box_size, n_grid_target)
+        bias_term_kcut = utils_model.remove_highk_modes(bias_term, box_size, n_grid_target)
         bias_terms_eul_pred_kcut.append(bias_term_kcut)
     bias_terms_eul_pred_kcut = np.array(bias_terms_eul_pred_kcut)
     timeprev = timenow

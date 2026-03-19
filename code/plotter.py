@@ -4,7 +4,8 @@ import numpy as np
 import os
 import pandas as pd
 
-import utils
+import utils_plot
+import utils_inference
 # not working rn, TODO fix
 #from utils_inference import chi2      # used in some plotting helpers
 
@@ -563,7 +564,7 @@ def plot_comp_mean_subplots_grid(
     if param_names_plot is None:
         param_names_plot = param_names
     if param_label_dict is None:
-        param_label_dict = utils.param_label_dict
+        param_label_dict = utils_plot.param_label_dict
 
     n_cols = len(param_names_plot)
     if color_arr is None:
@@ -654,7 +655,7 @@ def plot_comp_mean_subplots_grid(
     fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
     axes = np.array(axes).reshape(n_rows, n_cols)
 
-    row_labels = [utils.get_stat_label(statistics_arr[r]) for r in range(n_rows)]
+    row_labels = [utils_plot.get_stat_label(statistics_arr[r]) for r in range(n_rows)]
 
     for r in range(n_rows):
         for c, pp in enumerate(idxs_plot):
@@ -1095,7 +1096,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             tag_test = ''
         else:
             tag_test = tags_test[i]
-        samples, param_names_samples = utils.get_samples(
+        samples, param_names_samples = utils_inference.get_samples(
             idx_obs,
             inf_method,
             tags_inf[i],
@@ -1286,7 +1287,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         # Get color and smoothing settings
         color = chain_data['color']
         if color is None:
-            color = utils.color_dict_methods[chain_data['inf_method']]
+            color = utils_plot.color_dict_methods[chain_data['inf_method']]
         
         # smooth = smooth_dict[chain_data['inf_method']]
         # bins = bins_dict[chain_data['inf_method']]
@@ -1312,7 +1313,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     c.set_plot_config(
         chainconsumer.PlotConfig(
             flip=True,
-            labels=utils.param_label_dict,
+            labels=utils_plot.param_label_dict,
             #contour_label_font_size=12,
             summary_font_size=0,
             extents=extents,
@@ -1418,7 +1419,7 @@ def plot_contours_inf_reparam(param_names, idx_obs, theta_obs_true,
             tag_test = ''
         else:
             tag_test = tags_test[i]
-        samples, param_names_samples = utils.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
+        samples, param_names_samples = utils_inference.get_samples(idx_obs, inf_method, tags_inf[i], tag_test=tag_test)
         
         # Check which requested parameters are available in this chain
         available_params = [pn for pn in param_names if pn in param_names_samples]
@@ -1535,7 +1536,7 @@ def plot_contours_inf_reparam(param_names, idx_obs, theta_obs_true,
         # Get color and smoothing settings
         color = chain_data['color']
         if color is None:
-            color = utils.color_dict_methods[chain_data['inf_method']]
+            color = utils_plot.color_dict_methods[chain_data['inf_method']]
         
         # smooth = smooth_dict[chain_data['inf_method']]
         # bins = bins_dict[chain_data['inf_method']]
@@ -1556,7 +1557,7 @@ def plot_contours_inf_reparam(param_names, idx_obs, theta_obs_true,
     c.set_plot_config(
         chainconsumer.PlotConfig(
             flip=True,
-            labels=utils.param_label_dict,
+            labels=utils_plot.param_label_dict,
             #contour_label_font_size=12,
             summary_font_size=0,
             extents=extents,
@@ -1686,7 +1687,7 @@ def plot_pnn(pnn, kk_emu=None, pnn_emu=None):
     fig, axarr = plt.subplots(2, 3, figsize=(20,10), height_ratios=[2,1])
     ax, ax_err = axarr
 
-    labels_pnn = utils.labels_pnn
+    labels_pnn = utils_plot.labels_pnn
 
     contf=0
     import itertools

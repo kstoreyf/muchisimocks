@@ -10,7 +10,7 @@ import bacco
 
 import paths
 import data_loader
-import utils
+import utils_model
 
 """
 This script computes statistics (e.g., PNN or bispectrum) for mock data.
@@ -171,7 +171,7 @@ def run(statistic, idx_mock,
 
     # Guardrail: if bias params include noise amplitude parameters, we must be given noise fields.
     # Noise amplitudes now live in tag_biasparams, but the noise *fields* still come from tag_noise.
-    noise_param_names = ['An_gaussian'] + list(utils.noiseparam_names_ordered)
+    noise_param_names = ['An_gaussian'] + list(utils_model.noiseparam_names_ordered)
     has_noise_params = any(
         (biasparams_dict_fixed is not None and n in biasparams_dict_fixed)
         or (biasparams_df is not None and n in biasparams_df.columns)
@@ -192,7 +192,7 @@ def run(statistic, idx_mock,
         has_anoise_mult = any(
             (biasparams_dict_fixed is not None and n in biasparams_dict_fixed)
             or (biasparams_df is not None and n in biasparams_df.columns)
-            for n in utils.noiseparam_names_ordered
+            for n in utils_model.noiseparam_names_ordered
         )
         # Enforce consistent convention for which noise fields are used.
         # - multiplicative noise amplitudes => unit-variance noise fields (tag contains 'unit')
@@ -201,7 +201,7 @@ def run(statistic, idx_mock,
         if has_anoise_mult and not tag_noise_has_unit:
             raise ValueError(
                 "Multiplicative noise parameters were provided in tag_biasparams "
-                f"({utils.noiseparam_names_ordered}), but tag_noise='{tag_noise}' does not include 'unit'. "
+                f"({utils_model.noiseparam_names_ordered}), but tag_noise='{tag_noise}' does not include 'unit'. "
                 "Use a unit-variance noise fields tag (e.g. '_noise_unit...')."
             )
         if has_anoise_gaussian and tag_noise_has_unit:
@@ -225,7 +225,7 @@ def run(statistic, idx_mock,
         if params_df is not None:
             param_dict.update(params_df.loc[idx_mock].to_dict())
         print(param_dict, flush=True)
-        cosmo = utils.get_cosmo(param_dict)
+        cosmo = utils_model.get_cosmo(param_dict)
     else:
         # noise-only computation, no fields to load
         fn_fields = None
@@ -233,7 +233,7 @@ def run(statistic, idx_mock,
         # docs say can pass None but it breaks things
         # TODO this will be an issue for future tests!
         # for now we'll load a fiducial
-        cosmo = utils.get_cosmo(utils.cosmo_dict_quijote)
+        cosmo = utils_model.get_cosmo(utils_model.cosmo_dict_quijote)
     
     # Use the shared data_loader functions for consistent logic
     # Special handling for pnn - it only needs one file per cosmology regardless of bias parameters
@@ -401,13 +401,13 @@ def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, 
             noise_model = 'additive'
         else:
             # Multiplicative noise: An_homog/An_b1/...
-            missing = [npm for npm in utils.noiseparam_names_ordered if npm not in A_noise_dict]
+            missing = [npm for npm in utils_model.noiseparam_names_ordered if npm not in A_noise_dict]
             if missing:
                 raise KeyError(
                     "Missing multiplicative noise parameters in tag_biasparams: "
-                    f"{missing}. Expected one of 'An_gaussian' or {utils.noiseparam_names_ordered}."
+                    f"{missing}. Expected one of 'An_gaussian' or {utils_model.noiseparam_names_ordered}."
                 )
-            A_noise = [A_noise_dict[npm] for npm in utils.noiseparam_names_ordered]
+            A_noise = [A_noise_dict[npm] for npm in utils_model.noiseparam_names_ordered]
             noise_model = 'multiplicative'
     else:
         noise_field = None
@@ -421,9 +421,9 @@ def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, 
         biasparam_dict = biasparams_dict_fixed.copy()
         if biasparams_df is not None:
             biasparam_dict.update(biasparams_df.loc[idx_bias].to_dict())
-        bias_vector = [biasparam_dict[name] for name in utils.biasparam_names_ordered]
+        bias_vector = [biasparam_dict[name] for name in utils_model.biasparam_names_ordered]
         # make tracer field
-        tracer_field = utils.get_tracer_field(bias_terms_eul, bias_vector, n_grid_orig,
+        tracer_field = utils_model.get_tracer_field(bias_terms_eul, bias_vector, n_grid_orig,
                                                 noise_field=noise_field, A_noise=A_noise, noise_model=noise_model)
     else:
         # noise-only
