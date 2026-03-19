@@ -169,6 +169,48 @@ def run(statistic, idx_mock,
     params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, _, _ = \
         data_loader.load_params(tag_params, tag_biasparams)
 
+    # Guardrail: if bias params include noise amplitude parameters, we must be given noise fields.
+    # Noise amplitudes now live in tag_biasparams, but the noise *fields* still come from tag_noise.
+    noise_param_names = ['An_gaussian'] + list(utils.noiseparam_names_ordered)
+    has_noise_params = any(
+        (biasparams_dict_fixed is not None and n in biasparams_dict_fixed)
+        or (biasparams_df is not None and n in biasparams_df.columns)
+        for n in noise_param_names
+    )
+    if has_noise_params and tag_noise is None:
+        raise ValueError(
+            "Bias parameters include noise amplitude parameter(s) "
+            f"({[n for n in noise_param_names if ((biasparams_dict_fixed is not None and n in biasparams_dict_fixed) or (biasparams_df is not None and n in biasparams_df.columns))]}), "
+            "but no --tag_noise was provided. This would silently compute noiseless statistics. "
+            "Provide --tag_noise pointing to the noise fields for this dataset."
+        )
+    if tag_noise is not None:
+        has_anoise_gaussian = (
+            (biasparams_dict_fixed is not None and 'An_gaussian' in biasparams_dict_fixed)
+            or (biasparams_df is not None and 'An_gaussian' in biasparams_df.columns)
+        )
+        has_anoise_mult = any(
+            (biasparams_dict_fixed is not None and n in biasparams_dict_fixed)
+            or (biasparams_df is not None and n in biasparams_df.columns)
+            for n in utils.noiseparam_names_ordered
+        )
+        # Enforce consistent convention for which noise fields are used.
+        # - multiplicative noise amplitudes => unit-variance noise fields (tag contains 'unit')
+        # - Gaussian/additive amplitude    => non-unit noise fields (tag does NOT contain 'unit')
+        tag_noise_has_unit = ('unit' in tag_noise)
+        if has_anoise_mult and not tag_noise_has_unit:
+            raise ValueError(
+                "Multiplicative noise parameters were provided in tag_biasparams "
+                f"({utils.noiseparam_names_ordered}), but tag_noise='{tag_noise}' does not include 'unit'. "
+                "Use a unit-variance noise fields tag (e.g. '_noise_unit...')."
+            )
+        if has_anoise_gaussian and tag_noise_has_unit:
+            raise ValueError(
+                "Gaussian/additive noise parameter 'An_gaussian' was provided in tag_biasparams, "
+                f"but tag_noise='{tag_noise}' includes 'unit'. "
+                "Use a non-unit noise fields tag (e.g. '_noise...') for the Gaussian/additive model."
+            )
+
     if tag_params is not None:  
         if 'p0' in tag_params or 'fisher' in tag_params:
             subdir_prefix = 'mock'

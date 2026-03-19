@@ -361,6 +361,9 @@ def load_cosmo_params(tag_params, dir_params='../data/params'):
     fn_params_fixed = f'{dir_params}/params_fixed{tag_params}.txt'
 
     if not os.path.exists(fn_params):
+        if os.path.exists(fn_params_fixed):
+            param_dict_fixed = pd.read_csv(fn_params_fixed).iloc[0].to_dict()
+            return None, param_dict_fixed
         raise FileNotFoundError(
             f"Missing cosmology params file for tag_params={tag_params}. "
             f"Expected: {fn_params}"
@@ -383,14 +386,21 @@ def load_bias_params(tag_biasparams, dir_params='../data/params', bx=None):
     else:
         fn_biasparams = f'{dir_params}/params_lh{tag_biasparams}.txt'
     fn_biasparams_fixed = f'{dir_params}/params_fixed{tag_biasparams}.txt'
+    # Some workflows only provide the "fixed" bias params (single row),
+    # e.g. SHAME fixed bias on all cosmologies, without the full LH table.
+    # In that case, allow falling back to params_fixed{tag_biasparams}.txt.
     if not os.path.exists(fn_biasparams):
+        if os.path.exists(fn_biasparams_fixed):
+            biasparams_dict_fixed = pd.read_csv(fn_biasparams_fixed).iloc[0].to_dict()
+            return None, biasparams_dict_fixed
         raise FileNotFoundError(
             f"Missing bias params file for tag_biasparams={tag_biasparams}. "
             f"Expected: {fn_biasparams}"
         )
+
     biasparams_df = pd.read_csv(fn_biasparams, index_col=0)
     biasparams_dict_fixed = (
-        pd.read_csv(fn_biasparams_fixed).iloc[0].to_dict() 
+        pd.read_csv(fn_biasparams_fixed).iloc[0].to_dict()
         if os.path.exists(fn_biasparams_fixed)
         else {}
     )
@@ -505,7 +515,7 @@ def load_theta_ood(data_mode, tag_mock,
     #     theta_test.extend([A_noise])
     # else:
     # we dont know true noise params
-    theta_test.extend([param_dict[pname] if pname in param_dict else np.nan for pname in noise_param_names_vary])
+    #theta_test.extend([param_dict[pname] if pname in param_dict else np.nan for pname in noise_param_names_vary])
     return np.array(theta_test)
 
     
@@ -630,20 +640,48 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
                                         tag_noise=tag_noise)
     print(f"dir_statistics: {dir_statistics}")
     stat_name = statistic
-    
+
+    # Load parameter dataframes early so we can decide whether PNN fallback is valid.
+    params_df, param_dict_fixed = load_cosmo_params(tag_params)
+    biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams, bx=bx)
+
+    # PNN fallback is only safe for the noiseless/bias-only case.
+    # `An_gaussian` is compatible (scalar additive noise); multiplicative noise params are not.
+    # Some bias-tag modes may not have a biasparams dataframe loaded; treat that as "no Anoise-mult cols".
+    if biasparams_df is None:
+        has_anoisemult_params = False
+    else:
+        has_anoisemult_params = any(
+            col in biasparams_df.columns for col in utils.noiseparam_names_ordered
+        )
+
     if os.path.exists(dir_statistics):
         mode_precomputed = True
     else:
-        if statistic in ('pk', 'pklin', 'pgm'):
+        # Only fall back to PNN in a truly noiseless/bias-only case.
+        can_fallback_to_pnn = (tag_noise is None and tag_Anoise is None and not has_anoisemult_params)
+        if statistic in ('pk', 'pklin', 'pgm') and can_fallback_to_pnn:
             stat_name = 'pnn'
             dir_statistics = get_dir_statistics(stat_name, tag_params, None)
-        mode_precomputed = False
-    
+            mode_precomputed = False
+        else:
+            reason_bits = []
+            if tag_noise is not None:
+                reason_bits.append("tag_noise is set")
+            if tag_Anoise is not None:
+                reason_bits.append("tag_Anoise is set")
+            if has_anoisemult_params and biasparams_df is not None:
+                present = [c for c in utils.noiseparam_names_ordered if c in biasparams_df.columns]
+                reason_bits.append(f"bias params include multiplicative noise columns {present}")
+            reason = "; ".join(reason_bits) if reason_bits else "unknown reason"
+            raise FileNotFoundError(
+                f"Precomputed statistics not found at {dir_statistics}. "
+                f"Refusing to fall back to PNN because: {reason}. "
+                "Generate the precomputed PKs there first."
+            )
+
     print(f"Loading muchisimocks data from {dir_statistics}")    
-    
-    # Load parameter dataframes
-    params_df, param_dict_fixed = load_cosmo_params(tag_params)
-    biasparams_df, biasparams_dict_fixed = load_bias_params(tag_biasparams, bx=bx)
+
     # Noise parameters now live inside the biasparams dataframe.
     Anoise_df, Anoise_dict_fixed = None, {}
 
@@ -808,7 +846,20 @@ def load_bispec(fn_stat, n_grid=None):
 
 def load_pgm(fn_stat):
     pgm_obj = np.load(fn_stat, allow_pickle=True).item()
-    k, stat, error = pgm_obj['k'], pgm_obj['pgm'], pgm_obj['pgm_gaussian_error']
+    # Some precomputed "pgm" files actually store the cross-spectrum under
+    # the legacy "pk" keys (see pgms_mlib/*noise* directories).
+    if 'pgm' in pgm_obj and 'pgm_gaussian_error' in pgm_obj:
+        k, stat, error = (
+            pgm_obj['k'],
+            pgm_obj['pgm'],
+            pgm_obj['pgm_gaussian_error'],
+        )
+    else:
+        k, stat, error = (
+            pgm_obj['k'],
+            pgm_obj['pk'],
+            pgm_obj['pk_gaussian_error'],
+        )
     return k, stat, error, pgm_obj
 
 
@@ -900,32 +951,23 @@ def _get_bias_indices_for_cosmology(idx_LH, params_df, biasparams_df):
 
 def _add_noise_to_statistic(stat, idx_LH, idx_bias, tag_noise,
                            biasparams_df, biasparams_dict_fixed):
-    """Add noise to a statistic if noise parameters are specified."""
-    
-    # Load noise power spectrum
+    """Add noise to a statistic if noise parameters are specified (PNN mode only).
+    For precomputed bias+noise PKs, load from pks_mlib/pks_{params}_{biasparams}_noise_{noise};
+    this function is not used in that case."""
     dir_noise = get_dir_statistics('pk', None, None, tag_noise=tag_noise)
     fn_noise = f'{dir_noise}/pk_n{idx_LH}.npy'
-    
     if not os.path.exists(fn_noise):
         raise FileNotFoundError(f"Noise file {fn_noise} not found!")
-    
     pk_obj_noise = np.load(fn_noise, allow_pickle=True).item()
     stat_noise = pk_obj_noise['pk']
-    
-    # Get noise amplitude (scalar gaussian noise) from the bias parameter row.
+
     A_noise_dict = {}
     if biasparams_dict_fixed:
         A_noise_dict.update(biasparams_dict_fixed)
     if biasparams_df is not None:
         A_noise_dict.update(biasparams_df.loc[idx_bias].to_dict())
-
     if 'An_gaussian' not in A_noise_dict:
-        raise KeyError(
-            "Expected scalar gaussian noise parameter 'An_gaussian' inside tag_biasparams. "
-            "If you are using multiplicative noise (An_homog/An_b1/...), pnn-mode noise "
-            "application needs to be handled elsewhere."
-        )
-
+        raise KeyError("Expected 'An_gaussian' in bias params for noise application.")
     return stat + A_noise_dict['An_gaussian'] * stat_noise
 
 

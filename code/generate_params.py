@@ -141,14 +141,24 @@ PARAM_SETS_LH = {
         fiducial_dict=utils.bias_dict_shame["_nbar0.00022_bl0"],
         seed=42,
     ),
-    # Example: bias coverage run (uncomment/adjust values as needed)
-    "bias_coverage_p4_n1000": dict(
+    # Bias coverage test set
+    "biascoverage_p4_n1000": dict(
         bounds_type="bias",
         n_params_vary=4,
         n_samples=1000,
         tag_bounds="_biascoverage",
-        fiducial_dict={"b1": 1.0, "b2": 0.0, "bs2": 0.0, "bl": 0.0},
+        fiducial_dict=None,
         seed=53,
+    ),
+    # Bias+noisecoverage test set
+    "biasnoisecoverage_p9_n1000": dict(
+        bounds_type="biasnoise",
+        anoise_option="Anmult",
+        n_params_vary=9,
+        n_samples=1000,
+        tag_bounds="_biasnoisecoverage",
+        fiducial_dict=None,
+        seed=54,
     ),
 }
 
@@ -206,9 +216,9 @@ PARAM_SETS_FISHER = {
 
 def main():
     # Select which LH parameter set to generate.
-    #param_set_name = "bias_shamebl0_p0_n1"
-    #param_set_cfg = PARAM_SETS_LH[param_set_name]
-    #generate_params_LH(**param_set_cfg)
+    param_set_name = "biasnoisecoverage_p9_n1000"
+    param_set_cfg = PARAM_SETS_LH[param_set_name]
+    generate_params_LH(**param_set_cfg)
 
     # Example for nested LH:
     # nested_name = "biasnest_p4_n320000"
@@ -221,9 +231,9 @@ def main():
     # generate_params_fisher(**fisher_cfg)
 
     # Bias+noise nested LH (bias + Anmult), 9 total parameters
-    biasnoisenest_name = "biasnoisenest_p9_320000"
-    biasnoisenest_cfg = PARAM_SETS_NESTED[biasnoisenest_name]
-    generate_params_nested_LH(**biasnoisenest_cfg)
+    # biasnoisenest_name = "biasnoisenest_p9_320000"
+    # biasnoisenest_cfg = PARAM_SETS_NESTED[biasnoisenest_name]
+    # generate_params_nested_LH(**biasnoisenest_cfg)
 
 
 def generate_params_LH(

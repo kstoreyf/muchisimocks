@@ -6,10 +6,10 @@ n_train_arr=(10000)
 #tag_stats_arr=("_pk") 
 #tag_stats_arr=("_bispec" "_pk_bispec") 
 #tag_stats_arr=("_pk_bispec")
-tag_stats_arr=("_pk_pgm")
+#tag_stats_arr=("_pk_pgm")
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_stats_arr=("_pgm")
-#tag_stats_arr=("_pgm" "_pk_pgm" "_pk_bispec_pgm") 
+tag_stats_arr=("_pk" "_pk_pgm") 
 #tag_stats_arr=("_pk" "_pgm" "_bispec" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
 
 for n_train in "${n_train_arr[@]}"; do
@@ -18,39 +18,38 @@ for n_train in "${n_train_arr[@]}"; do
         tag_params="_p5_n10000"
         tag_biasparams="_biasnest_p4_n320000"  
         tag_noise=""
+        #tag_biasparams="_biasnoisenest_p9_n320000"
+        #tag_noise="_noise_unit_p5_n10000"
         tag_mask=""
         #tag_mask="_kb0.25"
         tag_data_train="_muchisimocks${tag_stats}${tag_mask}${tag_params}${tag_biasparams}${tag_noise}"
         tag_rp="_rp"
         #tag_rp=""
-        bx=4
+        bx=1
         tag_inf_train="_bx${bx}_ntrain${n_train}"
         tag_inf="${tag_data_train}${tag_rp}${tag_inf_train}"
 
         ### TESTING ###
         ### cosmic variance (quijote)
-        tag_params_test="_shame_p0_n1000"
-        tag_biasparams_test="_biasshame_p0_n1"
-        tag_mean="_mean"
+        # tag_params_test="_shame_p0_n1000"
+        # tag_biasparams_test="_biasshame_p0_n1"
+        # tag_mean="_mean"
         #tag_mean=""
-        tag_noise_test=""
+        #tag_noise_test=""
         ### coverage
-        # tag_params_test="_test_p5_n1000"
-        # #tag_biasparams_test="_b1000_p0_n1"
-        # tag_biasparams_test="_biaszen_p4_n1000"
+        # tag_params_test="_coverage_p5_n1000"
+        # tag_biasparams_test="_biasnoisecoverage_p9_n1000"
+        # tag_noise_test="_noise_unit_coverage_p5_n1000"
         # tag_mean=""
-        # tag_noise_test="_noise_unit_test_p5_n1000"
-        # tag_Anoise_test="_Anmult_p5_n1000"
         ## no noise
         # tag_noise_test=""
-        # tag_Anoise_test=""
         ### Muchisimocks test set 
-        tag_data_test="_muchisimocks${tag_stats}${tag_mask}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_mean}"
+        #tag_data_test="_muchisimocks${tag_stats}${tag_mask}${tag_params_test}${tag_biasparams_test}${tag_noise_test}${tag_mean}"
 
         ### OOD test set
-        #data_mode="shame" 
-        #tag_mock="_nbar0.00022"
-        #tag_data_test="_shame${tag_stats}${tag_mask}${tag_mock}"
+        data_mode="shame" 
+        tag_mock="_nbar0.00022"
+        tag_data_test="_shame${tag_stats}${tag_mask}${tag_mock}"
 
         config_test_file="../configs/configs_test/config_TRAIN${tag_inf}_TEST${tag_data_test}.yaml"
 

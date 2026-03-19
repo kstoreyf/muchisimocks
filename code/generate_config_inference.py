@@ -15,20 +15,21 @@ def main():
     #stat_arr = [['bispec'], ['pk', 'bispec']]
     #stat_arr = [['pk'], ['bispec'], ['pk', 'bispec']]
     #stat_arr = [['pgm']]
-    stat_arr = [['pk', 'pgm']]
+    #stat_arr = [['pk', 'pgm']]
     #stat_arr = [['pk', 'bispec', 'pgm']]
     #stat_arr = [['pk']]
     #stat_arr = [['bispec']]
-    #stat_arr = [['bispec'], ['pk', 'bispec'], ['pk', 'bispec', 'pgm']]
+    stat_arr = [['pk', 'bispec'], ['pk', 'bispec', 'pgm']]
     #stat_arr = [['pk', 'bispec']]
     #stat_arr = [['pk'], ['pgm'], ['bispec'], ['pk', 'pgm'], ['pk', 'bispec'], ['pk', 'bispec', 'pgm']]
+    #stat_arr = [['pk'],  ['pk', 'pgm'], ['pk', 'bispec'], ['pk', 'bispec', 'pgm']]
     n_train_arr = [10000]
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
     for statistics in stat_arr:
         for n_train in n_train_arr:
             #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
-            #generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train)
+            generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train)
     #generate_runlike_config(overwrite=overwrite)
     
     
@@ -40,8 +41,10 @@ def generate_train_config(dir_config='../configs/configs_train',
     """
     data_mode = 'muchisimocks'
     tag_params = '_p5_n10000'
-    tag_biasparams = '_biasnest_p4_n320000'
-    tag_noise = None
+    #tag_biasparams = '_biasnest_p4_n320000'
+    #tag_noise = None
+    tag_biasparams = '_biasnoisenest_p9_n320000'
+    tag_noise = '_noise_unit_p5_n10000'
     #tag_mask = ''
     tag_mask = '_kb0.25'
     bx = 1 # bx is bias parameters per cosmo (1x, 2x, 4x, 8x, 16x, 32x)
@@ -127,11 +130,13 @@ def generate_test_config(dir_config='../configs/configs_test',
     
     ### train params
     tag_params = '_p5_n10000'
-    tag_biasparams = '_biasnest_p4_n320000'
-    tag_noise = None
-    #tag_mask = '_kb0.25'
     bx=4
-    tag_mask = ''
+    #tag_biasparams = '_biasnest_p4_n320000'
+    #tag_noise = None
+    tag_biasparams = '_biasnoisenest_p9_n320000'
+    tag_noise = '_noise_unit_p5_n10000'
+    tag_mask = '_kb0.25'
+    #tag_mask = ''
 
     reparameterize = True
     # For loading a model trained with wandb sweep; best of that sweep will be used
@@ -140,23 +145,20 @@ def generate_test_config(dir_config='../configs/configs_test',
     tag_sweep = None
     n_train_sweep = None
         
-    ### test params
+    ##### test params
     data_mode_test = 'muchisimocks'
     idxs_obs = None # if none, all (unless evaluate mean)
-    ## settings for fixed cosmo
-    evaluate_mean = True
-    tag_params_test = '_shame_p0_n1000'
-    tag_biasparams_test = '_biasshame_p0_n1'
+    ### settings for fixed cosmo
+    #evaluate_mean = True
+    #tag_params_test = '_shame_p0_n1000'
+    #tag_biasparams_test = '_biasshame_p0_n1'
     # tag_noise_test = None
     # tag_Anoise_test = None
-    ## settings for coverage test
-    # evaluate_mean = False
-    # tag_params_test = '_test_p5_n1000'
-    # #tag_biasparams_test = '_b1000_p0_n1'
-    # tag_biasparams_test = '_biaszen_p4_n1000'
-    # tag_noise_test = '_noise_unit_test_p5_n1000'
-    # tag_Anoise_test = '_Anmult_p5_n1000'
-    tag_noise_test = None
+    ### settings for coverage test
+    evaluate_mean = False
+    tag_params_test = '_coverage_p5_n1000'
+    tag_biasparams_test = '_biasnoisecoverage_p9_n1000'
+    tag_noise_test = '_noise_unit_coverage_p5_n1000'
     
     # don't need train kwargs here bc not actually loading the data; just getting tag to reload model
     tag_stats = f'_{"_".join(statistics)}'    
@@ -244,17 +246,11 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     
     ### train params
     tag_params = '_p5_n10000'
-    #tag_biasparams = '_b1000_p0_n1'
-    #tag_biasparams = '_b1zen_p1_n10000'
-    #tag_biasparams = '_biaszen_p4_n10000' #1x
-    #tag_biasparams = '_biaszen_p4_n50000' #5x
-    #tag_biasparams = '_biaszen_p4_n100000' #10x
-    tag_biasparams = '_biaszen_p4_n200000' #20 bias params per cosmo
-    tag_noise = '_noise_unit_p5_n10000'
-    #tag_Anoise = '_An_p1_n10000'
-    #tag_Anoise = '_An1_p0_n1' #fix Anoise=1
-    #tag_noise = None
-    #tag_Anoise = None
+    bx=1
+    tag_biasparams = '_biasnest_p4_n320000'
+    tag_noise = None
+    #tag_biasparams = '_biasnoisenest_p9_n320000'
+    #tag_noise = '_noise_unit_p5_n10000'
     tag_mask = '_kb0.25'
     #tag_mask = ''
 
@@ -286,8 +282,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
     tag_inf_train = tag_data_train
     if reparameterize:
         tag_inf_train += '_rp'
-    if n_train is not None:
-        tag_inf_train += f'_ntrain{n_train}'
+    tag_inf_train += f'_bx{bx}_ntrain{n_train}'
     # run_mode fixed to load for testing, bc always should be loading already trained model;
     # (best is for training; will read the best hyperparameters from a sweep and retrain and save it)
     if tag_sweep is not None:
@@ -318,6 +313,7 @@ def generate_test_config_ood(dir_config='../configs/configs_test',
         "tag_noise": tag_noise,
         "tag_mask": tag_mask,
         "n_train": n_train,
+        "bx": bx,
         "evaluate_mean": evaluate_mean,
         "idxs_obs": idxs_obs,
         "tag_data_train": tag_data_train,

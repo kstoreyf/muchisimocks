@@ -13,11 +13,8 @@ import utils
 
 def main():
     
-    #tag_noise = '_noise_quijote_p0_n1000'
-    #tag_noise = '_noise_p5_n10000'
-    #tag_noise = '_noise_p5_n10000_advected'
     #tag_params = '_p5_n10000'
-    #tag_params = '_test_p5_n1000'
+    #tag_params = '_coverage_p5_n1000'
     #tag_params = '_quijote_p0_n1000'
     tag_params = '_shame_p0_n1000'
     #tag_noise = f'_noise_unit{tag_params}'
