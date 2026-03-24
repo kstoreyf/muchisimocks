@@ -4,9 +4,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 import sys
-sys.path.append('/dipc/kstoreyf/muchisimocks/code')
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import argparse
-from multiprocessing import Pool, cpu_count
 
 import numpy as np
 import pandas as pd
@@ -19,6 +20,7 @@ import sbi_model
 import scaler_custom as scl
 import data_loader
 import generate_params as genp
+from generate_config_inference import BX_SWEEP, N_TRAIN_SWEEP
 
 
 def _build_tags_mask(statistics, config) -> list[str]:
@@ -181,46 +183,37 @@ def train_likefree_inference(config, overwrite=False):
             print('param_names after plite filtering:', param_names)
             print('Updated bounds after plite filtering:', dict_bounds)
     
-    ### Subsampling (ntrain and train/val)
+    ### Subsampling (n_train); sbi does train/val split internally via validation_fraction
     if n_train is None:
         n_train = len(random_ints_cosmo)
+    n_train_used = int(n_train)
     idxs_cosmo_subset = random_ints_cosmo[:n_train]
-    idxs_cosmo_train, idxs_cosmo_val, _ = utils_inference.idxs_train_val_test(idxs_cosmo_subset, frac_train=0.9, frac_val=0.1, frac_test=0.0)
 
-    # for each row in the index metadata of the full dataset, 
+    # for each row in the index metadata of the full dataset,
     # if our intended training idx is in it, keep
     # y_shape is (n_stats, n_idxs, n_bins) (inhomogeneous!)
     idxs_all = np.arange(len(y[0]))
     # first column of idxs_params is the cosmo index
-    idxs_train = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_train)]
-    idxs_val = idxs_all[np.isin(idxs_params[:,0], idxs_cosmo_val)]
+    idxs_train = idxs_all[np.isin(idxs_params[:, 0], idxs_cosmo_subset)]
 
-
-
-    theta_train, theta_val = theta[idxs_train], theta[idxs_val]
-    y_train, y_val, y_err_train, y_err_val = [], [], [], []
+    theta_train = theta[idxs_train]
+    y_train = []
     for i_stat in range(len(statistics)):
         print(f"y train shape for statistic {statistics[i_stat]}:", y[i_stat][idxs_train].shape)
         y_train.append(y[i_stat][idxs_train])
-        y_val.append(y[i_stat][idxs_val])
-        y_err_train.append(y_err[i_stat][idxs_train])
-        y_err_val.append(y_err[i_stat][idxs_val])    
-        
+
     print("y_train shape:", len(y_train), len(y_train[0]), len(y_train[0][0]))
-    # y_train, y_val = y[:,idxs_train], y[:,idxs_val]
-    # y_err_train, y_err_val = y_err[:,idxs_train], y_err[:,idxs_val]
         
     ### Run inference (now only sbi)
-    # Run mode and sweep configuration
     print("tag_inf (SBI):", tag_inf)
-    
+    matches_sweep_model = bx is not None and int(bx) == BX_SWEEP and int(n_train) == N_TRAIN_SWEEP
+    if run_mode == "best":
+        print("run_mode=best matches_sweep_model=%s bx/n_train=%s/%s (sweep %s/%s)" % (
+            matches_sweep_model, bx, n_train, BX_SWEEP, N_TRAIN_SWEEP))
+
     sbi_network = sbi_model.SBIModel(
                 theta_train=theta_train,
                 y_train_unscaled=y_train,
-                y_err_train_unscaled=y_err_train,
-                theta_val=theta_val,
-                y_val_unscaled=y_val,
-                y_err_val_unscaled=y_err_val,
                 tag_sbi=tag_inf,
                 run_mode=run_mode,
                 sweep_name=sweep_name,
@@ -228,6 +221,7 @@ def train_likefree_inference(config, overwrite=False):
                 statistics=statistics,
                 dict_bounds=dict_bounds,
                 overwrite=overwrite,
+                matches_sweep_model=matches_sweep_model,
                 )
     sbi_network.run(max_epochs=2000)
     #sbi_network.run(max_epochs=10)
@@ -257,7 +251,6 @@ def test_likefree_inference(config, overwrite=False):
     tag_data_train = config["tag_data_train"]
     tag_data_test = config["tag_data_test"]
     tag_inf_train = config["tag_inf_train"]
-    sweep_name = config["sweep_name"]
     n_test_eval = config.get("n_test_eval", None)
     tags_mask = _build_tags_mask(statistics, config)
     #print("BEWARNED: manually setting n_test_eval to 100")
@@ -301,7 +294,6 @@ def test_likefree_inference(config, overwrite=False):
     sbi_network = sbi_model.SBIModel(
                 tag_sbi=tag_inf_train,
                 run_mode='load',
-                sweep_name=sweep_name,
                 param_names=param_names_train,
                 statistics=statistics,
                 overwrite=overwrite,
@@ -348,7 +340,6 @@ def test_likefree_inference_ood(config, overwrite=False):
     tag_noise = config.get("tag_noise", None)  
     tag_data_train = config["tag_data_train"]
     tag_inf_train = config["tag_inf_train"]
-    sweep_name = config["sweep_name"]
     ### testing
     data_mode_test = config["data_mode_test"]
     evaluate_mean = config["evaluate_mean"]
@@ -363,9 +354,9 @@ def test_likefree_inference_ood(config, overwrite=False):
     else:
         tag_test = tag_data_test
     
-    # Construct tag_test_eval with _N{n_test_eval} suffix if n_test_eval is specified
+    # Construct tag_test_eval with _neval{n_test_eval} suffix if n_test_eval is specified
     if n_test_eval is not None:
-        tag_n_eval = f"_N{n_test_eval}"
+        tag_n_eval = f"_neval{n_test_eval}"
         tag_test_eval = f"{tag_test}{tag_n_eval}"
     else:
         tag_test_eval = tag_test
@@ -388,7 +379,6 @@ def test_likefree_inference_ood(config, overwrite=False):
     sbi_network = sbi_model.SBIModel(
                 tag_sbi=tag_inf_train,
                 run_mode='load',
-                sweep_name=sweep_name,
                 param_names=param_names_train,
                 statistics=statistics,
                 overwrite=overwrite,
@@ -517,35 +507,6 @@ def run_likelihood_inference(config):
                 tag_inf=tag_inf, tag_obs=tag_obs, 
                 n_threads=8, mcmc_framework=mcmc_framework)
            
-
-         
-def scale_y_data(y_train, y_val, y_test,
-                 y_err_train=None, y_err_val=None, y_err_test=None,
-                 return_scaler=True):
-    scaler = scl.Scaler('log_minmax')
-    scaler.fit(y_train)
-    y_train_scaled = scaler.scale(y_train)
-    y_val_scaled = scaler.scale(y_val)
-    y_test_scaled = scaler.scale(y_test)
-
-    if y_err_train is not None:
-        err_msg =  "If you're passing y_err_train, you should also pass y_err_val and y_err_test!"
-        assert y_err_val is not None and y_err_test is not None, err_msg
-        y_err_train_scaled = scaler.scale_error(y_err_train, y_train)
-        y_err_val_scaled = scaler.scale_error(y_err_val, y_val)
-        y_err_test_scaled = scaler.scale_error(y_err_test, y_test)
-        if return_scaler:
-            return y_train_scaled, y_val_scaled, y_test_scaled, \
-                y_err_train_scaled, y_err_val_scaled, y_err_test_scaled, scaler
-        else:
-            return y_train_scaled, y_val_scaled, y_test_scaled, \
-                y_err_train_scaled, y_err_val_scaled, y_err_test_scaled
-
-    if return_scaler:
-        return y_train_scaled, y_val_scaled, y_test_scaled, scaler
-    else:
-        return y_train_scaled, y_val_scaled, y_test_scaled
-
 
 if __name__=='__main__':
     main()

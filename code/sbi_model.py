@@ -1,9 +1,6 @@
 import os
-
-# # Set environment variables before importing torch
-# os.environ['OMP_NUM_THREADS'] = '24'
-# os.environ['MKL_NUM_THREADS'] = '24'
-# os.environ['NUMEXPR_NUM_THREADS'] = '24'
+import shutil
+from types import SimpleNamespace
 
 import numpy as np
 import pathlib
@@ -11,53 +8,84 @@ import pickle
 import time
 import wandb
 
-import sbi
 from sbi.inference import NPE
 from sbi.utils import BoxUniform
 from sbi.neural_nets import posterior_nn
 import torch
 
+import paths
 import scaler_custom as scl
 import generate_params as genp
 import utils_inference
 
 
+# Must match sweep_config['parameters'] and agent wandb.config.update in run().
+_WANDB_SWEEP_PARAMETER_KEYS = (
+    "learning_rate",
+    "hidden_features",
+    "training_batch_size",
+    "num_transforms",
+)
+
+
+def _fit_config_from_wandb_run(run, max_epochs_default, validation_fraction_default):
+    """
+    Build fit hyperparameters from a wandb sweep run's config.
+
+    Requires the sweep-sampled keys (``sweep_config['parameters']`` in ``run()``):
+    learning_rate, hidden_features, training_batch_size, num_transforms.
+
+    Uses per-run keys from the sweep agent's ``wandb.config.update`` when
+    present: max_epochs, model_type, validation_fraction; otherwise falls back
+    to ``max_epochs_default`` / ``validation_fraction_default`` / ``'maf'``.
+    """
+    raw = {k: v for k, v in dict(run.config).items() if not str(k).startswith("_")}
+    missing = [k for k in _WANDB_SWEEP_PARAMETER_KEYS if raw.get(k) is None]
+    if missing:
+        raise ValueError(
+            "Best run %s missing sweep-sampled keys %s (expected all of %s). "
+            "Config keys: %s"
+            % (
+                run.id,
+                missing,
+                _WANDB_SWEEP_PARAMETER_KEYS,
+                sorted(raw.keys()),
+            )
+        )
+    return SimpleNamespace(
+        learning_rate=float(raw["learning_rate"]),
+        hidden_features=int(raw["hidden_features"]),
+        training_batch_size=int(raw["training_batch_size"]),
+        num_transforms=int(raw["num_transforms"]),
+        model_type=raw.get("model_type") or "maf",
+        max_epochs=int(raw.get("max_epochs", max_epochs_default)),
+        validation_fraction=float(
+            raw.get("validation_fraction", validation_fraction_default)
+        ),
+    )
+
+
 class SBIModel():
 
-    def __init__(self, theta_train=None, y_train_unscaled=None, y_err_train_unscaled=None,
-                     theta_val=None, y_val_unscaled=None, y_err_val_unscaled=None,
-                     theta_test=None, y_test_unscaled=None, y_err_test_unscaled=None,
+    def __init__(self, theta_train=None, y_train_unscaled=None,
+                     theta_test=None, y_test_unscaled=None,
                      statistics=None, param_names=None, dict_bounds=None, 
                      run_mode='single', tag_sbi='', n_threads=1, 
                      sweep_name=None, overwrite=False,
+                     matches_sweep_model=False,
                      ):
-        
-        # training does not seem to be parallelizeable! getting no speedup
-        # if n_threads is not None:
-        #     tf.config.threading.set_inter_op_parallelism_threads(n_threads)
-        #     tf.config.threading.set_intra_op_parallelism_threads(n_threads)
-        # NOTE the error is not used in SBI
 
-        self.dir_sbi = f'../results/results_sbi/sbi{tag_sbi}'
+        self.dir_sbi = str(paths.DIR_RESULTS / "results_sbi" / f"sbi{tag_sbi}")
         p = pathlib.Path(self.dir_sbi)
         p.mkdir(parents=True, exist_ok=True)
         
         self.theta_train = theta_train
         self.y_train_unscaled = y_train_unscaled
-        self.y_err_train_unscaled = y_err_train_unscaled
-
-        self.theta_val = theta_val
-        self.y_val_unscaled = y_val_unscaled
-        self.y_err_val_unscaled = y_err_val_unscaled
 
         self.theta_test = theta_test
         self.y_test_unscaled = y_test_unscaled
-        self.y_err_test_unscaled = y_err_test_unscaled
         
-        #if training, need to pass param names
-        #if run_mode != 'load':
-        # ideally for testing, the saved SBI model would know the 
-        # parameter names, but it seems that they can't save them
+        # param_names are required (saved model doesn't store them)
         assert param_names is not None, 'need parameter names'
         self.param_names = param_names
         assert len(statistics) > 0, 'Pass statistics! (Needed for scaler)'
@@ -66,16 +94,10 @@ class SBIModel():
         if self.y_train_unscaled is not None:
             self.setup_scalers_y()
             self.n_dim = self.y_train.shape[1]
-            #self.n_dim = self.y_train.shape[1:]
             print('ndim:', self.n_dim)
         elif self.y_test_unscaled is not None:
-            # better way to do this now that might have multiple statistics?
             self.n_dim = np.sum([y_test_i.shape[1] for y_test_i in self.y_test_unscaled])
-            #self.n_dim = self.y_test_unscaled.shape[1]
-            #self.n_dim = self.y_test.shape[1:]
-            
-        # If we don't have training data, we'll probs want the scaler
-        # (but maybe there's a better place for this...?)
+
         if self.y_train_unscaled is None:
             self.load_scalers_y()
             
@@ -92,10 +114,12 @@ class SBIModel():
         
         self.n_threads = n_threads
         self.overwrite = overwrite
+        self.matches_sweep_model = matches_sweep_model
 
         
-    def run(self, max_epochs=1000):
-        
+    def run(self, max_epochs=2000):
+        validation_fraction = 0.1
+
         print("run mode:", self.run_mode)
         print("sweep name:", self.sweep_name)
         print("dir_sbi:", self.dir_sbi)
@@ -103,7 +127,8 @@ class SBIModel():
         project_name = 'muchisimocks-sbi'
         
         if self.run_mode == 'sweep':
-            count = 10  # number of runs in sweep for random search
+            wandb.login()
+            count = 30  # number of runs in sweep for random search
             sweep_config = {
                 'name': self.sweep_name,
                 'method': 'random',
@@ -112,47 +137,80 @@ class SBIModel():
                     'goal': 'minimize'
                 },
                 'parameters': {
-                    'learning_rate': {'values': [1e-2, 1e-3, 1e-4, 1e-5]},
-                    'hidden_features': {'values': [32, 64, 128]},
-                    'training_batch_size': {'values': [32, 64, 128]},
-                    'model_type': {'values': ['maf']},
-                    #'model_type': {'values': ['maf', 'nsf']},
-                    'max_epochs': {'value': max_epochs},
+                    'learning_rate': {'values': [1e-2, 3e-3, 1e-3, 3e-4, 1e-4, 3e-5, 1e-5]},
+                    'hidden_features': {'values': [32, 64, 128, 256]},
+                    'training_batch_size': {'values': [32, 64, 128, 256]},
+                    'num_transforms': {'values': [4, 6, 8, 10]},
                 }
             }
             sweep_id = wandb.sweep(sweep_config, project=project_name)
-            
+
             def _fit_model_wandb():
-                wandb.init()
-                self.fit_model(wandb.config, save_model=False)
-                
+                wandb.init(project=project_name)
+                wandb.config.update({
+                    'max_epochs': max_epochs,
+                    'model_type': 'maf',
+                    'validation_fraction': validation_fraction,
+                })
+                run_dir = os.path.join(self.dir_sbi, wandb.run.id)
+                self.fit_model(wandb.config, save_model=True, save_dir=run_dir)
+                artifact = wandb.Artifact(name=f"sbi-posterior-{wandb.run.id}", type="model")
+                artifact.add_dir(local_path=run_dir)
+                wandb.run.log_artifact(artifact)
+
             wandb.agent(sweep_id, function=_fit_model_wandb, count=count)
             wandb.finish()
             
         elif self.run_mode == 'best':
             wandb.login()
             api = wandb.Api()
-            # get sweep name
             sweeps = api.project(project_name).sweeps()
-            
             self.sweep = next((s for s in sweeps if s.name == self.sweep_name), None)
             assert self.sweep is not None, f"Sweep {self.sweep_name} not found"
-            
-            # Get best run parameters
             best_run = self.sweep.best_run()
-            print(f"Using hyperparameters from best run from sweep {self.sweep_name}: {best_run.config}")
-            wandb.init(project=project_name, config=best_run.config)
-            self.fit_model(wandb.config, save_model=True)
-            wandb.finish()
+            print("Best run from sweep %s: %s" % (self.sweep_name, best_run.id))
+
+            if self.matches_sweep_model:
+                model_artifacts = [
+                    a for a in best_run.logged_artifacts() if a.type == "model"
+                ]
+                assert model_artifacts, (
+                    "No model artifact found for best run %s" % best_run.id
+                )
+                artifact = model_artifacts[0]
+                download_root = artifact.download()
+                os.makedirs(self.dir_sbi, exist_ok=True)
+                for fn in ["posterior.p", "inference.p", "param_names.txt", "config.pkl"]:
+                    src = os.path.join(download_root, fn)
+                    if os.path.exists(src):
+                        shutil.copy2(src, os.path.join(self.dir_sbi, fn))
+                for f in pathlib.Path(download_root).glob("scaler_y_*.p"):
+                    shutil.copy2(f, os.path.join(self.dir_sbi, f.name))
+                print("Copied best sweep model to %s" % self.dir_sbi)
+            else:
+                print("Training with best-run hparams (bx/n_train != sweep model; sweep=%s)" % self.sweep_name)
+                cfg = _fit_config_from_wandb_run(
+                    best_run, max_epochs, validation_fraction
+                )
+                wandb.init(
+                    project=project_name,
+                    config=vars(cfg),
+                    name="retrain-besthp-%s" % best_run.id,
+                )
+                self.fit_model(cfg, save_model=True)
+                wandb.finish()
             
         elif self.run_mode == 'single':
+            wandb.login()
             # Use default config for single run
             config = {
                 'learning_rate': 1e-3,
                 'hidden_features': 128,
                 'training_batch_size': 64,
+                'num_transforms': 5,
                 'model_type': 'maf',
                 'max_epochs': max_epochs,
+                'validation_fraction': validation_fraction,
             }
             wandb.init(project=project_name, config=config)
             self.fit_model(wandb.config, save_model=True)
@@ -161,20 +219,20 @@ class SBIModel():
         elif self.run_mode == 'load':
             self.load_posterior()
             self.load_param_names()
-            # may need to get n_params somehow
-            
         else:
             raise ValueError(f"run_mode {self.run_mode} not recognized")
             
-    def fit_model(self, config, save_model=True):
+    def fit_model(self, config, save_model=True, save_dir=None):
         """
-        Fit the SBI model using the specified configuration
+        Fit the SBI model using the specified configuration.
+
+        If save_dir is provided, save to that directory instead of self.dir_sbi
+        (used for sweep runs so each run gets its own subdirectory).
         """
         
         print(f"Fitting model for dir_sbi={self.dir_sbi}, run_mode={self.run_mode}, sweep_name={self.sweep_name}")
         print("wandb.config:", config)
-        
-         # Setup device
+
         device = "cuda" if torch.cuda.is_available() else "cpu"
         # Optimize PyTorch settings
         if device == "cpu":
@@ -198,54 +256,43 @@ class SBIModel():
         hidden_features = config.hidden_features
         model_type = config.model_type
         max_epochs = config.max_epochs
-            
+        num_transforms = getattr(config, 'num_transforms', 5) # sbi default is 5
+
         density_estimator_build_fun = posterior_nn(
             model=model_type,
             hidden_features=hidden_features,
-            # num_transforms and num_blocks could also be hyperparameters
+            num_transforms=num_transforms,
         )
 
-        # can't pass in own validation set without writing custom training loop,
-        # so doing this hack (don't even know if the fraction is taken from the end
-        # or randomly, so may be mixing train and val here)
-        theta_train_and_val = np.concatenate((self.theta_train, self.theta_val), axis=0)
-        y_train_and_val = np.concatenate((self.y_train, self.y_val), axis=0)
-        validation_fraction = len(self.theta_val) / len(theta_train_and_val)
-        print('theta_train shape:', self.theta_train.shape, 'theta_val shape:', self.theta_val.shape)
-        print(f"Validation fraction: {validation_fraction}")
+        validation_fraction = float(getattr(config, "validation_fraction", 0.1))
+        print("theta_train shape:", self.theta_train.shape)
+        print(f"validation_fraction (sbi internal split): {validation_fraction}")
         
         inference = NPE(prior=prior, density_estimator=density_estimator_build_fun)
         inference = inference.append_simulations(
-            torch.tensor(theta_train_and_val, dtype=torch.float32),
-            torch.tensor(y_train_and_val, dtype=torch.float32),
+            torch.tensor(self.theta_train, dtype=torch.float32),
+            torch.tensor(self.y_train, dtype=torch.float32),
             )
         
         print(f"Training with {self.n_threads} threads")
         start = time.time()
-        
-        # defaults: 
-        # stop_after_epochs=20
-        # num_atoms = 10
+
         density_estimator = inference.train(
             max_num_epochs=max_epochs,
             training_batch_size=training_batch_size,
             validation_fraction=validation_fraction,
             learning_rate=learning_rate,
             show_train_summary=True,
-            #callbacks=callbacks
-            )
+        )
         print("Trained!")
         end = time.time()
         print(f"Training time: {end - start:.2f}s = {(end - start) / 60:.2f} min (max_epochs={max_epochs}, n_threads={self.n_threads})")
 
-        # Get the final training and validation losses
+        # Log final losses to wandb
         train_log = inference._summary
         if train_log and len(train_log['training_loss']) > 0:
             final_training_loss = train_log['training_loss'][-1] if train_log['training_loss'] is not None else None
             final_validation_loss = train_log['validation_loss'][-1] if train_log['validation_loss'] is not None else None
-            #final_training_loss = train_log[0].get("training_log_probs", [])[-1] if train_log[0].get("training_log_probs", []) else None
-            #final_validation_loss = train_log[0].get("validation_log_probs", [])[-1] if train_log[0].get("validation_log_probs", []) else None
-            
             if final_training_loss is not None:
                 wandb.log({"final_training_loss": final_training_loss})
             if final_validation_loss is not None:
@@ -254,22 +301,28 @@ class SBIModel():
         print("Building posterior")
         self.posterior = inference.build_posterior(density_estimator)
         print(self.posterior)
-        
+
+        out_dir = save_dir if save_dir is not None else self.dir_sbi
+
         # save model if requested (e.g., for best model from sweep or single run)
         if save_model:
-            with open(f"{self.dir_sbi}/posterior.p", "wb") as f:
+            os.makedirs(out_dir, exist_ok=True)
+            if save_dir is not None:
+                # Copy scalers so the run dir is self-contained (for artifact)
+                for stat in self.statistics:
+                    src = f"{self.dir_sbi}/scaler_y_{stat}.p"
+                    if os.path.exists(src):
+                        shutil.copy2(src, f"{out_dir}/scaler_y_{stat}.p")
+            with open(f"{out_dir}/posterior.p", "wb") as f:
                 pickle.dump(self.posterior, f)
-            with open(f"{self.dir_sbi}/inference.p", "wb") as f:
+            with open(f"{out_dir}/inference.p", "wb") as f:
                 pickle.dump(inference, f)
-            with open(f"{self.dir_sbi}/param_names.txt", "w") as f:
+            with open(f"{out_dir}/param_names.txt", "w") as f:
                 np.savetxt(f, self.param_names, fmt="%s")
-            
-            # Also save the hyperparameter configuration
             config_dict = {k: v for k, v in vars(config).items() if not k.startswith('_')}
-            with open(f"{self.dir_sbi}/config.pkl", "wb") as f:
+            with open(f"{out_dir}/config.pkl", "wb") as f:
                 pickle.dump(config_dict, f)
-            
-            print(f"Saved model to {self.dir_sbi}")
+            print(f"Saved model to {out_dir}")
 
             
     def load_posterior(self):
@@ -288,11 +341,10 @@ class SBIModel():
 
 
     def setup_scalers_y(self):
-        
         self.scalers_y = []
-        # these have length the number of data samples
         self.y_train = np.empty((len(self.y_train_unscaled[0]), 0))
-        self.y_val = np.empty((len(self.y_val_unscaled[0]), 0))
+        if self.y_test_unscaled is not None:
+            self.y_test = np.empty((len(self.y_test_unscaled[0]), 0))
         print(f"y_train shape: {self.y_train.shape}")
                 
         for i, statistic in enumerate(self.statistics):
@@ -307,10 +359,8 @@ class SBIModel():
             self.scalers_y.append(scaler_y)
             
             y_train_i = scaler_y.scale(self.y_train_unscaled[i])
-            y_val_i = scaler_y.scale(self.y_val_unscaled[i])
 
             self.y_train = np.concatenate((self.y_train, y_train_i), axis=1)
-            self.y_val = np.concatenate((self.y_val, y_val_i), axis=1)
             if self.y_test_unscaled is not None:
                 y_test_i = scaler_y.scale(self.y_test_unscaled[i])
                 self.y_test = np.concatenate((self.y_test, y_test_i), axis=1)
@@ -363,14 +413,9 @@ class SBIModel():
     
     
     
-    def evaluate_test_set(self, y_test_unscaled=None, tag_test_eval='', 
-                          n_samples=10000, checkpoint_every=100, 
-                          #n_samples=200, checkpoint_every=10, 
+    def evaluate_test_set(self, y_test_unscaled=None, tag_test_eval='',
+                          n_samples=10000, checkpoint_every=100,
                           resume=True, n_test_eval=100):
-        
-        ### NOTE: this went orders of mag faster when i added checkpointing every 100 and doing 
-        # samples_batched of that size! before sometimes would only finish a 20-50% in a day;
-        # now finishing in 4-8 hours, for 1000 test set with 10000 samples
         
         # y_test_unscaled is an array of length n_statistics, each with shape (n_test, n_dim);
         # concatenate inside evaluate bc we need to scale based on each stat
@@ -390,9 +435,7 @@ class SBIModel():
         fn_samples_test_pred = f'{self.dir_sbi}/samples_test{tag_test_eval}_pred.npy'
         fn_samples_test_pred_inprogress = f'{self.dir_sbi}/samples_test{tag_test_eval}_pred_inprogress.npy'
         checkpoint_file = f"{self.dir_sbi}/checkpoint_samples_test{tag_test_eval}.txt"
-        
-        # Check for existing samples and checkpoint
-        #samples_total = len(y_test_unscaled[0])
+
         if y_test_unscaled[0].ndim == 1:
             samples_total = 1
         else:
@@ -510,8 +553,3 @@ class SBIModel():
         if os.path.exists(fn_samples_test_pred_inprogress):
             os.rename(fn_samples_test_pred_inprogress, fn_samples_test_pred)
             print(f"Sampling complete! Moved to final file: {fn_samples_test_pred}")
-        
-        # Clean up checkpoint file on successful completion
-        # if os.path.exists(checkpoint_file):
-        #     os.remove(checkpoint_file)
-        #     print("Checkpoint file removed after successful completion")

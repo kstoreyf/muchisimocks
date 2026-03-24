@@ -14,6 +14,7 @@ import numpy as np
 from pathlib import Path
 
 import data_loader
+import paths
 import utils_inference
 
 param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
@@ -387,8 +388,7 @@ def load_test_predictions(
 
 def _sbi_samples_pred_path(tag_inf: str, tag_test: str) -> Path:
     """Path to finalized test predictions (`samples_test*_pred.npy`) that loaders use."""
-    repo_root = Path(__file__).resolve().parents[1]
-    dir_sbi = repo_root / "results" / "results_sbi" / f"sbi{tag_inf}"
+    dir_sbi = paths.DIR_RESULTS / "results_sbi" / f"sbi{tag_inf}"
     return dir_sbi / f"samples_test{tag_test}_pred.npy"
 
 

@@ -5,9 +5,17 @@ from pathlib import Path
 import utils_model
 
 '''
-Generates a YAML configuration file for inference.
+Generates YAML configuration files for inference.
 '''
 
+# Fiducial bx / n_train used to name the wandb sweep (sweep_name) and for
+# run_mode `best`: if (bx, n_train) in the config match these, the best run
+# artifact is copied; otherwise best hyperparameters are taken from the sweep
+# and the model is retrained on the config's bx / n_train.
+# Training data always uses config ``bx`` and ``n_train`` (including run_mode
+# ``sweep``); only hyperparameters come from the wandb sweep.
+BX_SWEEP = 32
+N_TRAIN_SWEEP = 10000
 
 # Resolve config output directories relative to repo root.
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -18,7 +26,6 @@ DEFAULT_CONFIGS_RUNLIKE_DIR = REPO_ROOT / "configs" / "configs_runlike"
 
 def main():
     overwrite = False
-    # Match commonly-used combinations in submit scripts.
     stat_arr = [
         ['pk'],
         ['pk', 'pgm'],
@@ -27,30 +34,31 @@ def main():
     ]
     n_train_arr = [10000]
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
-    bx_arr = [1, 4, 32]
+    bx_arr = [32]
     for statistics in stat_arr:
         for n_train in n_train_arr:
             for bx in bx_arr:
-                #generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
+                generate_train_config(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
                 #generate_test_config(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
-                generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
+                #generate_test_config_ood(overwrite=overwrite, statistics=statistics, n_train=n_train, bx=bx)
     #generate_runlike_config(overwrite=overwrite)
     
     
 def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
                           overwrite=False,
-                          statistics=['pk'], n_train=10000, bx=32):
+                          statistics=['pk'],
+                          n_train=N_TRAIN_SWEEP, bx=BX_SWEEP):
     """
     Generates a YAML configuration file for training.
     """
     data_mode = 'muchisimocks'
     tag_params = '_p5_n10000'
-    #tag_biasparams = '_biasnest_p4_n320000'
-    #tag_noise = None
-    tag_biasparams = '_biasnoisenest_p9_n320000'
-    tag_noise = '_noise_unit_p5_n10000'
-    #tag_mask = ''
-    tag_mask = '_kb0.25'
+    tag_biasparams = '_biasnest_p4_n320000'
+    tag_noise = None
+    #tag_biasparams = '_biasnoisenest_p9_n320000'
+    #tag_noise = '_noise_unit_p5_n10000'
+    tag_mask = ''
+    #tag_mask = '_kb0.25'
     # bx is bias parameters per cosmo (1x, 2x, 4x, 8x, 16x, 32x)
 
     # tags_mask is aligned with `statistics` (same order).
@@ -58,44 +66,32 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
     tags_mask = [tag_mask if stat == 'bispec' else '' for stat in statistics]
     tag_masks = ''.join(tags_mask)
 
-    # running inferece params
+    # Inference params: run_mode 'single' | 'sweep' | 'best'; tag_sweep required for sweep/best
     reparameterize = True
     run_mode = 'single'
-    tag_sweep = None
-    n_train_sweep = None
-    #run_mode = 'best'
-    #run_mode = 'sweep'
-    #tag_sweep = '-rand10'
-    #n_train_sweep = 10000 # grab the hyperparams from the sweep trained on this many
-        
-    tag_stats = f'_{"_".join(statistics)}'    
+    tag_sweep = None  # e.g. '-rand10' for sweep/best
+
+    tag_stats = f'_{"_".join(statistics)}'
     tag_paramsall = tag_params + tag_biasparams
     if tag_noise is not None:
         tag_paramsall += tag_noise
     tag_data = '_'+data_mode + tag_stats + tag_masks + tag_paramsall
-    
-    # build tag
-    # TODO - check this when doing sweeps!
-    tag_inf = tag_data
-    if reparameterize:
-        tag_inf += '_rp'
+
     tag_inf_num = f'_bx{bx}_ntrain{n_train}'
-    tag_inf += tag_inf_num
+    base_inf = tag_data + ('_rp' if reparameterize else '') + tag_inf_num
+    tag_inf_num_sweep = f'_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}'
+    base_inf_sweep = tag_data + ('_rp' if reparameterize else '') + tag_inf_num_sweep
+
     if run_mode == 'sweep':
-        tag_inf += f'_sweep{tag_sweep}'
-        sweep_name = tag_inf_num
+        tag_inf = base_inf_sweep + f'_sweep{tag_sweep}'
+        sweep_name = base_inf_sweep + f'_sweep{tag_sweep}'
     elif run_mode == 'best':
-        # if want best, neeed the sweep name to match sweep,
-        # but new tag_inf will be best
-        # sweep name is tag_inf of sweep; reconstruct cuz is diff than this tag_inf
-        sweep_name = tag_data
-        if reparameterize:
-            sweep_name += '_rp'
-        sweep_name += f'{tag_inf_num}_sweep{tag_sweep}'
-        tag_inf += f'_best{tag_sweep}'
-    elif run_mode == 'single':
+        tag_inf = base_inf + f'_best{tag_sweep}'
+        sweep_name = base_inf_sweep + f'_sweep{tag_sweep}'
+    else:  # single
+        tag_inf = base_inf
         sweep_name = None
-            
+
     config = {
         "data_mode": data_mode,
         "statistics": statistics,
@@ -106,6 +102,7 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
         "n_train": n_train,
         "bx": bx,
         "run_mode": run_mode,
+        "tag_sweep": tag_sweep,
         "sweep_name": sweep_name,
         "tag_data": tag_data,
         "tag_inf": tag_inf,
@@ -127,12 +124,12 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
 
 
 def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
-                         overwrite=False, 
-                         statistics=['pk'], n_train=10000, bx=32):
+                         overwrite=False,
+                         statistics=['pk'],
+                         n_train=N_TRAIN_SWEEP, bx=BX_SWEEP):
     """
     Generates a YAML configuration file for testing.
     """
-
     ### Select trained model
     #data_mode = 'emu'
     data_mode = 'muchisimocks'
@@ -147,12 +144,8 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     tag_mask = ''
 
     reparameterize = True
-    # For loading a model trained with wandb sweep; best of that sweep will be used
-    #tag_sweep = '-rand10'
-    #n_train_sweep = 10000
-    tag_sweep = None
-    n_train_sweep = None
-        
+    tag_sweep = None  # set when loading best model from sweep (e.g. '-rand10')
+
     ##### test params
     data_mode_test = 'muchisimocks'
     idxs_obs = None # if none, all (unless evaluate mean)
@@ -185,21 +178,18 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         tag_paramsall_test += tag_noise_test
     tag_data_test = '_'+data_mode + tag_stats + tag_masks + tag_paramsall_test
 
-    # build tag
-    tag_inf_train = tag_data_train
-    if reparameterize:
-        tag_inf_train += '_rp'
-    tag_inf_train += f'_bx{bx}_ntrain{n_train}'
-    # run_mode fixed to load for testing, bc always should be loading already trained model;
-    # (best is for training; will read the best hyperparameters from a sweep and retrain and save it)
+    # build tag (run_mode fixed to load for testing)
+    tag_inf_num = f'_bx{bx}_ntrain{n_train}'
+    base_inf_train = tag_data_train + ('_rp' if reparameterize else '') + tag_inf_num
+    tag_inf_num_sweep = f'_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}'
+    base_inf_train_sweep = tag_data_train + ('_rp' if reparameterize else '') + tag_inf_num_sweep
     if tag_sweep is not None:
-        sweep_name = tag_data_train
-        if reparameterize:
-            sweep_name += '_rp'
-        sweep_name += f'_ntrain{n_train_sweep}_best{tag_sweep}'
+        tag_inf_train = base_inf_train + f'_best{tag_sweep}'
+        sweep_name = base_inf_train_sweep + f'_sweep{tag_sweep}'
     else:
+        tag_inf_train = base_inf_train
         sweep_name = None
-    
+
     if evaluate_mean:
         tag_mean = '_mean'
     else:
@@ -219,6 +209,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         "tag_noise_test": tag_noise_test,
         "n_train": n_train,
         "bx": bx,
+        "tag_sweep": tag_sweep,
         "evaluate_mean": evaluate_mean,
         "idxs_obs": idxs_obs,
         "tag_data_train": tag_data_train,
@@ -244,12 +235,12 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         
         
 def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
-                         overwrite=False, 
-                         statistics=['pk'], n_train=10000, bx=32):
+                         overwrite=False,
+                         statistics=['pk'],
+                         n_train=N_TRAIN_SWEEP, bx=BX_SWEEP):
     """
-    Generates a YAML configuration file for testing.
+    Generates a YAML configuration file for OOD testing.
     """
-
     ### Select trained model
     #data_mode = 'emu'
     data_mode = 'muchisimocks'
@@ -262,15 +253,10 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     tag_noise = None
     #tag_mask = '_kb0.25'
     tag_mask = ''
-    #tag_mask = ''
 
     reparameterize = True
-    # For loading a model trained with wandb sweep; best of that sweep will be used
-    #tag_sweep = '-rand10'
-    #n_train_sweep = 10000
-    tag_sweep = None
-    n_train_sweep = None
-    
+    tag_sweep = None  # set when loading best model from sweep (e.g. '-rand10')
+
     ### test params
     idxs_obs = None # if none, all (unless evaluate mean)
     evaluate_mean = False
@@ -290,21 +276,18 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         tag_paramsall += tag_noise
     tag_data_train = '_'+data_mode + tag_stats + tag_masks + tag_paramsall
 
-    # build tag
-    tag_inf_train = tag_data_train
-    if reparameterize:
-        tag_inf_train += '_rp'
-    tag_inf_train += f'_bx{bx}_ntrain{n_train}'
-    # run_mode fixed to load for testing, bc always should be loading already trained model;
-    # (best is for training; will read the best hyperparameters from a sweep and retrain and save it)
+    # build tag (run_mode fixed to load for testing)
+    tag_inf_num = f'_bx{bx}_ntrain{n_train}'
+    base_inf_train = tag_data_train + ('_rp' if reparameterize else '') + tag_inf_num
+    tag_inf_num_sweep = f'_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}'
+    base_inf_train_sweep = tag_data_train + ('_rp' if reparameterize else '') + tag_inf_num_sweep
     if tag_sweep is not None:
-        sweep_name = tag_data_train
-        if reparameterize:
-            sweep_name += '_rp'
-        sweep_name += f'_ntrain{n_train_sweep}_best{tag_sweep}'
+        tag_inf_train = base_inf_train + f'_best{tag_sweep}'
+        sweep_name = base_inf_train_sweep + f'_sweep{tag_sweep}'
     else:
+        tag_inf_train = base_inf_train
         sweep_name = None
-    
+
     ### test tags
     tag_data_test = '_'+data_mode_test + tag_stats + tag_masks + tag_mock
     
@@ -324,6 +307,7 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         "tags_mask": tags_mask,
         "n_train": n_train,
         "bx": bx,
+        "tag_sweep": tag_sweep,
         "evaluate_mean": evaluate_mean,
         "idxs_obs": idxs_obs,
         "tag_data_train": tag_data_train,

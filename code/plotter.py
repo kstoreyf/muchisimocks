@@ -117,70 +117,21 @@ def plot_dists_mean_subplots(
         unreparameterize: If True, convert reparameterized parameters back to original form.
         use_abs_diff: If True, use absolute differences instead of fractional differences.
     """
-    # Handle unreparameterization if requested
     if unreparameterize:
-        # Define parameters that are reparameterized
-        params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
-        params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
-        
-        # Check if we have sigma8_cold
         if 'sigma8_cold' not in param_names:
-            print("Warning: unreparameterize=True but 'sigma8_cold' not in param_names. Skipping unreparameterization.")
-            unreparameterize = False
-        
-        if unreparameterize:
-            # Make copies to avoid modifying original arrays
-            theta_pred_arr = theta_pred_arr.copy()
-            theta_true_arr = theta_true_arr.copy()
-            
-            # Get sigma8_cold index
-            idx_sigma8 = param_names.index('sigma8_cold')
-            
-            # Create mapping from reparameterized names to original names and indices
-            param_names_new = param_names.copy()
-            reparam_to_orig = {}
-            
-            for i, pn in enumerate(param_names):
-                if pn.startswith('sigma8_cold_x_') or pn.startswith('sigma8_cold_sq_x_'):
-                    # Extract original parameter name
-                    if pn.startswith('sigma8_cold_sq_x_'):
-                        orig_param_name = pn.replace('sigma8_cold_sq_x_', '')
-                    else:
-                        orig_param_name = pn.replace('sigma8_cold_x_', '')
-                    
-                    # Check if this is a known reparameterized parameter
-                    if orig_param_name in params_sigma8 or orig_param_name in params_sigma8_squared:
-                        reparam_to_orig[i] = orig_param_name
-                        # Update param_names to use original name
-                        param_names_new[i] = orig_param_name
-            
-            # Convert reparameterized parameters back to original
-            if theta_pred_arr.ndim == 2:
-                theta_pred_arr = np.array([theta_pred_arr])
-                theta_true_arr = np.array([theta_true_arr])
-            
-            for i in range(len(theta_pred_arr)):
-                sigma8_vals = theta_pred_arr[i][:, idx_sigma8]
-                sigma8_true_vals = theta_true_arr[i][:, idx_sigma8]
-                
-                for reparam_idx, orig_param_name in reparam_to_orig.items():
-                    if orig_param_name in params_sigma8:
-                        # Divide by sigma8
-                        theta_pred_arr[i][:, reparam_idx] = theta_pred_arr[i][:, reparam_idx] / sigma8_vals
-                        theta_true_arr[i][:, reparam_idx] = theta_true_arr[i][:, reparam_idx] / sigma8_true_vals
-                    elif orig_param_name in params_sigma8_squared:
-                        # Divide by sigma8^2
-                        theta_pred_arr[i][:, reparam_idx] = theta_pred_arr[i][:, reparam_idx] / (sigma8_vals ** 2)
-                        theta_true_arr[i][:, reparam_idx] = theta_true_arr[i][:, reparam_idx] / (sigma8_true_vals ** 2)
-            
-            # Update param_names
-            param_names = param_names_new
-            
-            # Reshape back if needed
-            if len(theta_pred_arr) == 1:
-                theta_pred_arr = theta_pred_arr[0]
-                theta_true_arr = theta_true_arr[0]
-    
+            print(
+                "Warning: unreparameterize=True but 'sigma8_cold' not in param_names. Skipping unreparameterization."
+            )
+        else:
+            names_r = list(param_names)
+            theta_pred_arr, names_out = utils_inference.unreparameterize_theta(
+                theta_pred_arr, names_r
+            )
+            theta_true_arr, _ = utils_inference.unreparameterize_theta(
+                theta_true_arr, names_r
+            )
+            param_names = list(names_out)
+
     if use_abs_diff:
         diffs_arr = theta_pred_arr - theta_true_arr
     else:
@@ -302,114 +253,38 @@ def plot_comp_mean_subplots(
         N_plot: If provided, randomly sample this many points to plot (per dataset).
         unreparameterize: If True, convert reparameterized parameters back to original form.
     """
-    # Handle unreparameterization if requested
     if unreparameterize:
-        # Define parameters that are reparameterized
-        params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
-        params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
-        
-        # Check if we have sigma8_cold
         if 'sigma8_cold' not in param_names:
-            print("Warning: unreparameterize=True but 'sigma8_cold' not in param_names. Skipping unreparameterization.")
-            unreparameterize = False
-        
-        if unreparameterize:
-            # Make copies to avoid modifying original arrays
-            theta_pred_arr = theta_pred_arr.copy()
-            theta_true_arr = theta_true_arr.copy()
-            covs_pred_arr = covs_pred_arr.copy()
-            
-            # Get sigma8_cold index
-            idx_sigma8 = param_names.index('sigma8_cold')
-            
-            # Create mapping from reparameterized names to original names and indices
-            param_names_new = param_names.copy()
-            reparam_to_orig = {}
-            
-            for i, pn in enumerate(param_names):
-                if pn.startswith('sigma8_cold_x_') or pn.startswith('sigma8_cold_sq_x_'):
-                    # Extract original parameter name
-                    if pn.startswith('sigma8_cold_sq_x_'):
-                        orig_param_name = pn.replace('sigma8_cold_sq_x_', '')
-                    else:
-                        orig_param_name = pn.replace('sigma8_cold_x_', '')
-                    
-                    # Check if this is a known reparameterized parameter
-                    if orig_param_name in params_sigma8 or orig_param_name in params_sigma8_squared:
-                        reparam_to_orig[i] = orig_param_name
-                        # Update param_names to use original name
-                        param_names_new[i] = orig_param_name
-            
-            # Convert reparameterized parameters back to original
-            if theta_pred_arr.ndim == 2:
+            print(
+                "Warning: unreparameterize=True but 'sigma8_cold' not in param_names. Skipping unreparameterization."
+            )
+        else:
+            names_reparam = list(param_names)
+            theta_pred_arr = np.asarray(theta_pred_arr).copy()
+            theta_true_arr = np.asarray(theta_true_arr).copy()
+            covs_pred_arr = np.asarray(covs_pred_arr).copy()
+            was_2d = theta_pred_arr.ndim == 2
+            if was_2d:
                 theta_pred_arr = np.array([theta_pred_arr])
                 theta_true_arr = np.array([theta_true_arr])
                 covs_pred_arr = np.array([covs_pred_arr])
-            
+            names_out = names_reparam
             for i in range(len(theta_pred_arr)):
-                sigma8_vals = theta_pred_arr[i][:, idx_sigma8]
-                sigma8_true_vals = theta_true_arr[i][:, idx_sigma8]
-                
-                for reparam_idx, orig_param_name in reparam_to_orig.items():
-                    if orig_param_name in params_sigma8:
-                        # Divide by sigma8
-                        theta_pred_arr[i][:, reparam_idx] = theta_pred_arr[i][:, reparam_idx] / sigma8_vals
-                        theta_true_arr[i][:, reparam_idx] = theta_true_arr[i][:, reparam_idx] / sigma8_true_vals
-                    elif orig_param_name in params_sigma8_squared:
-                        # Divide by sigma8^2
-                        theta_pred_arr[i][:, reparam_idx] = theta_pred_arr[i][:, reparam_idx] / (sigma8_vals ** 2)
-                        theta_true_arr[i][:, reparam_idx] = theta_true_arr[i][:, reparam_idx] / (sigma8_true_vals ** 2)
-                
-                # Also need to update covariance matrices for reparameterized parameters
-                # This is more complex - for now, we'll just update the diagonal elements
-                # A full transformation would require Jacobian, but for error bars we mainly need diagonal
-                for j in range(len(covs_pred_arr[i])):
-                    cov = covs_pred_arr[i][j].copy()
-                    sigma8_val = sigma8_vals[j]
-                    
-                    for reparam_idx, orig_param_name in reparam_to_orig.items():
-                        if orig_param_name in params_sigma8:
-                            # Variance scales as (1/sigma8)^2
-                            cov[reparam_idx, reparam_idx] = cov[reparam_idx, reparam_idx] / (sigma8_val ** 2)
-                            # Update off-diagonal elements involving this parameter
-                            for k in range(len(param_names)):
-                                if k != reparam_idx:
-                                    if k == idx_sigma8:
-                                        # Covariance with sigma8 needs special handling
-                                        # For now, set to 0 (approximation)
-                                        cov[reparam_idx, k] = 0
-                                        cov[k, reparam_idx] = 0
-                                    else:
-                                        # Covariance scales as 1/sigma8
-                                        cov[reparam_idx, k] = cov[reparam_idx, k] / sigma8_val
-                                        cov[k, reparam_idx] = cov[k, reparam_idx] / sigma8_val
-                        elif orig_param_name in params_sigma8_squared:
-                            # Variance scales as (1/sigma8^2)^2 = 1/sigma8^4
-                            cov[reparam_idx, reparam_idx] = cov[reparam_idx, reparam_idx] / (sigma8_val ** 4)
-                            # Update off-diagonal elements involving this parameter
-                            for k in range(len(param_names)):
-                                if k != reparam_idx:
-                                    if k == idx_sigma8:
-                                        # Covariance with sigma8 needs special handling
-                                        # For now, set to 0 (approximation)
-                                        cov[reparam_idx, k] = 0
-                                        cov[k, reparam_idx] = 0
-                                    else:
-                                        # Covariance scales as 1/sigma8^2
-                                        cov[reparam_idx, k] = cov[reparam_idx, k] / (sigma8_val ** 2)
-                                        cov[k, reparam_idx] = cov[k, reparam_idx] / (sigma8_val ** 2)
-                    
-                    covs_pred_arr[i][j] = cov
-            
-            # Update param_names
-            param_names = param_names_new
-            
-            # Reshape back if needed
-            if len(theta_pred_arr) == 1:
+                tp, tt, covs, names_out = utils_inference.unreparameterize_prediction_block(
+                    theta_pred_arr[i],
+                    theta_true_arr[i],
+                    names_reparam,
+                    covs_pred_arr[i],
+                )
+                theta_pred_arr[i] = tp
+                theta_true_arr[i] = tt
+                covs_pred_arr[i] = covs
+            param_names = names_out
+            if was_2d:
                 theta_pred_arr = theta_pred_arr[0]
                 theta_true_arr = theta_true_arr[0]
                 covs_pred_arr = covs_pred_arr[0]
-    
+
     if theta_pred_arr.ndim == 2:
         theta_pred_arr = np.array([theta_pred_arr])
         theta_true_arr = np.array([theta_true_arr])
@@ -572,78 +447,28 @@ def plot_comp_mean_subplots_grid(
     if label_arr is None:
         label_arr = [None] * n_rows
 
-    # Handle unreparameterization (kept consistent with plot_comp_mean_subplots)
     if unreparameterize:
-        params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
-        params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
-
         if 'sigma8_cold' not in param_names:
-            print("Warning: unreparameterize=True but 'sigma8_cold' not in param_names. Skipping unreparameterization.")
-            unreparameterize = False
-
-        if unreparameterize:
+            print(
+                "Warning: unreparameterize=True but 'sigma8_cold' not in param_names. Skipping unreparameterization."
+            )
+        else:
+            names_reparam = list(param_names)
             theta_pred_arr = theta_pred_arr.copy()
             theta_true_arr = theta_true_arr.copy()
             covs_pred_arr = covs_pred_arr.copy()
-
-            idx_sigma8 = param_names.index('sigma8_cold')
-
-            param_names_new = param_names.copy()
-            reparam_to_orig = {}
-            for i, pn in enumerate(param_names):
-                if pn.startswith('sigma8_cold_x_') or pn.startswith('sigma8_cold_sq_x_'):
-                    if pn.startswith('sigma8_cold_sq_x_'):
-                        orig_param_name = pn.replace('sigma8_cold_sq_x_', '')
-                    else:
-                        orig_param_name = pn.replace('sigma8_cold_x_', '')
-
-                    if orig_param_name in params_sigma8 or orig_param_name in params_sigma8_squared:
-                        reparam_to_orig[i] = orig_param_name
-                        param_names_new[i] = orig_param_name
-
-            # Convert reparameterized columns back to original
+            names_out = names_reparam
             for r in range(n_rows):
-                sigma8_vals = theta_pred_arr[r][:, idx_sigma8]
-                sigma8_true_vals = theta_true_arr[r][:, idx_sigma8]
-
-                for reparam_idx, orig_param_name in reparam_to_orig.items():
-                    if orig_param_name in params_sigma8:
-                        theta_pred_arr[r][:, reparam_idx] = theta_pred_arr[r][:, reparam_idx] / sigma8_vals
-                        theta_true_arr[r][:, reparam_idx] = theta_true_arr[r][:, reparam_idx] / sigma8_true_vals
-                    elif orig_param_name in params_sigma8_squared:
-                        theta_pred_arr[r][:, reparam_idx] = theta_pred_arr[r][:, reparam_idx] / (sigma8_vals ** 2)
-                        theta_true_arr[r][:, reparam_idx] = theta_true_arr[r][:, reparam_idx] / (sigma8_true_vals ** 2)
-
-                # Update covariance matrices (diagonal + rough off-diagonal scaling)
-                for j in range(len(covs_pred_arr[r])):
-                    cov = covs_pred_arr[r][j].copy()
-                    sigma8_val = sigma8_vals[j]
-
-                    for reparam_idx, orig_param_name in reparam_to_orig.items():
-                        if orig_param_name in params_sigma8:
-                            cov[reparam_idx, reparam_idx] = cov[reparam_idx, reparam_idx] / (sigma8_val ** 2)
-                            for k in range(len(param_names)):
-                                if k != reparam_idx:
-                                    if k == idx_sigma8:
-                                        cov[reparam_idx, k] = 0
-                                        cov[k, reparam_idx] = 0
-                                    else:
-                                        cov[reparam_idx, k] = cov[reparam_idx, k] / sigma8_val
-                                        cov[k, reparam_idx] = cov[k, reparam_idx] / sigma8_val
-                        elif orig_param_name in params_sigma8_squared:
-                            cov[reparam_idx, reparam_idx] = cov[reparam_idx, reparam_idx] / (sigma8_val ** 4)
-                            for k in range(len(param_names)):
-                                if k != reparam_idx:
-                                    if k == idx_sigma8:
-                                        cov[reparam_idx, k] = 0
-                                        cov[k, reparam_idx] = 0
-                                    else:
-                                        cov[reparam_idx, k] = cov[reparam_idx, k] / (sigma8_val ** 2)
-                                        cov[k, reparam_idx] = cov[k, reparam_idx] / (sigma8_val ** 2)
-
-                    covs_pred_arr[r][j] = cov
-
-            param_names = param_names_new
+                tp, tt, covs, names_out = utils_inference.unreparameterize_prediction_block(
+                    theta_pred_arr[r],
+                    theta_true_arr[r],
+                    names_reparam,
+                    covs_pred_arr[r],
+                )
+                theta_pred_arr[r] = tp
+                theta_true_arr[r] = tt
+                covs_pred_arr[r] = covs
+            param_names = names_out
 
     idxs_plot = [param_names.index(pn) for pn in param_names_plot]
     param_labels = [param_label_dict[pn] for pn in param_names_plot]
@@ -1125,25 +950,12 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         print("Error: No valid chains found.")
         return
     
-    # Find which parameters are available in at least one chain
-    # Preserve the order from param_names, but replace original params with reparameterized versions when found
+    # Preserve param_names order; use reparameterized chain names when present.
     param_names_any_available = []
-    # Track which original parameters have been replaced by reparameterized versions
-    replaced_params = set()
-    
-    # Define parameters to multiply by sigma_8 vs sigma_8^2
-    params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
-    params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
-    
+
     for pn in param_names:
-        # Determine the reparameterized name based on parameter type
-        if pn in params_sigma8_squared:
-            reparam_name = f'sigma8_cold_sq_x_{pn}'
-        elif pn in params_sigma8:
-            reparam_name = f'sigma8_cold_x_{pn}'
-        else:
-            reparam_name = None
-        
+        reparam_name = utils_inference.reparameterized_sample_name(pn)
+
         has_reparam = False
         if reparam_name:
             has_reparam = any(reparam_name in chain_data['param_names_samples'] 
@@ -1151,136 +963,77 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         has_original = any(pn in chain_params for chain_params in all_param_names_per_chain)
         
         if unreparameterize:
-            # Always use original parameter names when unreparameterizing
             if has_reparam or has_original:
                 param_names_any_available.append(pn)
         else:
-            # Use reparameterized version if available, otherwise original
             if has_reparam:
-                # Use reparameterized version if available
                 param_names_any_available.append(reparam_name)
-                replaced_params.add(pn)
             elif has_original:
-                # Use original version
                 param_names_any_available.append(pn)
     
     if len(param_names_any_available) == 0:
         print("Error: No requested parameters found in any chains.")
         return
         
-    # Check for missing parameters (accounting for reparameterized replacements)
     missing_params = []
     for pn in param_names:
         if unreparameterize:
-            # When unreparameterizing, we only check if the original param is available
             if pn not in param_names_any_available:
                 missing_params.append(pn)
         else:
-            # When not unreparameterizing, check both original and reparameterized
-            if pn in params_sigma8_squared:
-                reparam_name = f'sigma8_cold_sq_x_{pn}'
-            elif pn in params_sigma8:
-                reparam_name = f'sigma8_cold_x_{pn}'
-            else:
-                reparam_name = None
-            
+            reparam_name = utils_inference.reparameterized_sample_name(pn)
             if pn not in param_names_any_available:
                 if reparam_name and reparam_name not in param_names_any_available:
                     missing_params.append(pn)
                 elif not reparam_name:
                     missing_params.append(pn)
-    
-    if len(missing_params) > 0:
-        if unreparameterize:
-            print(f"Warning: Parameters {missing_params} not found in any chains (neither original nor reparameterized). Plotting only: {param_names_any_available}")
-        else:
-            print(f"Warning: Parameters {missing_params} not found in any chains (neither original nor reparameterized). Plotting only: {param_names_any_available}")
+
+    if missing_params:
+        print(
+            f"Warning: Parameters {missing_params} not found in any chains "
+            f"(neither original nor reparameterized). Plotting only: {param_names_any_available}"
+        )
     
     # Create chains for chainconsumer - only include chains that have at least one parameter
     import chainconsumer
     c = chainconsumer.ChainConsumer()
     
     for chain_data in all_chains_data:
-        # Get samples for parameters that this chain has
-        # If unreparameterize=True, convert reparameterized params back to original
         available_in_this_chain = []
-        param_mapping = {}  # Maps original param names to their indices/sources in chain
-        
+        param_mapping = {}
+
         for pn in param_names_any_available:
-            # Check if it's in the chain's param_names_samples (could be original or reparameterized)
             if pn in chain_data['param_names_samples']:
                 available_in_this_chain.append(pn)
-                param_mapping[pn] = pn  # Direct mapping
+                param_mapping[pn] = pn
             elif unreparameterize:
-                # Check if there's a reparameterized version we can convert back
-                if pn in params_sigma8_squared:
-                    reparam_name = f'sigma8_cold_sq_x_{pn}'
-                elif pn in params_sigma8:
-                    reparam_name = f'sigma8_cold_x_{pn}'
-                else:
-                    reparam_name = None
-                
+                reparam_name = utils_inference.reparameterized_sample_name(pn)
                 if reparam_name and reparam_name in chain_data['param_names_samples']:
                     available_in_this_chain.append(pn)
-                    param_mapping[pn] = reparam_name  # Map original name to reparameterized name
-        
+                    param_mapping[pn] = reparam_name
+
         if len(available_in_this_chain) == 0:
             continue
-        
-        # Check if we need sigma8_cold for unreparameterization
-        need_sigma8 = False
+
+        pnames = list(chain_data['param_names_samples'])
+        samples_raw = chain_data['samples']
         if unreparameterize:
-            for pn in available_in_this_chain:
-                if pn in param_mapping and (param_mapping[pn].startswith('sigma8_cold_x_') or param_mapping[pn].startswith('sigma8_cold_sq_x_')):
-                    need_sigma8 = True
-                    break
-        
-        # Get sigma8_cold if needed
-        sigma8_samples = None
-        if need_sigma8:
-            if 'sigma8_cold' in chain_data['param_names_samples']:
-                idx_sigma8 = list(chain_data['param_names_samples']).index('sigma8_cold')
-                sigma8_samples = chain_data['samples'][:, idx_sigma8]
-            else:
-                print(f"Warning: Need sigma8_cold for unreparameterization but not found in chain. Skipping unreparameterization for this chain.")
-                need_sigma8 = False
-        
+            samples_u, names_u = utils_inference.unreparameterize_theta(
+                samples_raw, pnames, strict=False
+            )
+        else:
+            samples_u, names_u = samples_raw, pnames
+        names_u = list(names_u)
+
         # Extract samples for available parameters
         samples_dict = {}
         for pn in available_in_this_chain:
-            if pn in param_mapping:
-                source_name = param_mapping[pn]
-                if source_name == pn:
-                    # Direct parameter - just extract
-                    idx = list(chain_data['param_names_samples']).index(pn)
-                    samples_dict[pn] = chain_data['samples'][:, idx]
-                elif (source_name.startswith('sigma8_cold_x_') or source_name.startswith('sigma8_cold_sq_x_')) and need_sigma8:
-                    # Reparameterized parameter - convert back to original
-                    idx_reparam = list(chain_data['param_names_samples']).index(source_name)
-                    reparam_samples = chain_data['samples'][:, idx_reparam]
-                    
-                    # Extract original parameter name
-                    if source_name.startswith('sigma8_cold_sq_x_'):
-                        orig_param_name = source_name.replace('sigma8_cold_sq_x_', '')
-                    else:
-                        orig_param_name = source_name.replace('sigma8_cold_x_', '')
-                    
-                    # Determine if we divide by sigma8 or sigma8^2
-                    params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
-                    params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
-                    
-                    if orig_param_name in params_sigma8:
-                        # Divide by sigma8
-                        samples_dict[pn] = reparam_samples / sigma8_samples
-                    elif orig_param_name in params_sigma8_squared:
-                        # Divide by sigma8^2
-                        samples_dict[pn] = reparam_samples / (sigma8_samples ** 2)
-                    else:
-                        print(f"Warning: Unknown reparameterized parameter {source_name}. Skipping.")
-                else:
-                    # Shouldn't happen, but handle gracefully
-                    idx = list(chain_data['param_names_samples']).index(source_name)
-                    samples_dict[pn] = chain_data['samples'][:, idx]
+            source_name = param_mapping[pn]
+            if pn in names_u:
+                idx = names_u.index(pn)
+            else:
+                idx = names_u.index(source_name)
+            samples_dict[pn] = samples_u[:, idx]
         
         samples_df = pd.DataFrame(samples_dict)
         
@@ -1331,54 +1084,41 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     #     )
     # )
     
-    # Create truth location for available parameters only
-    # Note: param_names and theta_obs_true are in original (non-reparameterized) form,
-    # but param_names_any_available may contain reparameterized parameter names from the chains
     truth_loc = {}
+    theta_vec = np.asarray(theta_obs_true, dtype=float).reshape(-1)
+    names_theta = list(param_names)
+
     for pn in param_names_any_available:
-        # Check if this is a reparameterized parameter (from the chains)
-        if pn.startswith('sigma8_cold_x_') or pn.startswith('sigma8_cold_sq_x_'):
-            # Extract the original parameter name
-            if pn.startswith('sigma8_cold_sq_x_'):
-                orig_param_name = pn.replace('sigma8_cold_sq_x_', '')
+        if pn in names_theta:
+            j = names_theta.index(pn)
+            if j < len(theta_vec):
+                truth_loc[pn] = float(theta_vec[j])
             else:
-                orig_param_name = pn.replace('sigma8_cold_x_', '')
-            
-            # Check if we have sigma8_cold and the original parameter in param_names (original form)
-            if 'sigma8_cold' in param_names and orig_param_name in param_names:
-                idx_sigma8 = param_names.index('sigma8_cold')
-                idx_orig = param_names.index(orig_param_name)
-                
-                if idx_sigma8 < len(theta_obs_true) and idx_orig < len(theta_obs_true):
-                    sigma8_val = theta_obs_true[idx_sigma8]
-                    orig_val = theta_obs_true[idx_orig]
-                    
-                    # Determine if we multiply by sigma8 or sigma8^2
-                    params_sigma8 = ['b1', 'An_b1', 'bl', 'An_bl']
-                    params_sigma8_squared = ['b2', 'bs2', 'An_b2', 'An_bs2']
-                    
-                    if orig_param_name in params_sigma8:
-                        truth_loc[pn] = orig_val * sigma8_val
-                    elif orig_param_name in params_sigma8_squared:
-                        truth_loc[pn] = orig_val * (sigma8_val ** 2)
-                    else:
-                        print(f"Warning: Unknown reparameterized parameter {pn}. Skipping truth value.")
-                else:
-                    print(f"Warning: Indices out of range for reparameterized parameter {pn}. Skipping truth value.")
-            else:
-                print(f"Warning: Cannot compute truth for reparameterized parameter {pn}: missing 'sigma8_cold' or '{orig_param_name}' in param_names. Skipping truth value.")
+                print(
+                    f"Warning: Parameter {pn} (index {j}) not found in theta_obs_true "
+                    f"(length {len(theta_vec)}). Skipping truth value."
+                )
+            continue
+
+        if unreparameterize:
+            print(
+                f"Warning: Parameter {pn} found in chains but not in original param_names. "
+                "Skipping truth value."
+            )
+            continue
+
+        v = utils_inference.forward_reparameterized_value(pn, names_theta, theta_vec)
+        if v is not None:
+            truth_loc[pn] = v
+        elif str(pn).startswith(utils_inference.REPARAM_PREFIX_SQ) or str(pn).startswith(
+            utils_inference.REPARAM_PREFIX_X
+        ):
+            print(f"Warning: Unknown reparameterized parameter {pn}. Skipping truth value.")
         else:
-            # Regular parameter - check if it's in the original param_names
-            if pn in param_names:
-                param_idx = param_names.index(pn)
-                if param_idx < len(theta_obs_true):
-                    truth_loc[pn] = theta_obs_true[param_idx]
-                else:
-                    print(f"Warning: Parameter {pn} (index {param_idx}) not found in theta_obs_true (length {len(theta_obs_true)}). Skipping truth value.")
-            else:
-                # Parameter is in chains but not in original param_names - might be a different naming
-                # Try to find it or skip
-                print(f"Warning: Parameter {pn} found in chains but not in original param_names. Skipping truth value.")
+            print(
+                f"Warning: Parameter {pn} found in chains but not in original param_names. "
+                "Skipping truth value."
+            )
     
     c.add_truth(chainconsumer.Truth(location=truth_loc))
 
@@ -1776,5 +1516,5 @@ def plot_catalog_slice(cat, z_center, z_width, ax=None, s=0.1, alpha=0.7, color=
                 f'({len(slice_pos)} galaxies)', size=14)
     ax.set_aspect('equal')
     ax.grid(True, alpha=0.3)
-    
+
     return fig, ax
