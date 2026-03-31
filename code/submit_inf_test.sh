@@ -4,9 +4,10 @@
 n_train_arr=(10000)
 #tag_stats_arr=("_pk") 
 #tag_stats_arr=("_pk_bispec")
-tag_stats_arr=("_pk_pgm")
+#tag_stats_arr=("_pk_pgm")
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm") 
+tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
 
 for n_train in "${n_train_arr[@]}"; do

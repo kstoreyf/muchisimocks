@@ -6,6 +6,8 @@ import numpy as np
 import pathlib
 import pickle
 import time
+import tempfile
+import yaml
 import wandb
 
 from sbi.inference import NPE
@@ -26,6 +28,78 @@ _WANDB_SWEEP_PARAMETER_KEYS = (
     "training_batch_size",
     "num_transforms",
 )
+
+
+def _wandb_sweep_api_path(sweep_id_or_path, project_name):
+    """
+    W&B API expects ``entity/project/sweep_id``. Accept that full string, or a
+    short sweep id with default entity from the logged-in user.
+    """
+    s = (sweep_id_or_path or "").strip()
+    if s.count("/") >= 2:
+        return s
+    api = wandb.Api()
+    entity = api.default_entity
+    return f"{entity}/{project_name}/{s}"
+
+
+def _parse_wandb_sweep_api_path(sweep_api_path):
+    """Split ``entity/project/sweep_id`` into a triple."""
+    parts = (sweep_api_path or "").strip().split("/")
+    if len(parts) != 3:
+        raise ValueError(
+            "wandb_sweep_id must be sweep_id or entity/project/sweep_id; got %r"
+            % sweep_api_path
+        )
+    return parts[0], parts[1], parts[2]
+
+
+def _write_wandb_sweep_id_to_yaml(yaml_path, sweep_api_path):
+    """Persist ``wandb_sweep_id`` so the next job can resume without env vars."""
+    p = pathlib.Path(yaml_path)
+    if not p.is_file():
+        print("wandb: training config not found (%s); skip writing sweep id" % p)
+        return
+    with open(p, "r") as f:
+        data = yaml.safe_load(f)
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        print("wandb: training config is not a mapping; skip writing sweep id")
+        return
+    if data.get("wandb_sweep_id") == sweep_api_path:
+        return
+    data["wandb_sweep_id"] = sweep_api_path
+    fd, tmp_name = tempfile.mkstemp(
+        suffix=".yaml", dir=str(p.parent), text=True
+    )
+    try:
+        with os.fdopen(fd, "w") as tmp:
+            yaml.dump(data, tmp, default_flow_style=False, sort_keys=False)
+        pathlib.Path(tmp_name).replace(p)
+    except OSError as e:
+        print("wandb: could not write sweep id to config: %s" % e)
+        try:
+            pathlib.Path(tmp_name).unlink(missing_ok=True)
+        except OSError:
+            pass
+    else:
+        print("wandb: saved wandb_sweep_id to %s" % p)
+
+
+def _delete_crashed_runs_in_sweep(sweep_api_path):
+    """
+    Delete non-running failed runs in an existing sweep before resuming.
+    """
+    api = wandb.Api()
+    sweep = api.sweep(sweep_api_path)
+    n_deleted = 0
+    for run in sweep.runs:
+        state = str(getattr(run, "state", "")).lower()
+        if state in {"crashed", "failed", "killed"}:
+            run.delete()
+            n_deleted += 1
+    print("wandb: deleted %s crashed/failed/killed runs from %s" % (n_deleted, sweep_api_path))
 
 
 def _fit_config_from_wandb_run(run, max_epochs_default, validation_fraction_default):
@@ -73,6 +147,9 @@ class SBIModel():
                      run_mode='single', tag_sbi='', n_threads=1, 
                      sweep_name=None, overwrite=False,
                      matches_sweep_model=False,
+                     wandb_sweep_id=None,
+                     sweep_num_runs=None,
+                     wandb_config_yaml_path=None,
                      ):
 
         self.dir_sbi = str(paths.DIR_RESULTS / "results_sbi" / f"sbi{tag_sbi}")
@@ -115,6 +192,13 @@ class SBIModel():
         self.n_threads = n_threads
         self.overwrite = overwrite
         self.matches_sweep_model = matches_sweep_model
+        self.wandb_sweep_id = wandb_sweep_id
+        self.sweep_num_runs = int(sweep_num_runs) if sweep_num_runs is not None else None
+        self.wandb_config_yaml_path = (
+            str(pathlib.Path(wandb_config_yaml_path).resolve())
+            if wandb_config_yaml_path
+            else None
+        )
 
         
     def run(self, max_epochs=2000):
@@ -127,11 +211,14 @@ class SBIModel():
         project_name = 'muchisimocks-sbi'
         
         if self.run_mode == 'sweep':
+            if self.sweep_num_runs is None:
+                raise ValueError("run_mode='sweep' requires sweep_num_runs in the config")
             wandb.login()
-            count = 30  # number of runs in sweep for random search
+            resume_id = (self.wandb_sweep_id or "").strip()
             sweep_config = {
                 'name': self.sweep_name,
                 'method': 'random',
+                'run_cap': self.sweep_num_runs,
                 'metric': {
                     'name': 'validation_loss',
                     'goal': 'minimize'
@@ -143,10 +230,36 @@ class SBIModel():
                     'num_transforms': {'values': [4, 6, 8, 10]},
                 }
             }
-            sweep_id = wandb.sweep(sweep_config, project=project_name)
+            if resume_id:
+                sweep_path = _wandb_sweep_api_path(resume_id, project_name)
+                agent_entity, agent_project, sweep_id = _parse_wandb_sweep_api_path(
+                    sweep_path
+                )
+                _delete_crashed_runs_in_sweep(sweep_path)
+                count = None
+                print(
+                    "wandb sweep resume: path=%s target_total_runs=%s (count=None)"
+                    % (sweep_path, self.sweep_num_runs)
+                )
+            else:
+                sweep_id = wandb.sweep(sweep_config, project=project_name)
+                count = self.sweep_num_runs
+                api = wandb.Api()
+                agent_entity = api.default_entity
+                agent_project = project_name
+                sweep_api_path = f"{agent_entity}/{agent_project}/{sweep_id}"
+                if self.wandb_config_yaml_path:
+                    _write_wandb_sweep_id_to_yaml(
+                        self.wandb_config_yaml_path, sweep_api_path
+                    )
+                print(
+                    "Started wandb sweep %s. Re-run the same training command to resume "
+                    "(wandb_sweep_id is in the config if it was saved)."
+                    % sweep_api_path
+                )
 
             def _fit_model_wandb():
-                wandb.init(project=project_name)
+                wandb.init(project=agent_project, entity=agent_entity)
                 wandb.config.update({
                     'max_epochs': max_epochs,
                     'model_type': 'maf',
@@ -158,7 +271,13 @@ class SBIModel():
                 artifact.add_dir(local_path=run_dir)
                 wandb.run.log_artifact(artifact)
 
-            wandb.agent(sweep_id, function=_fit_model_wandb, count=count)
+            wandb.agent(
+                sweep_id,
+                function=_fit_model_wandb,
+                count=count,
+                entity=agent_entity,
+                project=agent_project,
+            )
             wandb.finish()
             
         elif self.run_mode == 'best':

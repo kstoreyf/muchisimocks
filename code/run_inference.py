@@ -20,7 +20,7 @@ import sbi_model
 import scaler_custom as scl
 import data_loader
 import generate_params as genp
-from generate_config_inference import BX_SWEEP, N_TRAIN_SWEEP
+from generate_config_inference import BX_SWEEP, N_TRAIN_SWEEP, SWEEP_NUM_RUNS
 
 
 def _build_tags_mask(statistics, config) -> list[str]:
@@ -59,7 +59,7 @@ def main():
     if args.config_train:
         with open(args.config_train, "r") as file:
             train_config = yaml.safe_load(file)
-        train_likefree_inference(train_config)
+        train_likefree_inference(train_config, config_yaml_path=args.config_train)
 
     # Run testing if a testing config file is provided
     if args.config_test:
@@ -85,9 +85,12 @@ def main():
     
 
 
-def train_likefree_inference(config, overwrite=False):
+def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
     """
     Train function using parameters from the config file.
+
+    ``config_yaml_path``: path from ``--config-train``; used to write
+    ``wandb_sweep_id`` when a new W&B sweep is created (sweep mode).
     """
 
     dir_results = str(paths.DIR_RESULTS)  # default from paths.py; override via env if needed
@@ -211,6 +214,8 @@ def train_likefree_inference(config, overwrite=False):
         print("run_mode=best matches_sweep_model=%s bx/n_train=%s/%s (sweep %s/%s)" % (
             matches_sweep_model, bx, n_train, BX_SWEEP, N_TRAIN_SWEEP))
 
+    sweep_num_runs = int(config["sweep_num_runs"]) if run_mode == "sweep" else SWEEP_NUM_RUNS
+
     sbi_network = sbi_model.SBIModel(
                 theta_train=theta_train,
                 y_train_unscaled=y_train,
@@ -222,6 +227,9 @@ def train_likefree_inference(config, overwrite=False):
                 dict_bounds=dict_bounds,
                 overwrite=overwrite,
                 matches_sweep_model=matches_sweep_model,
+                wandb_sweep_id=config.get("wandb_sweep_id"),
+                sweep_num_runs=sweep_num_runs,
+                wandb_config_yaml_path=config_yaml_path,
                 )
     sbi_network.run(max_epochs=2000)
     #sbi_network.run(max_epochs=10)

@@ -175,7 +175,48 @@ def get_bias_indices_for_idx(idx_mock, modecosmo='lh', params_df=None, biasparam
     return idxs_bias
 
 
+def _validate_tag_mask(statistic: str, tag_mask: str) -> None:
+    """
+    Validate that `tag_mask` is either "" (no masking) or one of the supported
+    kmax/bin-selection tokens for the given statistic.
+
+    This prevents accidentally applying bispectrum/k tokens to pgm (or vice-versa)
+    and silently returning an "all bins" mask.
+    """
+    if not isinstance(tag_mask, str):
+        raise TypeError(f"tag_mask must be a string (or empty string). Got {type(tag_mask)}")
+
+    tag_mask = tag_mask.strip()
+    if tag_mask == "":
+        return
+
+    # Supported mask tokens:
+    # - pk:    'kmaxpk' or 'kp'
+    # - bispec:'kmaxbispec' or 'kb'
+    # - pgm:   'kmaxpgm' or 'kpgm'
+    allowed = None
+    if statistic in ("pk", "pklin"):
+        allowed = r"^_?(?:kmaxpk|kp)(\d+(?:\.\d+)?)$"
+    elif statistic == "bispec":
+        allowed = r"^_?(?:kmaxbispec|kb)(\d+(?:\.\d+)?)$"
+    elif statistic == "pgm":
+        allowed = r"^_?(?:kmaxpgm|kpgm)(\d+(?:\.\d+)?)$"
+    else:
+        # mask_data() prints and falls back for unknown statistics; keep behavior.
+        return
+
+    if allowed is None or re.fullmatch(allowed, tag_mask) is None:
+        raise ValueError(
+            f"Invalid tags_mask token {tag_mask!r} for statistic {statistic!r}. "
+            f"Allowed: {allowed!r} (or '' for no mask)."
+        )
+
+
 def mask_data(statistic, tag_mask, k, y, y_err):
+    if isinstance(tag_mask, str):
+        tag_mask = tag_mask.strip()
+    _validate_tag_mask(statistic, tag_mask)
+
     if statistic in ('pk', 'pklin'):
         mask = get_Pk_mask(tag_mask=tag_mask, k=k)
     elif statistic == 'pgm':
