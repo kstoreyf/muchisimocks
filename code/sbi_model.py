@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 from types import SimpleNamespace
 
@@ -28,6 +29,9 @@ _WANDB_SWEEP_PARAMETER_KEYS = (
     "training_batch_size",
     "num_transforms",
 )
+
+# Subdirs under ``dir_sbi`` for sweep trials use ``wandb.run.id`` (lowercase alnum).
+_WANDB_RUN_ID_DIR_RE = re.compile(r"^[a-z0-9]{8,}$")
 
 
 def _wandb_sweep_api_path(sweep_id_or_path, project_name):
@@ -87,24 +91,88 @@ def _write_wandb_sweep_id_to_yaml(yaml_path, sweep_api_path):
         print("wandb: saved wandb_sweep_id to %s" % p)
 
 
-def _delete_crashed_runs_in_sweep(sweep_api_path):
+def _delete_crashed_runs_in_sweep(sweep_api_path, dir_sbi=None):
     """
     Delete non-running failed runs in an existing sweep before resuming.
+
+    If ``dir_sbi`` is set, also remove ``dir_sbi/<run_id>/`` for each deleted run.
     """
     api = wandb.Api()
     sweep = api.sweep(sweep_api_path)
+    to_remove = [
+        r
+        for r in sweep.runs
+        if str(getattr(r, "state", "")).lower() in {"crashed", "failed", "killed"}
+    ]
     n_deleted = 0
+    n_local = 0
+    root = pathlib.Path(dir_sbi) if dir_sbi else None
+    for run in to_remove:
+        rid = run.id
+        run.delete()
+        n_deleted += 1
+        if root is not None and _WANDB_RUN_ID_DIR_RE.match(str(rid)):
+            p = root / rid
+            if p.is_dir():
+                shutil.rmtree(p)
+                n_local += 1
+    print(
+        "wandb: deleted %s crashed/failed/killed runs from %s (local run dirs removed: %s)"
+        % (n_deleted, sweep_api_path, n_local if root is not None else "n/a")
+    )
+
+
+def _delete_orphaned_local_sweep_run_dirs(dir_sbi, sweep_api_path):
+    """
+    Remove ``dir_sbi/<run_id>/`` subdirs whose ``run_id`` is not a run in this sweep
+    on W&B (e.g. runs removed manually in the UI).
+    """
+    api = wandb.Api()
+    sweep = api.sweep(sweep_api_path)
+    active_ids = {str(r.id) for r in sweep.runs}
+    root = pathlib.Path(dir_sbi)
+    if not root.is_dir():
+        return
+    n_removed = 0
+    for child in sorted(root.iterdir()):
+        if not child.is_dir():
+            continue
+        name = child.name
+        if not _WANDB_RUN_ID_DIR_RE.match(name):
+            continue
+        if name in active_ids:
+            continue
+        shutil.rmtree(child)
+        n_removed += 1
+        print("wandb: removed orphaned local sweep run dir %s" % child)
+    if n_removed:
+        print(
+            "wandb: removed %s orphaned local sweep run dir(s) under %s"
+            % (n_removed, dir_sbi)
+        )
+
+
+def _wandb_count_finished_success_runs(sweep_api_path):
+    """
+    Count runs in a successful terminal state. Used with ``sweep_num_runs`` so
+    ``wandb.agent(..., count=...)`` can stop in-process (``count=None`` does not).
+    """
+    api = wandb.Api()
+    sweep = api.sweep(sweep_api_path)
+    n = 0
     for run in sweep.runs:
         state = str(getattr(run, "state", "")).lower()
-        if state in {"crashed", "failed", "killed"}:
-            run.delete()
-            n_deleted += 1
-    print("wandb: deleted %s crashed/failed/killed runs from %s" % (n_deleted, sweep_api_path))
+        if state in {"finished", "completed"}:
+            n += 1
+    return n
 
 
 def _fit_config_from_wandb_run(run, max_epochs_default, validation_fraction_default):
     """
     Build fit hyperparameters from a wandb sweep run's config.
+
+    Used when ``run_mode == 'best'`` and ``matches_sweep_model`` is False: retrain
+    with the best sweep run's hyperparameters on the config's bx / n_train data.
 
     Requires the sweep-sampled keys (``sweep_config['parameters']`` in ``run()``):
     learning_rate, hidden_features, training_batch_size, num_transforms.
@@ -146,6 +214,8 @@ class SBIModel():
                      statistics=None, param_names=None, dict_bounds=None, 
                      run_mode='single', tag_sbi='', n_threads=1, 
                      sweep_name=None, overwrite=False,
+                     # True iff bx/n_train match generate_config_inference.BX_SWEEP / N_TRAIN_SWEEP;
+                     # for run_mode best: copy best sweep artifact vs retrain with best hparams.
                      matches_sweep_model=False,
                      wandb_sweep_id=None,
                      sweep_num_runs=None,
@@ -231,19 +301,18 @@ class SBIModel():
                 }
             }
             if resume_id:
-                sweep_path = _wandb_sweep_api_path(resume_id, project_name)
+                sweep_api_path = _wandb_sweep_api_path(resume_id, project_name)
                 agent_entity, agent_project, sweep_id = _parse_wandb_sweep_api_path(
-                    sweep_path
+                    sweep_api_path
                 )
-                _delete_crashed_runs_in_sweep(sweep_path)
-                count = None
+                _delete_crashed_runs_in_sweep(sweep_api_path, self.dir_sbi)
                 print(
-                    "wandb sweep resume: path=%s target_total_runs=%s (count=None)"
-                    % (sweep_path, self.sweep_num_runs)
+                    "wandb sweep resume: path=%s target_total_finished_runs=%s"
+                    % (sweep_api_path, self.sweep_num_runs),
+                    flush=True,
                 )
             else:
                 sweep_id = wandb.sweep(sweep_config, project=project_name)
-                count = self.sweep_num_runs
                 api = wandb.Api()
                 agent_entity = api.default_entity
                 agent_project = project_name
@@ -253,10 +322,31 @@ class SBIModel():
                         self.wandb_config_yaml_path, sweep_api_path
                     )
                 print(
-                    "Started wandb sweep %s. Re-run the same training command to resume "
-                    "(wandb_sweep_id is in the config if it was saved)."
-                    % sweep_api_path
+                    (
+                        "Started wandb sweep %s. Re-run the same training command to resume "
+                        "(wandb_sweep_id is in the config if it was saved)."
+                    )
+                    % sweep_api_path,
+                    flush=True,
                 )
+
+            _delete_orphaned_local_sweep_run_dirs(self.dir_sbi, sweep_api_path)
+
+            n_finished = _wandb_count_finished_success_runs(sweep_api_path)
+            count = max(0, int(self.sweep_num_runs) - n_finished)
+            print(
+                "wandb: agent count=%s (target finished runs=%s, already finished=%s)"
+                % (count, self.sweep_num_runs, n_finished),
+                flush=True,
+            )
+            if count == 0:
+                print(
+                    "wandb: skipping wandb.agent (finished runs=%s, target=%s)."
+                    % (n_finished, self.sweep_num_runs),
+                    flush=True,
+                )
+                wandb.finish()
+                return
 
             def _fit_model_wandb():
                 wandb.init(project=agent_project, entity=agent_entity)
@@ -281,6 +371,9 @@ class SBIModel():
             wandb.finish()
             
         elif self.run_mode == 'best':
+            # sweep.best_run() uses the sweep metric (see sweep branch in run(): validation_loss min).
+            # matches_sweep_model True: download that run's model artifact into dir_sbi.
+            # False: _fit_config_from_wandb_run(best_run) then fit_model on this process's theta/y_train.
             wandb.login()
             api = wandb.Api()
             sweeps = api.project(project_name).sweeps()

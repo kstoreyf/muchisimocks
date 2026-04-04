@@ -20,6 +20,7 @@ import sbi_model
 import scaler_custom as scl
 import data_loader
 import generate_params as genp
+# BX_SWEEP / N_TRAIN_SWEEP: must match generate_config_inference; used for run_mode best (copy vs retrain).
 from generate_config_inference import BX_SWEEP, N_TRAIN_SWEEP, SWEEP_NUM_RUNS
 
 
@@ -209,6 +210,8 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
         
     ### Run inference (now only sbi)
     print("tag_inf (SBI):", tag_inf)
+    # run_mode best: True => sbi downloads W&B best-run checkpoint (same training regime as sweep);
+    # False => retrain with best run's hyperparameters on this bx/n_train.
     matches_sweep_model = bx is not None and int(bx) == BX_SWEEP and int(n_train) == N_TRAIN_SWEEP
     if run_mode == "best":
         print("run_mode=best matches_sweep_model=%s bx/n_train=%s/%s (sweep %s/%s)" % (

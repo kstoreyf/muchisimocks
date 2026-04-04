@@ -139,6 +139,9 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
     For ``run_mode`` ``sweep``, ``wandb_sweep_id`` (initially ``None``) and
     ``sweep_num_runs`` are written so re-running this same config can resume
     without environment variables.
+
+    For ``run_mode`` ``best``, ``tag_sweep`` must match the sweep you optimized;
+    ``sweep_name`` is the sweep's W&B name (bx/n_train at BX_SWEEP/N_TRAIN_SWEEP).
     """
     # bx is bias parameters per cosmo (1x, 2x, 4x, 8x, 16x, 32x)
     tags_mask = [""] * len(statistics) if tags_mask is None else list(tags_mask)
@@ -163,6 +166,7 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
         tag_inf = base_inf_sweep + f'_sweep{tag_sweep}'
         sweep_name = base_inf_sweep + f'_sweep{tag_sweep}'
     elif run_mode == 'best':
+        # Output dir tag includes this bx/n_train; sweep_name is the completed sweep.
         tag_inf = base_inf + f'_best{tag_sweep}'
         sweep_name = base_inf_sweep + f'_sweep{tag_sweep}'
     else:  # single
@@ -249,6 +253,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     tag_inf_num_sweep = f'_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}'
     base_inf_train_sweep = tag_data_train + ('_rp' if reparameterize else '') + tag_inf_num_sweep
     if tag_sweep is not None:
+        # Align with train run_mode=best: load results_sbi/sbi<tag_inf_train> from that run.
         tag_inf_train = base_inf_train + f'_best{tag_sweep}'
         sweep_name = base_inf_train_sweep + f'_sweep{tag_sweep}'
     else:
@@ -510,9 +515,11 @@ def main():
                     ]
 
     # Training: run_mode 'single' | 'sweep' | 'best'; tag_sweep required for sweep/best (e.g. '-rand10').
+    # For best: after sweep finishes, switch run_mode to best and same tag_sweep to pull best hparams / artifact.
     #run_mode = "single"
     #tag_sweep = None
-    run_mode = "sweep"
+    #run_mode = "sweep"
+    run_mode = "best"
     tag_sweep = "-rand30"
 
     stat_arr = [
@@ -521,8 +528,10 @@ def main():
         ["pk", "bispec"],
         ["pk", "bispec", "pgm"],
     ]
-    n_train_arr = [10000]
-    bx_arr = [32]
+    #n_train_arr = [10000]
+    #bx_arr = [32]
+    n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
+    bx_arr = [1, 2, 4, 8, 16, 32]
 
     for i,statistics in enumerate(stat_arr):
         for n_train in n_train_arr:
