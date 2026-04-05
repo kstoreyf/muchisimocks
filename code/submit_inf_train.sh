@@ -1,9 +1,12 @@
 #!/bin/bash
 
 #n_train_arr=(500 1000 2000 4000 6000 8000 10000)
-#n_train_arr=(10000)
-n_train_arr=(500 1000 2000 4000 6000 8000 10000)
-bx_arr=(1 2 4 8 16 32)
+n_train_arr=(10000)
+bx_arr=(32)
+#n_train_arr=(500 1000 2000 4000 6000 8000 10000)
+#bx_arr=(1 2 4 8 16 32)
+#bx_arr=(16 32)
+#bx_arr=(8 16 32)
 tag_stats_arr=("_pk") 
 #tag_stats_arr=("_pk" "_pk_pgm") 
 #tag_stats_arr=("_pk_pgm") 
@@ -25,8 +28,8 @@ for n_train in "${n_train_arr[@]}"; do
             tag_data_train="_muchisimocks${tag_stats}${tag_masks}${tag_params}${tag_biasparams}${tag_noise}"
             tag_rp="_rp"
             tag_inf_num="_bx${bx}_ntrain${n_train}"
-            #tag_sweep="_sweep-rand30"
-            tag_sweep="_best-rand30"
+            tag_sweep="_sweep-rand30"
+            #tag_sweep="_best-rand30"
             #tag_sweep=""
             tag_inf="${tag_data_train}${tag_rp}${tag_inf_num}${tag_sweep}"
             config_train_file="../configs/configs_train/config${tag_inf}.yaml"
