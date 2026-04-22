@@ -3,6 +3,7 @@ __pycache__
 sbi-logs/
 logs/
 old/
+artifacts/
 
 *nohup*
 

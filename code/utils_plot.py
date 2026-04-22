@@ -58,6 +58,14 @@ labels_biasparams = {
     '_biaszen_p4_n100000': r'10x $\{b\}$ per cosmo',
     '_biaszen_p4_n200000': r'20x $\{b\}$ per cosmo',
 }
+labels_mask = {
+    '_kb0.15': r'$k_\text{max}^\text{bispec}=0.15$',
+    '_kb0.2': r'$k_\text{max}^\text{bispec}=0.2$', 
+    '_kb0.25': r'$k_\text{max}^\text{bispec}=0.25$',
+    '_kb0.3': r'$k_\text{max}^\text{bispec}=0.3$',
+    '_kb0.35': r'$k_\text{max}^\text{bispec}=0.35$',
+    '_kb0.4': r'$k_\text{max}^\text{bispec}=0.4$',
+}
 
 
 def get_stat_label(statistics):
@@ -114,6 +122,10 @@ def setup_inference_tags(
     """
     Construct SBI inference tags for the given statistics and training setup.
 
+    ``tags_mask`` is one joined mask suffix per row of ``statistics_arr`` (same
+    string that ``generate_train_config`` inserts after ``tag_stats``: join the
+    per-statistic YAML list with ``"".join(tags_mask)``).
+
     Returns
     -------
     tags_inf, labels, colors, tag_stats_arr
@@ -131,7 +143,9 @@ def setup_inference_tags(
     for i, tag_stats in enumerate(tag_stats_arr):
         # tag_stats already includes the leading underscore.
         if tag_noise is None:
-            tags_inf.append(f"_{data_mode}{tag_stats}{tags_mask[i]}{tag_params}{tag_biasparams}{tag_reparam}{tag_num}")
+            tags_inf.append(
+                f"_{data_mode}{tag_stats}{tags_mask[i]}{tag_params}{tag_biasparams}{tag_reparam}{tag_num}"
+            )
         else:
             tags_inf.append(
                 f"_{data_mode}{tag_stats}{tags_mask[i]}{tag_params}{tag_biasparams}{tag_noise}{tag_reparam}{tag_num}"
@@ -201,6 +215,9 @@ def setup_test_tags(
     """
     Construct tag_test strings for SBI sample loading.
 
+    ``tags_mask_test`` is one joined suffix per ``tag_stats_arr`` entry (same as
+    ``generate_test_config``: ``tag_masks = "".join(tags_mask)``).
+
     Notes
     -----
     - `tag_noise_test` corresponds to the additive-noise portion of the tag.
@@ -231,16 +248,25 @@ def setup_shame_mock_test_tags(
     tag_mock: str = "_nbar0.00022",
     data_mode_test: str = "shame",
     data_mode: Optional[str] = None,
+    tags_mask: Optional[Sequence[str]] = None,
 ):
     """
     Construct OOD SHAMe test tags used for SBI sample loading.
+
+    ``tags_mask`` is one joined suffix per ``tag_stats_arr`` entry (same mask
+    segment as in ``generate_test_config_ood`` / ``submit_inf_test.sh``).
 
     Accepts `data_mode` as an alias for `data_mode_test` for notebook
     compatibility.
     """
     if data_mode is not None:
         data_mode_test = data_mode
-    return [f"_{data_mode_test}{tag_stats}{tag_mock}" for tag_stats in tag_stats_arr]
+    n = len(tag_stats_arr)
+    if tags_mask is None:
+        tags_mask = [""] * n
+    if len(tags_mask) != n:
+        raise ValueError("tags_mask must be the same length as tag_stats_arr.")
+    return [f"_{data_mode_test}{tag_stats_arr[i]}{tags_mask[i]}{tag_mock}" for i in range(n)]
 
 
 def _covs_pred_to_per_sample(

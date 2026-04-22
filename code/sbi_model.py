@@ -34,6 +34,58 @@ _WANDB_SWEEP_PARAMETER_KEYS = (
 _WANDB_RUN_ID_DIR_RE = re.compile(r"^[a-z0-9]{8,}$")
 
 
+def wandb_sweep_best_run(sweep, *, minimize: str):
+    """
+    ``wandb.apis.public.Sweep.best_run`` only accepts ``order=``, not ``minimize=``.
+    Minimizing a summary metric is ``order='+<name>'`` (see ``QueryGenerator``).
+
+    Raises ``ValueError`` if the selected run has no ``minimize`` value in summary
+    (metric never logged); do not treat an unlogged metric as a comparable best.
+    """
+    run = sweep.best_run(order=f"+{minimize}")
+    if run is None:
+        raise ValueError(
+            "No run returned for sweep id=%r (empty sweep or filter)."
+            % (getattr(sweep, "id", None),)
+        )
+    sm = dict(run.summary)
+    val = sm.get(minimize)
+    if val is None:
+        raise ValueError(
+            "Best run %s has no summary[%r] logged; cannot select best without that metric."
+            % (run.id, minimize)
+        )
+    return run
+
+
+def _read_best_run_id_from_dir_sbi(dir_sbi):
+    """
+    W&B run id from ``best_run.txt`` in the given results directory (written by
+    ``choose_best_run.py`` after ranking + stall tests).
+    """
+    fn = os.path.join(dir_sbi, "best_run.txt")
+    if not os.path.isfile(fn):
+        raise FileNotFoundError(
+            "Missing best run file %s. Run choose_best_run.py for this sweep first "
+            "(it writes best_run.txt with the chosen W&B run id)."
+            % fn
+        )
+    with open(fn, encoding="utf-8") as f:
+        line = f.readline()
+    parts = line.split()
+    run_id = parts[0] if parts else ""
+    if not run_id:
+        raise ValueError(
+            "Empty or invalid W&B run id in %s (expected one line: run id only)."
+            % fn
+        )
+    if _WANDB_RUN_ID_DIR_RE.match(run_id) is None:
+        raise ValueError(
+            "Unexpected run id %r in %s (expected a wandb run id)." % (run_id, fn)
+        )
+    return run_id
+
+
 def _wandb_sweep_api_path(sweep_id_or_path, project_name):
     """
     W&B API expects ``entity/project/sweep_id``. Accept that full string, or a
@@ -167,32 +219,24 @@ def _wandb_count_finished_success_runs(sweep_api_path):
     return n
 
 
-def _fit_config_from_wandb_run(run, max_epochs_default, validation_fraction_default):
+def _fit_config_from_training_dict(
+    raw,
+    max_epochs_default,
+    validation_fraction_default,
+    *,
+    source,
+):
     """
-    Build fit hyperparameters from a wandb sweep run's config.
-
-    Used when ``run_mode == 'best'`` and ``matches_sweep_model`` is False: retrain
-    with the best sweep run's hyperparameters on the config's bx / n_train data.
-
-    Requires the sweep-sampled keys (``sweep_config['parameters']`` in ``run()``):
-    learning_rate, hidden_features, training_batch_size, num_transforms.
-
-    Uses per-run keys from the sweep agent's ``wandb.config.update`` when
-    present: max_epochs, model_type, validation_fraction; otherwise falls back
-    to ``max_epochs_default`` / ``validation_fraction_default`` / ``'maf'``.
+    Shared by W&B run config and ``config.pkl`` from a sweep trial (``fit_model``
+    saves a plain dict via ``_training_config_to_plain_dict``). Requires the four sweep
+    sample keys; optional ``max_epochs``, ``model_type``, ``validation_fraction``.
     """
-    raw = {k: v for k, v in dict(run.config).items() if not str(k).startswith("_")}
+    raw = {k: v for k, v in dict(raw).items() if not str(k).startswith("_")}
     missing = [k for k in _WANDB_SWEEP_PARAMETER_KEYS if raw.get(k) is None]
     if missing:
         raise ValueError(
-            "Best run %s missing sweep-sampled keys %s (expected all of %s). "
-            "Config keys: %s"
-            % (
-                run.id,
-                missing,
-                _WANDB_SWEEP_PARAMETER_KEYS,
-                sorted(raw.keys()),
-            )
+            "%s: missing keys %s (need all of %s). Saw: %s"
+            % (source, missing, _WANDB_SWEEP_PARAMETER_KEYS, sorted(raw.keys()))
         )
     return SimpleNamespace(
         learning_rate=float(raw["learning_rate"]),
@@ -207,6 +251,50 @@ def _fit_config_from_wandb_run(run, max_epochs_default, validation_fraction_defa
     )
 
 
+def _fit_config_from_wandb_run(run, max_epochs_default, validation_fraction_default):
+    """See ``_fit_config_from_training_dict``."""
+    raw = {k: v for k, v in dict(run.config).items() if not str(k).startswith("_")}
+    return _fit_config_from_training_dict(
+        raw,
+        max_epochs_default,
+        validation_fraction_default,
+        source="W&B run %s" % run.id,
+    )
+
+
+def _fit_config_from_config_pkl(path, max_epochs_default, validation_fraction_default):
+    """Load sweep hparams from a trial's ``config.pkl`` (same schema as W&B config)."""
+    with open(path, "rb") as f:
+        raw = pickle.load(f)
+    if not isinstance(raw, dict):
+        raise ValueError("%s: expected a dict, got %s" % (path, type(raw).__name__))
+    return _fit_config_from_training_dict(
+        raw,
+        max_epochs_default,
+        validation_fraction_default,
+        source=path,
+    )
+
+
+def _training_config_to_plain_dict(config):
+    """
+    Snapshot hyperparameters for ``config.pkl``.
+
+    ``wandb.config`` stores user keys internally; ``vars(wandb.config)`` only has
+    private attributes like ``_items``, so filtering ``k.startswith('_')`` yields
+    ``{}``. Use the mapping API (``dict(config)``) when possible; fall back to
+    ``vars`` for :class:`types.SimpleNamespace` (``dict(ns)`` raises).
+    """
+    if isinstance(config, dict):
+        raw = config
+    else:
+        try:
+            raw = dict(config)
+        except (TypeError, ValueError):
+            raw = vars(config)
+    return {k: v for k, v in raw.items() if not str(k).startswith("_")}
+
+
 class SBIModel():
 
     def __init__(self, theta_train=None, y_train_unscaled=None,
@@ -214,8 +302,8 @@ class SBIModel():
                      statistics=None, param_names=None, dict_bounds=None, 
                      run_mode='single', tag_sbi='', n_threads=1, 
                      sweep_name=None, overwrite=False,
-                     # True iff bx/n_train match generate_config_inference.BX_SWEEP / N_TRAIN_SWEEP;
-                     # for run_mode best: copy best sweep artifact vs retrain with best hparams.
+                     # True iff bx/n_train match BX_SWEEP/N_TRAIN_SWEEP and tags_mask matches
+                     # tags_mask_for_sweep(statistics); run_mode best: copy sweep artifact vs retrain.
                      matches_sweep_model=False,
                      wandb_sweep_id=None,
                      sweep_num_runs=None,
@@ -270,6 +358,20 @@ class SBIModel():
             else None
         )
 
+    def _sweep_results_dir_for_best_run_txt(self):
+        """
+        Sweep results directory ``results_sbi/sbi{sweep_name}`` where
+        ``choose_best_run.py`` writes ``best_run.txt``. Same string as W&B ``sweep_name``
+        / training sweep ``tag_inf``. Not ``self.dir_sbi`` (the ``_best...`` output tree).
+        """
+        if not self.sweep_name:
+            raise ValueError(
+                "run_mode=best requires sweep_name (sweep folder = sbi<sweep_name>)."
+            )
+        return str(
+            paths.DIR_RESULTS / "results_sbi" / ("sbi" + self.sweep_name)
+        )
+
         
     def run(self, max_epochs=2000):
         validation_fraction = 0.1
@@ -290,7 +392,8 @@ class SBIModel():
                 'method': 'random',
                 'run_cap': self.sweep_num_runs,
                 'metric': {
-                    'name': 'validation_loss',
+                    # Logged in fit_model as min(epoch validation loss); matches sweep ranking.
+                    'name': 'best_validation_loss',
                     'goal': 'minimize'
                 },
                 'parameters': {
@@ -371,23 +474,72 @@ class SBIModel():
             wandb.finish()
             
         elif self.run_mode == 'best':
-            # sweep.best_run() uses the sweep metric (see sweep branch in run(): validation_loss min).
-            # matches_sweep_model True: download that run's model artifact into dir_sbi.
-            # False: _fit_config_from_wandb_run(best_run) then fit_model on this process's theta/y_train.
-            wandb.login()
-            api = wandb.Api()
-            sweeps = api.project(project_name).sweeps()
-            self.sweep = next((s for s in sweeps if s.name == self.sweep_name), None)
-            assert self.sweep is not None, f"Sweep {self.sweep_name} not found"
-            best_run = self.sweep.best_run()
-            print("Best run from sweep %s: %s" % (self.sweep_name, best_run.id))
+            # matches_sweep_model True: copy trained run into dir_sbi (local sweep subdir if
+            # present, else W&B artifact download). False: retrain from W&B run hparams.
+            # Best run id: read from best_run.txt under results_sbi/sbi{sweep_name} (not
+            # self.dir_sbi, which is the _best... output tree).
+            try:
+                sweep_dir = self._sweep_results_dir_for_best_run_txt()
+            except ValueError as e:
+                raise SystemExit(str(e)) from e
+            print(
+                "run_mode=best: looking for best_run.txt in sweep dir %s "
+                "(output dir_sbi=%s, sweep_name=%r)"
+                % (sweep_dir, self.dir_sbi, self.sweep_name),
+                flush=True,
+            )
+            try:
+                best_run_id = _read_best_run_id_from_dir_sbi(sweep_dir)
+            except (FileNotFoundError, ValueError) as e:
+                raise SystemExit(str(e)) from e
+            best_run_txt = os.path.join(sweep_dir, "best_run.txt")
+            print(
+                "run_mode=best: read chosen W&B run id %r from %s"
+                % (best_run_id, best_run_txt),
+                flush=True,
+            )
 
-            if self.matches_sweep_model:
+            local_run_dir = os.path.join(sweep_dir, best_run_id)
+            local_posterior = os.path.join(local_run_dir, "posterior.p")
+            local_cfg_pkl = os.path.join(local_run_dir, "config.pkl")
+
+            if self.matches_sweep_model and os.path.isfile(local_posterior):
+                print(
+                    "run_mode=best: hyperparameters/source = sweep trial checkpoint (copy local posterior; "
+                    "same bx/n_train and tags_mask as sweep).",
+                    flush=True,
+                )
+                print(
+                    "run_mode=best: found trained model under sweep dir — copying to %s "
+                    "(skipping wandb login / artifact download)."
+                    % self.dir_sbi,
+                    flush=True,
+                )
+                os.makedirs(self.dir_sbi, exist_ok=True)
+                for fn in ["posterior.p", "inference.p", "param_names.txt", "config.pkl"]:
+                    src = os.path.join(local_run_dir, fn)
+                    if os.path.exists(src):
+                        shutil.copy2(src, os.path.join(self.dir_sbi, fn))
+                for f in pathlib.Path(local_run_dir).glob("scaler_y_*.p"):
+                    shutil.copy2(f, os.path.join(self.dir_sbi, f.name))
+                print("Copied best sweep model to %s" % self.dir_sbi)
+            elif self.matches_sweep_model:
+                wandb.login()
+                api = wandb.Api()
+                entity = api.default_entity
+                run_path = "%s/%s/%s" % (entity, project_name, best_run_id)
+                best_run = api.run(run_path)
+                print(
+                    "run_mode=best: resolved sweep run %s (W&B path %s)"
+                    % (best_run.id, run_path),
+                    flush=True,
+                )
                 model_artifacts = [
                     a for a in best_run.logged_artifacts() if a.type == "model"
                 ]
                 assert model_artifacts, (
-                    "No model artifact found for best run %s" % best_run.id
+                    "No model artifact for best run %s (no local posterior at %s)"
+                    % (best_run.id, local_posterior)
                 )
                 artifact = model_artifacts[0]
                 download_root = artifact.download()
@@ -400,19 +552,54 @@ class SBIModel():
                     shutil.copy2(f, os.path.join(self.dir_sbi, f.name))
                 print("Copied best sweep model to %s" % self.dir_sbi)
             else:
-                print("Training with best-run hparams (bx/n_train != sweep model; sweep=%s)" % self.sweep_name)
-                cfg = _fit_config_from_wandb_run(
-                    best_run, max_epochs, validation_fraction
+                print(
+                    "run_mode=best: retrain path — apply best sweep trial hyperparameters to this job's "
+                    "training data (output dir_sbi=%s; trial %s under %s)."
+                    % (self.dir_sbi, best_run_id, sweep_dir),
+                    flush=True,
                 )
+                cfg = None
+                if os.path.isfile(local_cfg_pkl):
+                    try:
+                        cfg = _fit_config_from_config_pkl(
+                            local_cfg_pkl, max_epochs, validation_fraction
+                        )
+                    except ValueError as e:
+                        raise SystemExit(str(e)) from e
+                    print(
+                        "run_mode=best: hparams from %s (skip W&B run fetch)"
+                        % local_cfg_pkl,
+                        flush=True,
+                    )
+                if cfg is None:
+                    wandb.login()
+                    api = wandb.Api()
+                    entity = api.default_entity
+                    run_path = "%s/%s/%s" % (entity, project_name, best_run_id)
+                    best_run = api.run(run_path)
+                    print(
+                        "run_mode=best: resolved sweep run %s for hparams (%s)"
+                        % (best_run.id, run_path),
+                        flush=True,
+                    )
+                    cfg = _fit_config_from_wandb_run(
+                        best_run, max_epochs, validation_fraction
+                    )
+                wandb.login()
                 wandb.init(
                     project=project_name,
                     config=vars(cfg),
-                    name="retrain-besthp-%s" % best_run.id,
+                    name="retrain-besthp-%s" % best_run_id,
                 )
                 self.fit_model(cfg, save_model=True)
                 wandb.finish()
             
         elif self.run_mode == 'single':
+            print(
+                "run_mode=single: hyperparameters from built-in defaults in sbi_model.SBIModel.run "
+                "(learning_rate, hidden_features, …); see fit_model wandb.config print below.",
+                flush=True,
+            )
             wandb.login()
             # Use default config for single run
             config = {
@@ -496,11 +683,17 @@ class SBIModel():
             learning_rate=learning_rate,
             show_train_summary=True,
         )
+        # sbi reloads best-val weights inside the training loop only when early stopping
+        # triggers; if we stop because max_num_epochs is hit first, weights can still be
+        # from the last epoch. Always restore the best checkpoint (no-op if already loaded).
+        best_sd = getattr(inference, "_best_model_state_dict", None)
+        if best_sd is not None and inference._neural_net is not None:
+            inference._neural_net.load_state_dict(best_sd)
         print("Trained!")
         end = time.time()
         print(f"Training time: {end - start:.2f}s = {(end - start) / 60:.2f} min (max_epochs={max_epochs}, n_threads={self.n_threads})")
 
-        # Log final losses to wandb
+        # Log final losses to wandb (best_validation_loss is the sweep objective key)
         train_log = inference._summary
         if train_log and len(train_log['training_loss']) > 0:
             final_training_loss = train_log['training_loss'][-1] if train_log['training_loss'] is not None else None
@@ -509,6 +702,9 @@ class SBIModel():
                 wandb.log({"final_training_loss": final_training_loss})
             if final_validation_loss is not None:
                 wandb.log({"final_validation_loss": final_validation_loss})
+            val_series = train_log.get("validation_loss")
+            if val_series:
+                wandb.log({"best_validation_loss": float(min(val_series))})
         
         print("Building posterior")
         self.posterior = inference.build_posterior(density_estimator)
@@ -531,7 +727,7 @@ class SBIModel():
                 pickle.dump(inference, f)
             with open(f"{out_dir}/param_names.txt", "w") as f:
                 np.savetxt(f, self.param_names, fmt="%s")
-            config_dict = {k: v for k, v in vars(config).items() if not k.startswith('_')}
+            config_dict = _training_config_to_plain_dict(config)
             with open(f"{out_dir}/config.pkl", "wb") as f:
                 pickle.dump(config_dict, f)
             print(f"Saved model to {out_dir}")

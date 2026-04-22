@@ -21,7 +21,12 @@ import scaler_custom as scl
 import data_loader
 import generate_params as genp
 # BX_SWEEP / N_TRAIN_SWEEP: must match generate_config_inference; used for run_mode best (copy vs retrain).
-from generate_config_inference import BX_SWEEP, N_TRAIN_SWEEP, SWEEP_NUM_RUNS
+from generate_config_inference import (
+    BX_SWEEP,
+    N_TRAIN_SWEEP,
+    SWEEP_NUM_RUNS,
+    tags_mask_for_sweep,
+)
 
 
 def _build_tags_mask(statistics, config) -> list[str]:
@@ -210,12 +215,33 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
         
     ### Run inference (now only sbi)
     print("tag_inf (SBI):", tag_inf)
-    # run_mode best: True => sbi downloads W&B best-run checkpoint (same training regime as sweep);
-    # False => retrain with best run's hyperparameters on this bx/n_train.
-    matches_sweep_model = bx is not None and int(bx) == BX_SWEEP and int(n_train) == N_TRAIN_SWEEP
+    # run_mode best: copy sweep posterior only if bx/n_train AND tags_mask match the sweep
+    # (fiducial masks from tags_mask_for_sweep). Otherwise retrain with best hparams —
+    # e.g. training _kb0.2 while sweep used TAG_MASK_BISPEC_SWEEP _kb0.25.
+    sweep_tags_mask = tags_mask_for_sweep(statistics)
+    mask_matches_sweep = list(tags_mask) == list(sweep_tags_mask)
+    matches_sweep_model = (
+        bx is not None
+        and int(bx) == BX_SWEEP
+        and int(n_train) == N_TRAIN_SWEEP
+        and mask_matches_sweep
+    )
     if run_mode == "best":
-        print("run_mode=best matches_sweep_model=%s bx/n_train=%s/%s (sweep %s/%s)" % (
-            matches_sweep_model, bx, n_train, BX_SWEEP, N_TRAIN_SWEEP))
+        print(
+            "run_mode=best: tags_mask=%s | fiducial sweep masks=%s | mask_matches_sweep=%s"
+            % (tags_mask, sweep_tags_mask, mask_matches_sweep),
+            flush=True,
+        )
+        print(
+            "run_mode=best: matches_sweep_model=%s (if True: copy sweep posterior; if False: retrain with best hparams)"
+            % matches_sweep_model,
+            flush=True,
+        )
+        print(
+            "run_mode=best: bx/n_train=%s/%s (sweep fiducial %s/%s)"
+            % (bx, n_train, BX_SWEEP, N_TRAIN_SWEEP),
+            flush=True,
+        )
 
     sweep_num_runs = int(config["sweep_num_runs"]) if run_mode == "sweep" else SWEEP_NUM_RUNS
 

@@ -1,51 +1,60 @@
 #!/bin/bash
 
-#n_train_arr=(500 1000 2000 4000 6000 8000 10000)
 n_train_arr=(10000)
 bx_arr=(32)
 #n_train_arr=(500 1000 2000 4000 6000 8000 10000)
 #bx_arr=(1 2 4 8 16 32)
-#bx_arr=(16 32)
+#n_train_arr=(80000 10000)
+#n_train_arr=(500 1000 2000 4000 6000)
 #bx_arr=(8 16 32)
-tag_stats_arr=("_pk") 
-#tag_stats_arr=("_pk" "_pk_pgm") 
-#tag_stats_arr=("_pk_pgm") 
-#tag_stats_arr=("_pk_bispec_pgm")
+#bx_arr=(16 32)
+#bx_arr=(1 2 4)
+#bx_arr=(8 16 32)
+#tag_stats_arr=("_pk") 
 #tag_stats_arr=("_pk_bispec")
-#tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
+#tag_stats_arr=("_pk_pgm") 
+#tag_stats_arr=("_pk" "_pk_pgm") 
+#tag_stats_arr=("_pk_pgm" "_pk_bispec") 
+#tag_stats_arr=("_pk_bispec_pgm")
+tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
+#tag_stats_arr=("pk" "_pk_pgm" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
+tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.3" "_kb0.35" "_kb0.4")
+#tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "_kb0.4")
 
 for n_train in "${n_train_arr[@]}"; do
-    for tag_stats in "${tag_stats_arr[@]}"; do
-        for bx in "${bx_arr[@]}"; do
-            tag_params="_p5_n10000"
-            tag_biasparams="_biasnest_p4_n320000"  
-            tag_noise=""
-            #tag_biasparams="_biasnoisenest_p9_n320000"
-            #tag_noise="_noise_unit_p5_n10000"
-            tag_masks=""
-            #tag_masks="_kb0.25"
-            tag_data_train="_muchisimocks${tag_stats}${tag_masks}${tag_params}${tag_biasparams}${tag_noise}"
-            tag_rp="_rp"
-            tag_inf_num="_bx${bx}_ntrain${n_train}"
-            tag_sweep="_sweep-rand30"
-            #tag_sweep="_best-rand30"
-            #tag_sweep=""
-            tag_inf="${tag_data_train}${tag_rp}${tag_inf_num}${tag_sweep}"
-            config_train_file="../configs/configs_train/config${tag_inf}.yaml"
+    for bx in "${bx_arr[@]}"; do
+        for tag_stats in "${tag_stats_arr[@]}"; do
+            for tag_masks in "${tag_masks_arr[@]}"; do
+                tag_params="_p5_n10000"
+                #tag_biasparams="_biasnest_p4_n320000"  
+                #tag_noise=""
+                tag_biasparams="_biasnoisenest_p9_n320000"
+                tag_noise="_noise_unit_p5_n10000"
+                if [[ "$tag_stats" != *bispec* ]]; then # fiducial masks
+                    tag_masks=""
+                fi
+                tag_data_train="_muchisimocks${tag_stats}${tag_masks}${tag_params}${tag_biasparams}${tag_noise}"
+                tag_rp="_rp"
+                tag_inf_num="_bx${bx}_ntrain${n_train}"
+                #tag_sweep="_sweep-rand30"
+                tag_sweep="_best-rand30"
+                #tag_sweep=""
+                tag_inf="${tag_data_train}${tag_rp}${tag_inf_num}${tag_sweep}"
+                config_train_file="../configs/configs_train/config${tag_inf}.yaml"
 
-            job_name="inf_train${tag_inf}"
+                job_name="inf_train${tag_inf}"
 
-            code_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-            mkdir -p "${code_dir}/logs" || { echo "ERROR: Failed to create logs directory" >&2; exit 1; }
+                code_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+                mkdir -p "${code_dir}/logs" || { echo "ERROR: Failed to create logs directory" >&2; exit 1; }
 
-            sbatch <<EOF
+                sbatch <<EOF
 #!/bin/bash
 #SBATCH --qos=regular
 #SBATCH --job-name=${job_name}
 #SBATCH --output=${code_dir}/logs/${job_name}.out
 ##SBATCH --time=0:20:00
-#SBATCH --time=24:00:00 #0.5-2h for training -> 4 in case
+#SBATCH --time=24:00:00 
 ##SBATCH --time=48:00:00
 ##SBATCH --qos=long
 #SBATCH --nodes=1
@@ -69,6 +78,7 @@ echo "python run_inference.py --config-train=${config_train_file}"
 python run_inference.py --config-train="${config_train_file}"
 EOF
 
+            done
         done
     done
 done

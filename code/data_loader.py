@@ -12,6 +12,16 @@ import utils_inference
 NESTED_META_COLS = ['idx_cosmo', 'nest_layer']
 
 
+def _default_dir_params(dir_params):
+    if dir_params is None:
+        return str(paths.PROJECT_ROOT / "data" / "params")
+    return dir_params
+
+
+def _default_masks_dir():
+    return str(paths.PROJECT_ROOT / "data" / "masks")
+
+
 def _is_nested_bias(biasparams_df):
     """Check if bias params DataFrame has nested metadata columns."""
     return biasparams_df is not None and 'idx_cosmo' in biasparams_df.columns
@@ -275,7 +285,7 @@ def get_Pk_mask(tag_mask='', k=None):
 
 
 def get_Pgm_mask(tag_mask='', k=None):
-    dir_masks = '../data/masks'
+    dir_masks = _default_masks_dir()
     fn_mask = f'{dir_masks}/mask_pgm{tag_mask}.txt'
     if os.path.exists(fn_mask):
         return np.loadtxt(fn_mask, dtype=bool)
@@ -303,7 +313,7 @@ def get_Pgm_mask(tag_mask='', k=None):
 
 
 def get_bispec_mask(tag_mask='', k=None, bispec=None):
-    dir_masks = '../data/masks'
+    dir_masks = _default_masks_dir()
     fn_mask = f'{dir_masks}/mask_bispec{tag_mask}.txt'
     if os.path.exists(fn_mask):
         return np.loadtxt(fn_mask, dtype=bool)
@@ -327,8 +337,10 @@ def get_bispec_mask(tag_mask='', k=None, bispec=None):
 
 
 def load_params(tag_params=None, tag_biasparams=None,
-                dir_params='../data/params', bx=None):
-    
+                dir_params=None, bx=None):
+    if dir_params is None:
+        dir_params = str(paths.PROJECT_ROOT / "data" / "params")
+
     if tag_params is None:
         params_df = None
         param_dict_fixed = {}
@@ -349,7 +361,7 @@ def load_params(tag_params=None, tag_biasparams=None,
     return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
     
     
-def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
+def load_params_ood(data_mode, tag_mock, dir_params=None):
     if data_mode == 'shame':
         # needed this line bc was getting error message
         import bacco
@@ -370,7 +382,8 @@ def load_params_ood(data_mode, tag_mock, dir_params='../data/params'):
         raise ValueError(f"Data mode {data_mode} not recognized!")
    
     
-def load_cosmo_params(tag_params, dir_params='../data/params'):
+def load_cosmo_params(tag_params, dir_params=None):
+    dir_params = _default_dir_params(dir_params)
     if tag_params is None:
         return None, {}
     # TODO this is so messy! figure out what to do about lh prefix
@@ -398,7 +411,8 @@ def load_cosmo_params(tag_params, dir_params='../data/params'):
     return params_df, param_dict_fixed
     
     
-def load_bias_params(tag_biasparams, dir_params='../data/params', bx=None):
+def load_bias_params(tag_biasparams, dir_params=None, bx=None):
+    dir_params = _default_dir_params(dir_params)
     if tag_biasparams is None:
         return None, {}
     if 'fisher' in tag_biasparams:
@@ -529,7 +543,7 @@ def load_theta_ood(data_mode, tag_mock,
 
     
 
-def get_param_names(tag_params=None, tag_biasparams=None, dir_params='../data/params'):
+def get_param_names(tag_params=None, tag_biasparams=None, dir_params=None):
     """
     Gets parameter names given tag_params and tag_biasparams.
 
@@ -542,6 +556,7 @@ def get_param_names(tag_params=None, tag_biasparams=None, dir_params='../data/pa
     Returns:
         list: A list of parameter names.
     """
+    dir_params = _default_dir_params(dir_params)
 
     param_names = []
 

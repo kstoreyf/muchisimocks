@@ -1062,10 +1062,12 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                 chain_kwargs['shade'] = shades[orig_idx]
         c.add_chain(chainconsumer.Chain(**chain_kwargs))
 
-    # Set up plot configuration
+    # ChainConsumer only flips 1D histograms when n_params==2; flip=True with n>2 still
+    # suppresses x ticks/label on the bottom-right diagonal (see _get_triangle_figure).
+    flip_corner = len(param_names_any_available) == 2
     c.set_plot_config(
         chainconsumer.PlotConfig(
-            flip=True,
+            flip=flip_corner,
             labels=utils_plot.param_label_dict,
             #contour_label_font_size=12,
             summary_font_size=0,
