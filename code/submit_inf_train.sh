@@ -15,12 +15,15 @@ bx_arr=(32)
 #tag_stats_arr=("_pk_pgm") 
 #tag_stats_arr=("_pk" "_pk_pgm") 
 #tag_stats_arr=("_pk_pgm" "_pk_bispec") 
-#tag_stats_arr=("_pk_bispec_pgm")
-tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
+tag_stats_arr=("_pk_bispec_pgm")
+#tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
 #tag_stats_arr=("pk" "_pk_pgm" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
-tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.3" "_kb0.35" "_kb0.4")
+#tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.3" "_kb0.35" "_kb0.4")
 #tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "_kb0.4")
+tag_masks_arr=("_kb0.2_kpgm0.2")
+#tag_stats_arr=("_pk_pgm" "_pk_bispec_pgm")
+#tag_stats_arr=("_pk_pgm")
 
 for n_train in "${n_train_arr[@]}"; do
     for bx in "${bx_arr[@]}"; do
@@ -31,7 +34,8 @@ for n_train in "${n_train_arr[@]}"; do
                 #tag_noise=""
                 tag_biasparams="_biasnoisenest_p9_n320000"
                 tag_noise="_noise_unit_p5_n10000"
-                if [[ "$tag_stats" != *bispec* ]]; then # fiducial masks
+                #if [[ "$tag_stats" != *bispec* ]]; then # fiducial masks
+                if [[ "$tag_stats" != *pgm* ]]; then # fiducial masks
                     tag_masks=""
                 fi
                 tag_data_train="_muchisimocks${tag_stats}${tag_masks}${tag_params}${tag_biasparams}${tag_noise}"

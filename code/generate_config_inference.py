@@ -87,9 +87,9 @@ PARAM_SETS_TEST = {
         _ood=True,
         evaluate_mean=False,
         data_mode_test="shame",
-        #tag_mock="_nbar0.00022",
+        tag_mock="_nbar0.00022",
         #tag_mock="_nbar0.00011",
-        tag_mock="_nbar0.00054",
+        #tag_mock="_nbar0.00054",
         idxs_obs=None,
     ),
 }
@@ -542,7 +542,8 @@ def main():
     # For best: after sweep finishes, switch run_mode to best and same tag_sweep to pull best hparams / artifact.
     # Note: run_mode is only for training; testing is always 'load', and if tag_sweep is passed will use best
     
-    mode = "test"
+    #mode = "test"
+    mode = "train"
     #run_mode = "single"
     #tag_sweep = None
     #run_mode = "sweep"
@@ -550,17 +551,19 @@ def main():
     tag_sweep = "-rand30"
 
     stat_arr = [
-        ["pk"],
-        ["pk", "pgm"],
-        ["pk", "bispec"],
+        #["pk"],
+        #["pk", "pgm"],
+        #["pk", "bispec"],
         ["pk", "bispec", "pgm"],
     ]
     # stat_arr = [
     #     ["pk", "bispec"],
     #     ["pk", "bispec", "pgm"],
     # ]
-    tag_mask_bispec_arr = ["_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", "_kb0.4"]
+    #tag_mask_bispec_arr = ["_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", "_kb0.4"]
     #tag_mask_bispec_arr = ["_kb0.25"]
+    tags_mask_arr = [["", "_kb0.2", "_kpgm0.2"]]
+    
 
     n_train_arr = [10000]
     bx_arr = [32]
@@ -573,8 +576,8 @@ def main():
     for i,statistics in enumerate(stat_arr):
         for n_train in n_train_arr:
             for bx in bx_arr:
-                for tag_mask_bispec in tag_mask_bispec_arr:
-                    tags_mask = [tag_mask_bispec if s == "bispec" else "" for s in statistics]
+                for tags_mask in tags_mask_arr:
+                    #tags_mask = [tag_mask_pgm if s == "pgm" else "" for s in statistics]
                     if mode == "train":
                         generate_train_config(
                             overwrite=overwrite,

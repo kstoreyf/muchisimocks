@@ -908,7 +908,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       colors=None, labels=None,
                       figsize=(7,7), fontsize_legend=18,
                       extents={}, title=None, unreparameterize=False,
-                      shades=None, loc_legend=(1.05, 1.0)):
+                      shades=None, loc_legend=(1.05, 1.0), add_truth=True,
+                      truth_locations=None, truth_colors=None, truth_marker="o"):
     if title is None:
         title = f'test model {idx_obs}'
     
@@ -1086,43 +1087,61 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     #     )
     # )
     
-    truth_loc = {}
-    theta_vec = np.asarray(theta_obs_true, dtype=float).reshape(-1)
-    names_theta = list(param_names)
+    if add_truth:
+        if truth_locations is not None:
+            tcols = truth_colors if truth_colors is not None else colors
+            for i, loc in enumerate(truth_locations):
+                truth_loc = {
+                    pn: float(loc[pn])
+                    for pn in param_names_any_available
+                    if pn in loc
+                }
+                if not truth_loc:
+                    continue
+                kwargs = {}
+                if tcols is not None and i < len(tcols) and tcols[i] is not None:
+                    kwargs["color"] = tcols[i]
+                if truth_marker:
+                    kwargs["marker"] = truth_marker
+                c.add_truth(chainconsumer.Truth(location=truth_loc, **kwargs))
+        elif theta_obs_true is not None:
+            truth_loc = {}
+            theta_vec = np.asarray(theta_obs_true, dtype=float).reshape(-1)
+            names_theta = list(param_names)
 
-    for pn in param_names_any_available:
-        if pn in names_theta:
-            j = names_theta.index(pn)
-            if j < len(theta_vec):
-                truth_loc[pn] = float(theta_vec[j])
-            else:
-                print(
-                    f"Warning: Parameter {pn} (index {j}) not found in theta_obs_true "
-                    f"(length {len(theta_vec)}). Skipping truth value."
-                )
-            continue
+            for pn in param_names_any_available:
+                if pn in names_theta:
+                    j = names_theta.index(pn)
+                    if j < len(theta_vec):
+                        truth_loc[pn] = float(theta_vec[j])
+                    else:
+                        print(
+                            f"Warning: Parameter {pn} (index {j}) not found in theta_obs_true "
+                            f"(length {len(theta_vec)}). Skipping truth value."
+                        )
+                    continue
 
-        if unreparameterize:
-            print(
-                f"Warning: Parameter {pn} found in chains but not in original param_names. "
-                "Skipping truth value."
-            )
-            continue
+                if unreparameterize:
+                    print(
+                        f"Warning: Parameter {pn} found in chains but not in original param_names. "
+                        "Skipping truth value."
+                    )
+                    continue
 
-        v = utils_inference.forward_reparameterized_value(pn, names_theta, theta_vec)
-        if v is not None:
-            truth_loc[pn] = v
-        elif str(pn).startswith(utils_inference.REPARAM_PREFIX_SQ) or str(pn).startswith(
-            utils_inference.REPARAM_PREFIX_X
-        ):
-            print(f"Warning: Unknown reparameterized parameter {pn}. Skipping truth value.")
-        else:
-            print(
-                f"Warning: Parameter {pn} found in chains but not in original param_names. "
-                "Skipping truth value."
-            )
-    
-    c.add_truth(chainconsumer.Truth(location=truth_loc))
+                v = utils_inference.forward_reparameterized_value(pn, names_theta, theta_vec)
+                if v is not None:
+                    truth_loc[pn] = v
+                elif str(pn).startswith(utils_inference.REPARAM_PREFIX_SQ) or str(pn).startswith(
+                    utils_inference.REPARAM_PREFIX_X
+                ):
+                    print(f"Warning: Unknown reparameterized parameter {pn}. Skipping truth value.")
+                else:
+                    print(
+                        f"Warning: Parameter {pn} found in chains but not in original param_names. "
+                        "Skipping truth value."
+                    )
+
+            c.add_truth(chainconsumer.Truth(location=truth_loc))
 
     # Plot - ChainConsumer will automatically show all parameters that appear in any chain
     # and leave subplots blank for parameter combinations where data is missing
