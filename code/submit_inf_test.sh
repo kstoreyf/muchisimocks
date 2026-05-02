@@ -35,19 +35,22 @@ bx_arr=(32)
 #bx_arr=(1 2 4 8 16 32)
 
 #tag_stats_arr=("_pk")
-#tag_stats_arr=("_pk_pgm")
+tag_stats_arr=("_pk_pgm")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_stats_arr=("_pk_bispec")
 #tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_stats_arr=("_pk_pgm" "_pk_bispec")
-tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
+#tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
-tag_masks_arr=("_kb0.25")
-#tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.3" "_kb0.35" "_kb0.4")
+#tag_masks_arr=("_kb0.25_kpgm0.3")
+#tag_masks_arr=("_kpgm0.3")
+tag_masks_arr=("_kpgm0.1" "_kpgm0.15")
+#tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.3" "_kb0.35")
+#tag_masks_arr=("_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
 #tag_stats_arr=("_pk" "_pk_pgm")
-#tag_masks_arr=("")
+#tag_masks_arr=("" "_kb0.1")
 
 # Train cosmo LH tag (must match generated configs)
 tag_params_train="_p5_n10000"
@@ -132,9 +135,9 @@ set_test_tags_from_preset() {
             ;;
         ood)
             # PARAM_SETS_TEST["ood"]; generate_test_config_ood — no test noise/bias LH tags
-            #local tag_mock="_nbar0.00022"
             #local tag_mock="_nbar0.00011"
-            local tag_mock="_nbar0.00054"
+            local tag_mock="_nbar0.00022"
+            #local tag_mock="_nbar0.00054"
             tag_data_test="_shame${tag_stats}${tag_masks}${tag_mock}"
             ;;
         *)
@@ -155,9 +158,9 @@ for n_train in "${n_train_arr[@]}"; do
                             exit 1
                         fi
                         # only set given mask name when bispec is present
-                        if [[ "$tag_stats" != *bispec* ]]; then 
-                            tag_masks=""
-                        fi
+                        #if [[ "$tag_stats" != *bispec* ]]; then 
+                        #    tag_masks=""
+                        #fi
                         if ! set_test_tags_from_preset "${test_preset}" "${noise_mode}"; then
                             exit 1
                         fi

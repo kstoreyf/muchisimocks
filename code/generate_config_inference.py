@@ -87,9 +87,9 @@ PARAM_SETS_TEST = {
         _ood=True,
         evaluate_mean=False,
         data_mode_test="shame",
-        tag_mock="_nbar0.00022",
         #tag_mock="_nbar0.00011",
-        #tag_mock="_nbar0.00054",
+        #tag_mock="_nbar0.00022",
+        tag_mock="_nbar0.00054",
         idxs_obs=None,
     ),
 }
@@ -542,8 +542,8 @@ def main():
     # For best: after sweep finishes, switch run_mode to best and same tag_sweep to pull best hparams / artifact.
     # Note: run_mode is only for training; testing is always 'load', and if tag_sweep is passed will use best
     
-    #mode = "test"
-    mode = "train"
+    mode = "test"
+    #mode = "train"
     #run_mode = "single"
     #tag_sweep = None
     #run_mode = "sweep"
@@ -552,17 +552,25 @@ def main():
 
     stat_arr = [
         #["pk"],
-        #["pk", "pgm"],
+        ["pk", "pgm"],
         #["pk", "bispec"],
-        ["pk", "bispec", "pgm"],
+        #["pk", "bispec", "pgm"],
     ]
     # stat_arr = [
     #     ["pk", "bispec"],
     #     ["pk", "bispec", "pgm"],
     # ]
-    #tag_mask_bispec_arr = ["_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", "_kb0.4"]
+    #tag_mask_bispec_arr = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
+    #tags_mask_arr = [["", tag_mask_bispec] for tag_mask_bispec in tag_mask_bispec_arr]
+    tag_mask_pgm_arr = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
+    tags_mask_arr = [["", tag_mask_pgm] for tag_mask_pgm in tag_mask_pgm_arr]
     #tag_mask_bispec_arr = ["_kb0.25"]
-    tags_mask_arr = [["", "_kb0.2", "_kpgm0.2"]]
+    #tags_mask_arr = [
+        #["", "_kb0.1"],    
+        #["", "_kpgm0.35"],    
+        #["", ""],    
+        #["", "_kb0.25", "_kpgm0.3"]
+    #]
     
 
     n_train_arr = [10000]
@@ -592,6 +600,7 @@ def main():
                     elif mode == "test":
                         #for test_name in PARAM_SETS_TEST:
                         for test_name in ["ood"]:
+                        #for test_name in ["coverage", "fixed_cosmo_shame_mean"]:
                             generate_test_config_from_preset(
                                 test_name,
                                 tag_params=tag_params_train,

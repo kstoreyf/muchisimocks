@@ -58,14 +58,26 @@ labels_biasparams = {
     '_biaszen_p4_n100000': r'10x $\{b\}$ per cosmo',
     '_biaszen_p4_n200000': r'20x $\{b\}$ per cosmo',
 }
-labels_mask = {
-    '_kb0.15': r'$k_\text{max}^\text{bispec}=0.15$',
-    '_kb0.2': r'$k_\text{max}^\text{bispec}=0.2$', 
-    '_kb0.25': r'$k_\text{max}^\text{bispec}=0.25$',
-    '_kb0.3': r'$k_\text{max}^\text{bispec}=0.3$',
-    '_kb0.35': r'$k_\text{max}^\text{bispec}=0.35$',
-    '_kb0.4': r'$k_\text{max}^\text{bispec}=0.4$',
-}
+
+def get_mask_label(tags_mask):
+    if not tags_mask:
+        return ''
+
+    labels = []
+    for mask_part in tags_mask.split('_'):
+        if not mask_part:
+            continue
+        if mask_part.startswith('kb'):
+            kmax = float(mask_part.split('kb')[1])
+            labels.append(rf'$k_\text{{max}}^\text{{bispec}}={kmax}$')
+        elif mask_part.startswith('kpgm'):
+            kmax = float(mask_part.split('kpgm')[1])
+            labels.append(rf'$k_\text{{max}}^\text{{pgm}}={kmax}$')
+        elif mask_part.startswith('kp'):
+            kmax = float(mask_part.split('kp')[1])
+            labels.append(rf'$k_\text{{max}}^\text{{pk}}={kmax}$')
+
+    return ', '.join(labels)
 
 
 def get_stat_label(statistics):
