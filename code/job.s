@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --qos=regular
-#SBATCH --job-name=compute_ess_noiseless_pk_bispec
+#SBATCH --job-name=matched_mocks_0254_gpu
 #SBATCH --time=4:00:00
 #SBATCH --nodes=1              # nodes per instance
-##SBATCH --gres=gpu:1 		   #gpu only needed for datagen!
+#SBATCH --gres=gpu:1 		   #gpu only needed for datagen!
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=24             # tasks per instance
 ##SBATCH --ntasks=4             # tasks per instance
@@ -24,6 +24,8 @@ echo "Instance index is ${SLURM_ARRAY_TASK_ID}."
 #source ~/anaconda3/etc/profile.d/conda.sh
 source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile.d/conda.sh
 conda activate benv
+
+python make_quijote_matched_mocks.py --idxs_LH 0254
 
 #python compute_run_ess.py --noise-modes noiseless --stat-labels pk_bispec
 

@@ -542,8 +542,8 @@ def main():
     # For best: after sweep finishes, switch run_mode to best and same tag_sweep to pull best hparams / artifact.
     # Note: run_mode is only for training; testing is always 'load', and if tag_sweep is passed will use best
     
-    mode = "test"
-    #mode = "train"
+    #mode = "test"
+    mode = "train"
     #run_mode = "single"
     #tag_sweep = None
     #run_mode = "sweep"
@@ -552,9 +552,9 @@ def main():
 
     stat_arr = [
         #["pk"],
-        ["pk", "pgm"],
+        #["pk", "pgm"],
         #["pk", "bispec"],
-        #["pk", "bispec", "pgm"],
+        ["pk", "bispec", "pgm"],
     ]
     # stat_arr = [
     #     ["pk", "bispec"],
@@ -562,9 +562,11 @@ def main():
     # ]
     #tag_mask_bispec_arr = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
     #tags_mask_arr = [["", tag_mask_bispec] for tag_mask_bispec in tag_mask_bispec_arr]
-    tag_mask_pgm_arr = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
-    tags_mask_arr = [["", tag_mask_pgm] for tag_mask_pgm in tag_mask_pgm_arr]
-    #tag_mask_bispec_arr = ["_kb0.25"]
+    #tag_mask_pgm_arr = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
+    #tags_mask_arr = [["", tag_mask_pgm] for tag_mask_pgm in tag_mask_pgm_arr]
+    tag_mask_bispec_arr = ["_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
+    tag_mask_pgm_arr = ["_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
+    tags_mask_arr = [["", tag_mask_bispec, tag_mask_pgm] for tag_mask_bispec in tag_mask_bispec_arr for tag_mask_pgm in tag_mask_pgm_arr]
     #tags_mask_arr = [
         #["", "_kb0.1"],    
         #["", "_kpgm0.35"],    

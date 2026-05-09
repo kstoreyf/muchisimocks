@@ -11,11 +11,11 @@ bx_arr=(32)
 #bx_arr=(1 2 4)
 #bx_arr=(8 16 32)
 #tag_stats_arr=("_pk") 
-tag_stats_arr=("_pk_bispec")
+#tag_stats_arr=("_pk_bispec")
 #tag_stats_arr=("_pk_pgm") 
 #tag_stats_arr=("_pk" "_pk_pgm") 
 #tag_stats_arr=("_pk_pgm" "_pk_bispec") 
-#tag_stats_arr=("_pk_bispec_pgm")
+tag_stats_arr=("_pk_bispec_pgm")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
 #tag_stats_arr=("pk" "_pk_pgm" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
@@ -23,7 +23,16 @@ tag_stats_arr=("_pk_bispec")
 #tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "_kb0.4")
 #tag_masks_arr=("_kb0.25_kpgm0.35")
 #tag_masks_arr=("_kb0.1")
-tag_masks_arr=("")
+#tag_masks_arr=("")
+# _pk_bispec_pgm: same grid as generate_config_inference.py main() (tags_mask = ["", kb, kpgm] → tag_masks = kb+kpgm).
+tag_mask_bispec_arr=("_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
+tag_mask_pgm_arr=("_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
+tag_masks_arr=()
+for kb in "${tag_mask_bispec_arr[@]}"; do
+    for kpgm in "${tag_mask_pgm_arr[@]}"; do
+        tag_masks_arr+=("${kb}${kpgm}")
+    done
+done
 #tag_stats_arr=("_pk_pgm" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk_pgm")
 
