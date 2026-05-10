@@ -35,9 +35,9 @@ bx_arr=(32)
 #bx_arr=(1 2 4 8 16 32)
 
 #tag_stats_arr=("_pk")
-tag_stats_arr=("_pk_pgm")
+#tag_stats_arr=("_pk_pgm")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
-#tag_stats_arr=("_pk_bispec_pgm")
+tag_stats_arr=("_pk_bispec_pgm")
 #tag_stats_arr=("_pk_bispec")
 #tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm")
@@ -46,11 +46,19 @@ tag_stats_arr=("_pk_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
 #tag_masks_arr=("_kb0.25_kpgm0.3")
 #tag_masks_arr=("_kpgm0.3")
-tag_masks_arr=("_kpgm0.1" "_kpgm0.15")
+#tag_masks_arr=("_kpgm0.1" "_kpgm0.15")
 #tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.3" "_kb0.35")
 #tag_masks_arr=("_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_masks_arr=("" "_kb0.1")
+tag_mask_bispec_arr=("_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
+tag_mask_pgm_arr=("_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
+tag_masks_arr=()
+for kb in "${tag_mask_bispec_arr[@]}"; do
+    for kpgm in "${tag_mask_pgm_arr[@]}"; do
+        tag_masks_arr+=("${kb}${kpgm}")
+    done
+done
 
 # Train cosmo LH tag (must match generated configs)
 tag_params_train="_p5_n10000"

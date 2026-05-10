@@ -88,8 +88,8 @@ PARAM_SETS_TEST = {
         evaluate_mean=False,
         data_mode_test="shame",
         #tag_mock="_nbar0.00011",
-        #tag_mock="_nbar0.00022",
-        tag_mock="_nbar0.00054",
+        tag_mock="_nbar0.00022",
+        #tag_mock="_nbar0.00054",
         idxs_obs=None,
     ),
 }
@@ -542,8 +542,8 @@ def main():
     # For best: after sweep finishes, switch run_mode to best and same tag_sweep to pull best hparams / artifact.
     # Note: run_mode is only for training; testing is always 'load', and if tag_sweep is passed will use best
     
-    #mode = "test"
-    mode = "train"
+    mode = "test"
+    #mode = "train"
     #run_mode = "single"
     #tag_sweep = None
     #run_mode = "sweep"

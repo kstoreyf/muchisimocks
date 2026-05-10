@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --qos=regular
-#SBATCH --job-name=matched_mocks_1642
+#SBATCH --job-name=matched_mocks_0663_damping
 ##SBATCH --job-name=generate_emupks_p5_n10000_biaszen_p4_n1000
 ##SBATCH --job-name=run_inf_train_muchisimocks_pk_bispec_p5_n10000_biaszen_p4_n100000_ntrain10000_sweep-rand10
 #SBATCH --time=1:00:00 # max 24h
@@ -28,7 +28,8 @@ source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile
 conda activate benv
 
 # 0037 0574 0822 1082 1510 0254 0663 0977 1317 1642
-python make_quijote_matched_mocks.py --idxs_LH 1642
+python make_quijote_matched_mocks.py --idxs_LH 0663 --include_damping
+
 
 # old way was extremely picky with the backslashes so doing this! claude's idea
 # args=(
