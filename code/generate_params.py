@@ -9,6 +9,7 @@ import time
 from scipy.stats import qmc
 import gethypercube
 
+import data_loader
 import utils_model
 import utils_inference
 
@@ -95,6 +96,12 @@ def get_param_names_ordered(bounds_type: str, anoise_option: str | None = None) 
     raise ValueError('bounds_type must be "cosmo", "bias", "Anoise", or "biasnoise"')
 
 
+def get_shame_bias_fiducial(tag_mock: str = "_nbar0.00022") -> dict:
+    """Return the four SHAMe bias parameters (truth) via data_loader.load_params_ood."""
+    param_dict = data_loader.load_params_ood("shame", tag_mock)
+    return {pn: param_dict[pn] for pn in utils_model.biasparam_names_ordered}
+
+
 # Named parameter sets for reproducible Latin-hypercube runs.
 PARAM_SETS_LH = {
     # Main cosmology LH
@@ -161,6 +168,16 @@ PARAM_SETS_LH = {
         fiducial_dict=None,
         seed=54,
     ),
+    # SHAMe truth bias (fixed) + LH over 5 multiplicative Anoise parameters
+    "bias_shame_noise_p5_n1000": dict(
+        bounds_type="Anoise",
+        anoise_option="Anmult",
+        n_params_vary=5,
+        n_samples=1000,
+        tag_bounds="_bias_shame_noise",
+        fiducial_dict=get_shame_bias_fiducial("_nbar0.00022"),
+        seed=55,
+    ),
 }
 
 # Named parameter sets for nested LH bias runs.
@@ -217,7 +234,10 @@ PARAM_SETS_FISHER = {
 
 def main():
     # Select which LH parameter set to generate.
-    param_set_name = "biasnoisecoverage_p9_n1000"
+
+    # Example for regular LH
+    #param_set_name = "biasnoisecoverage_p9_n1000"
+    param_set_name = "bias_shame_noise_p5_n1000"
     param_set_cfg = PARAM_SETS_LH[param_set_name]
     generate_params_LH(**param_set_cfg)
 
@@ -274,6 +294,12 @@ def generate_params_LH(
         utils_inference.generate_randints(n_samples, fn_rands)
         
     param_names_fixed = [pn for pn in param_names_ordered if pn not in param_names_vary]
+    # e.g. SHAMe bias fixed alongside Anoise LH (bounds_type="Anoise")
+    if fiducial_dict:
+        param_names_fixed.extend(
+            pn for pn in fiducial_dict
+            if pn not in param_names_vary and pn not in param_names_fixed
+        )
     if len(param_names_fixed) > 0:
         save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
     

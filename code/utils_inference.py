@@ -75,17 +75,34 @@ def forward_reparameterized_value(reparam_column_name, param_names, theta_obs_tr
     return float(theta[io] * (theta[i8] ** power))
 
 
-def get_posterior_maxes(samples_equal, param_names):
-    import getdist
-    samps = getdist.MCSamples(names=param_names)
-    samps.setSamples(samples_equal)
+def get_posterior_maxes(samples_equal, param_names, n_grid=1000):
+    """
+    Marginal 1D posterior mode per column: argmax of a Gaussian KDE on a uniform grid.
+
+    Same intent as the previous getdist-based implementation, without requiring getdist.
+    """
+    from scipy.stats import gaussian_kde
+
+    samples_equal = np.asarray(samples_equal, dtype=float)
+    if samples_equal.ndim != 2:
+        raise ValueError(f"Expected 2D samples, got shape {samples_equal.shape}")
+    npar = samples_equal.shape[1]
+    if len(param_names) != npar:
+        raise ValueError(
+            f"param_names length {len(param_names)} != sample columns {npar}"
+        )
+
     maxes = []
-    for i, pn in enumerate(param_names):
-        xvals = np.linspace(min(samples_equal[:, i]), max(samples_equal[:, i]), 1000)
-        dens = samps.get1DDensity(pn)
-        probs = dens(xvals)
-        posterior_max = xvals[np.argmax(probs)]
-        maxes.append(posterior_max)
+    for i in range(npar):
+        col = samples_equal[:, i]
+        lo, hi = float(np.min(col)), float(np.max(col))
+        if hi <= lo or not np.all(np.isfinite(col)):
+            maxes.append(lo)
+            continue
+        xvals = np.linspace(lo, hi, n_grid)
+        kde = gaussian_kde(col)
+        probs = kde(xvals)
+        maxes.append(float(xvals[np.argmax(probs)]))
     return maxes
 
 
