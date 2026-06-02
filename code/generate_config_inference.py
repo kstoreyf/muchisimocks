@@ -582,7 +582,7 @@ def generate_runlike_config(dir_config=str(DEFAULT_CONFIGS_RUNLIKE_DIR), overwri
 
 
 def main():
-    overwrite = False
+    overwrite = True
     # Cosmo LH tag (see ``generate_params`` / data dirs); pair with noise_mode for bias+noise tags.
     tag_params_train = "_p5_n10000"
     #noise_mode = "noiseless"  # or "noisy" or "noisym2"; see NOISE_MODE_TRAIN_BIAS
@@ -597,7 +597,7 @@ def main():
     sweep_name_override = (
         # "_muchisimocks_pk_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
         # "_rp_bx32_ntrain10000_sweep-rand30"
-        "_muchisimocks_pk_pgm_p5_n10000_biasnoisem2nest_p7_n320000_noise_unit_p5_n10000" \
+        "_muchisimocks_pk_pgm_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
         "_rp_bx32_ntrain10000_sweep-rand30"
     )
     # sweep_name_override = None
@@ -624,6 +624,7 @@ def main():
     #     ["pk", "bispec", "pgm"],
     # ]
     tags_mask_arr = [["", "_kpgm0.25"]]
+    #tags_mask_arr = [["", ""]]
     #tag_mask_bispec_arr = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
     #tags_mask_arr = [["", tag_mask_bispec] for tag_mask_bispec in tag_mask_bispec_arr]
     #tag_mask_pgm_arr = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
