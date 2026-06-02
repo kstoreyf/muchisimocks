@@ -44,6 +44,8 @@ cosmo_param_names_ordered = ['omega_cold', 'sigma8_cold', 'hubble', 'omega_baryo
 biasparam_names_ordered = ['b1', 'b2', 'bs2', 'bl']
 param_names_all_ordered = cosmo_param_names_ordered + biasparam_names_ordered
 noiseparam_names_ordered = ['An_homog', 'An_b1', 'An_b2', 'An_bs2', 'An_bl']
+# Second-order multiplicative noise model: linear homog term + two squared-noise terms
+noiseparam_names_ordered_m2p3 = ['An_homog', 'An2_homog', 'An2_bl']
 
 n_factor_arr = [1, 2, 4, 8, 16, 32]
 nest_level_to_n_factor = {i: f for i, f in enumerate(n_factor_arr)}
@@ -144,6 +146,19 @@ def get_tracer_field(bias_fields_eul, bias_vector, n_grid_norm, noise_field=None
         if noise_model == 'multiplicative':
             assert len(A_noise) == len(bias_fields_eul), "A_noise must have same length as bias fields (5)"
             tracer_field_noise = np.sum([bias_fields_eul[ii] * A_noise[ii] * noise_field for ii in range(len(bias_fields_eul))], axis=0)
+            tracer_field_noise /= n_grid_norm**3
+        elif noise_model == 'multiplicative_m2p3':
+            # A_noise ordered as noiseparam_names_ordered_m2p3 = ['An_homog', 'An2_homog', 'An2_bl']
+            # An_homog: linear noise on homog field (index 0)
+            # An2_homog: squared noise on homog field (index 0)
+            # An2_bl: squared noise on bl field (index 4)
+            assert len(A_noise) == 3, "A_noise must have length 3 for multiplicative_m2p3 (An_homog, An2_homog, An2_bl)"
+            An_homog, An2_homog, An2_bl = A_noise
+            tracer_field_noise = (
+                bias_fields_eul[0] * An_homog * noise_field
+                + bias_fields_eul[0] * An2_homog * noise_field**2
+                + bias_fields_eul[4] * An2_bl * noise_field**2
+            )
             tracer_field_noise /= n_grid_norm**3
         elif noise_model == 'additive':
             assert isinstance(A_noise, (float, int)), "A_noise must be a single number for additive noise"

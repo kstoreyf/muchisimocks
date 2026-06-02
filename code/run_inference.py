@@ -142,14 +142,10 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
     # Noise parameters are stored inside tag_biasparams now.
     dict_bounds = {}
     for pn in param_names:
-        if pn in genp.BOUNDS["cosmo"]:
-            dict_bounds[pn] = genp.BOUNDS["cosmo"][pn]
-        elif pn in genp.BOUNDS["bias"]:
-            dict_bounds[pn] = genp.BOUNDS["bias"][pn]
-        elif pn in genp.BOUNDS["Anoisegaussian"]:
-            dict_bounds[pn] = genp.BOUNDS["Anoisegaussian"][pn]
-        elif pn in genp.BOUNDS["Anoisemult"]:
-            dict_bounds[pn] = genp.BOUNDS["Anoisemult"][pn]
+        for bounds_set in genp.BOUNDS.values():
+            if pn in bounds_set:
+                dict_bounds[pn] = bounds_set[pn]
+                break
         else:
             raise KeyError(f"Missing bounds for parameter '{pn}'. Update generate_params.BOUNDS.")
     print('theta shape:', theta.shape)

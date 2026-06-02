@@ -84,8 +84,12 @@ set_train_tags_from_noise_mode() {
             tag_biasparams="_biasnoisenest_p9_n320000"
             tag_noise="_noise_unit${tag_params}"
             ;;
+        noisym2)
+            tag_biasparams="_biasnoisem2nest_p7_n320000"
+            tag_noise="_noise_unit${tag_params}"
+            ;;
         *)
-            echo "ERROR: unknown noise_mode=${noise_mode}; expected noiseless or noisy" >&2
+            echo "ERROR: unknown noise_mode=${noise_mode}; expected noiseless, noisy, or noisym2" >&2
             return 1
             ;;
     esac
@@ -113,8 +117,11 @@ set_test_tags_from_preset() {
             if [[ "${noise_mode}" == "noiseless" ]]; then
                 tag_biasparams_test="_biascoverage_p4_n1000"
                 tag_noise_test=""
-            else
+            elif [[ "${noise_mode}" == "noisy" ]]; then
                 tag_biasparams_test="_biasnoisecoverage_p9_n1000"
+                tag_noise_test="_noise_unit${tag_params_test}"
+            else
+                tag_biasparams_test="_biasnoisem2coverage_p7_n1000"
                 tag_noise_test="_noise_unit${tag_params_test}"
             fi
             tag_data_test="_muchisimocks${tag_stats}${tag_masks}${tag_params_test}${tag_biasparams_test}${tag_noise_test}"
@@ -123,7 +130,11 @@ set_test_tags_from_preset() {
             # evaluate_mean=True -> tag_mean=_mean on filename only
             tag_params_test="_shame_p0_n1000"
             tag_mean="_mean"
-            tag_biasparams_test="_biasshame_p0_n1"
+            if [[ "${noise_mode}" == "noisym2" ]]; then
+                tag_biasparams_test="_bias_shame_noisem2_p3_n1000"
+            else
+                tag_biasparams_test="_biasshame_p0_n1"
+            fi
             if [[ "${noise_mode}" == "noiseless" ]]; then
                 tag_noise_test=""
             else
@@ -133,7 +144,11 @@ set_test_tags_from_preset() {
             ;;
         fixed_cosmo_shame_sample)
             tag_params_test="_shame_p0_n1000"
-            tag_biasparams_test="_biasshame_p0_n1"
+            if [[ "${noise_mode}" == "noisym2" ]]; then
+                tag_biasparams_test="_bias_shame_noisem2_p3_n1000"
+            else
+                tag_biasparams_test="_biasshame_p0_n1"
+            fi
             if [[ "${noise_mode}" == "noiseless" ]]; then
                 tag_noise_test=""
             else

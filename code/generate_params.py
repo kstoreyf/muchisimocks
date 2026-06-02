@@ -3,7 +3,6 @@ import numpy as np
 import os
 import pandas as pd
 from pathlib import Path
-import re
 import time
 
 from scipy.stats import qmc
@@ -20,6 +19,7 @@ PARAM_NAMES_ORDERED = {
     # Noise amplitude parameter sets (two “options”, treated like distinct parameter sets)
     "Anoisegaussian": ["An_gaussian"],
     "Anoisemult": utils_model.noiseparam_names_ordered,
+    "Anoisemultm2p3": utils_model.noiseparam_names_ordered_m2p3,
 }
 
 BOUNDS = {
@@ -51,6 +51,11 @@ BOUNDS = {
         'An_bs2'  :  [-5.0, 5.0],
         'An_bl'   :  [-10.0, 10.0],
     },
+    "Anoisemultm2p3": {
+        'An_homog'  :  [-3.0, 3.0],
+        'An2_homog' :  [-1.0, 1.0],
+        'An2_bl'    :  [-20.0, 20.0],
+    },
 }
 
 
@@ -61,9 +66,13 @@ def get_param_set_key(bounds_type: str, anoise_option: str | None = None) -> str
     if bounds_type == "Anoise":
         if anoise_option is None:
             raise ValueError('anoise_option must be provided for bounds_type="Anoise"')
-        if anoise_option not in ("An", "Anmult"):
-            raise ValueError(f'Unknown anoise_option "{anoise_option}" (expected "An" or "Anmult")')
-        return "Anoisegaussian" if anoise_option == "An" else "Anoisemult"
+        if anoise_option not in ("An", "Anmult", "Anmultm2p3"):
+            raise ValueError(f'Unknown anoise_option "{anoise_option}" (expected "An", "Anmult", or "Anmultm2p3")')
+        return {
+            "An": "Anoisegaussian",
+            "Anmult": "Anoisemult",
+            "Anmultm2p3": "Anoisemultm2p3",
+        }[anoise_option]
     if bounds_type == "biasnoise":
         if anoise_option is None:
             raise ValueError('anoise_option must be provided for bounds_type="biasnoise"')
@@ -168,6 +177,16 @@ PARAM_SETS_LH = {
         fiducial_dict=None,
         seed=54,
     ),
+    # Bias + second-order noise (m2p3) coverage test set: 4 bias + 3 noise = 7 params
+    "biasnoisem2coverage_p7_n1000": dict(
+        bounds_type="biasnoise",
+        anoise_option="Anmultm2p3",
+        n_params_vary=7,
+        n_samples=1000,
+        tag_bounds="_biasnoisem2coverage",
+        fiducial_dict=None,
+        seed=57,
+    ),
     # SHAMe truth bias (fixed) + LH over 5 multiplicative Anoise parameters
     "bias_shame_noise_p5_n1000": dict(
         bounds_type="Anoise",
@@ -177,6 +196,17 @@ PARAM_SETS_LH = {
         tag_bounds="_bias_shame_noise",
         fiducial_dict=get_shame_bias_fiducial("_nbar0.00022"),
         seed=55,
+    ),
+    # SHAMe truth bias (fixed) + LH over 3 second-order multiplicative Anoise params
+    # (An_homog, An2_homog, An2_bl)
+    "bias_shame_noisem2_p3_n1000": dict(
+        bounds_type="Anoise",
+        anoise_option="Anmultm2p3",
+        n_params_vary=3,
+        n_samples=1000,
+        tag_bounds="_bias_shame_noisem2",
+        fiducial_dict=get_shame_bias_fiducial("_nbar0.00022"),
+        seed=56,
     ),
 }
 
@@ -188,7 +218,7 @@ PARAM_SETS_NESTED = {
         n_factors=utils_model.n_factor_arr,  # [1,2,4,8,16,32]
         n_params_vary=4,
         tag_bounds="_biasnest",
-        fiducial_dict={"b1": 1.0, "b2": 0.0, "bs2": 0.0, "bl": 0.0},
+        fiducial_dict=None,
         seed=42,
     ),
     # Bias+noise nested LH (bias + Anmult), 9 total parameters
@@ -199,11 +229,19 @@ PARAM_SETS_NESTED = {
         n_factors=utils_model.n_factor_arr,  # [1,2,4,8,16,32]
         n_params_vary=9,
         tag_bounds="_biasnoisenest",
-        fiducial_dict={
-            "b1": 1.0, "b2": 0.0, "bs2": 0.0, "bl": 0.0,
-            "An_homog": 1.0, "An_b1": 0.0, "An_b2": 0.0, "An_bs2": 0.0, "An_bl": 0.0,
-        },
+        fiducial_dict=None,
         seed=64,
+    ),
+    # Bias + m2p3 noise nested LH: 4 bias + 3 Anoise = 7 parameters
+    "biasnoisem2nest_p7_n320000": dict(
+        bounds_type="biasnoise",
+        anoise_option="Anmultm2p3",
+        n_cosmo=10_000,
+        n_factors=utils_model.n_factor_arr,  # [1,2,4,8,16,32]
+        n_params_vary=7,
+        tag_bounds="_biasnoisem2nest",
+        fiducial_dict=None,
+        seed=65,
     ),
 }
 
@@ -237,9 +275,11 @@ def main():
 
     # Example for regular LH
     #param_set_name = "biasnoisecoverage_p9_n1000"
-    param_set_name = "bias_shame_noise_p5_n1000"
-    param_set_cfg = PARAM_SETS_LH[param_set_name]
-    generate_params_LH(**param_set_cfg)
+    #param_set_name = "bias_shame_noise_p5_n1000"
+    #param_set_name = "bias_shame_noisem2_p3_n1000"
+    # param_set_name = "biasnoisem2coverage_p7_n1000"
+    # param_set_cfg = PARAM_SETS_LH[param_set_name]
+    # generate_params_LH(**param_set_cfg)
 
     # Example for nested LH:
     # nested_name = "biasnest_p4_n320000"
@@ -252,9 +292,14 @@ def main():
     # generate_params_fisher(**fisher_cfg)
 
     # Bias+noise nested LH (bias + Anmult), 9 total parameters
-    # biasnoisenest_name = "biasnoisenest_p9_320000"
+    # biasnoisenest_name = "biasnoisenest_p9_n320000"
     # biasnoisenest_cfg = PARAM_SETS_NESTED[biasnoisenest_name]
     # generate_params_nested_LH(**biasnoisenest_cfg)
+
+    # Bias + m2p3 noise nested LH, 7 total parameters
+    biasnoisenestm2_name = "biasnoisem2nest_p7_n320000"
+    biasnoisenestm2_cfg = PARAM_SETS_NESTED[biasnoisenestm2_name]
+    generate_params_nested_LH(**biasnoisenestm2_cfg)
 
 
 def generate_params_LH(
@@ -310,7 +355,7 @@ def generate_params_nested_LH(
     n_factors,
     n_params_vary: int,
     tag_bounds: str,
-    fiducial_dict: dict,
+    fiducial_dict: dict | None,
     seed: int,
     anoise_option: str | None = None,
     overwrite: bool = False,
@@ -344,6 +389,11 @@ def generate_params_nested_LH(
         
     param_names_fixed = [pn for pn in param_names_ordered if pn not in param_names_vary]
     if len(param_names_fixed) > 0:
+        if fiducial_dict is None:
+            raise ValueError(
+                "fiducial_dict must be provided when there are fixed parameters to write "
+                f"(fixed={param_names_fixed})"
+            )
         save_fixed_params(param_names_fixed, fn_params_fixed, fiducial_dict)
         
 

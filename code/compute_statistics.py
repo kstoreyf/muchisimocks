@@ -399,13 +399,19 @@ def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, 
         if 'An_gaussian' in A_noise_dict:
             A_noise = A_noise_dict['An_gaussian']
             noise_model = 'additive'
+        elif all(npm in A_noise_dict for npm in utils_model.noiseparam_names_ordered_m2p3) \
+                and not any(npm in A_noise_dict for npm in ('An_b1', 'An_b2', 'An_bs2', 'An_bl')):
+            # Second-order multiplicative noise: An_homog/An2_homog/An2_bl
+            A_noise = [A_noise_dict[npm] for npm in utils_model.noiseparam_names_ordered_m2p3]
+            noise_model = 'multiplicative_m2p3'
         else:
             # Multiplicative noise: An_homog/An_b1/...
             missing = [npm for npm in utils_model.noiseparam_names_ordered if npm not in A_noise_dict]
             if missing:
                 raise KeyError(
                     "Missing multiplicative noise parameters in tag_biasparams: "
-                    f"{missing}. Expected one of 'An_gaussian' or {utils_model.noiseparam_names_ordered}."
+                    f"{missing}. Expected one of 'An_gaussian', {utils_model.noiseparam_names_ordered}, "
+                    f"or {utils_model.noiseparam_names_ordered_m2p3}."
                 )
             A_noise = [A_noise_dict[npm] for npm in utils_model.noiseparam_names_ordered]
             noise_model = 'multiplicative'
