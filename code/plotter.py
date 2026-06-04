@@ -89,6 +89,30 @@ def plot_hists_mean(theta_pred_arr, theta_true_arr, param_labels, label_arr=None
             
 
 
+def _maybe_append_sigma8_cold_x_b1_for_plot(
+    param_names, param_names_plot, theta_pred_arr, theta_true_arr, covs_pred_arr=None
+):
+    """Append σ₈×b₁ column when requested in ``param_names_plot``."""
+    if param_names_plot is None or "sigma8_cold_x_b1" not in param_names_plot:
+        return param_names, theta_pred_arr, theta_true_arr, covs_pred_arr
+    names_before = list(param_names)
+    if "sigma8_cold_x_b1" in names_before:
+        n_expected = len(names_before)
+        if (
+            np.asarray(theta_pred_arr).shape[-1] == n_expected
+            and np.asarray(theta_true_arr).shape[-1] == n_expected
+        ):
+            return param_names, theta_pred_arr, theta_true_arr, covs_pred_arr
+
+    theta_pred_arr, param_names, covs_pred_arr = utils_plot.append_sigma8_cold_x_b1(
+        theta_pred_arr, names_before, covs_pred_arr
+    )
+    theta_true_arr, _, _ = utils_plot.append_sigma8_cold_x_b1(
+        theta_true_arr, names_before, None
+    )
+    return param_names, theta_pred_arr, theta_true_arr, covs_pred_arr
+
+
 def plot_dists_mean_subplots(
     theta_pred_arr, theta_true_arr, param_names, param_names_plot=None, param_label_dict=None,
     n_rows=None, n_cols=None, label_arr=None,
@@ -131,6 +155,10 @@ def plot_dists_mean_subplots(
                 theta_true_arr, names_r
             )
             param_names = list(names_out)
+
+    param_names, theta_pred_arr, theta_true_arr, _ = _maybe_append_sigma8_cold_x_b1_for_plot(
+        param_names, param_names_plot, theta_pred_arr, theta_true_arr
+    )
 
     if use_abs_diff:
         diffs_arr = theta_pred_arr - theta_true_arr
@@ -284,6 +312,12 @@ def plot_comp_mean_subplots(
                 theta_pred_arr = theta_pred_arr[0]
                 theta_true_arr = theta_true_arr[0]
                 covs_pred_arr = covs_pred_arr[0]
+
+    param_names, theta_pred_arr, theta_true_arr, covs_pred_arr = (
+        _maybe_append_sigma8_cold_x_b1_for_plot(
+            param_names, param_names_plot, theta_pred_arr, theta_true_arr, covs_pred_arr
+        )
+    )
 
     if theta_pred_arr.ndim == 2:
         theta_pred_arr = np.array([theta_pred_arr])
@@ -470,6 +504,12 @@ def plot_comp_mean_subplots_grid(
                 covs_pred_arr[r] = covs
             param_names = names_out
 
+    param_names, theta_pred_arr, theta_true_arr, covs_pred_arr = (
+        _maybe_append_sigma8_cold_x_b1_for_plot(
+            param_names, param_names_plot, theta_pred_arr, theta_true_arr, covs_pred_arr
+        )
+    )
+
     idxs_plot = [param_names.index(pn) for pn in param_names_plot]
     param_labels = [param_label_dict[pn] for pn in param_names_plot]
 
@@ -622,16 +662,102 @@ def plot_hists_var(theta_true_arr, theta_pred_arr, var_pred_arr, param_labels,
             fig.legend(fontsize=12, bbox_to_anchor=(1.7, 0.9))
 
 
+def plot_covs_mean_subplots(
+    theta_pred_arr,
+    theta_true_arr,
+    covs_pred_arr,
+    param_names,
+    param_names_plot=None,
+    param_label_dict=None,
+    label_arr=None,
+    color_arr=None,
+    nbins=20,
+    alpha=0.5,
+    histtype="step",
+    lw=2,
+    n_rows=1,
+    n_cols=None,
+    plot_cdf=False,
+    unreparameterize=False,
+    title=None,
+):
+    """
+    Error-calibration plots: histograms of (pred − true) / σ for selected parameters.
+
+    Same argument order and ``unreparameterize`` behavior as ``plot_dists_mean_subplots``.
+    """
+    return plot_dists_cov_subplots(
+        theta_true_arr,
+        theta_pred_arr,
+        covs_pred_arr,
+        param_names,
+        param_names_plot=param_names_plot,
+        param_label_dict=param_label_dict,
+        label_arr=label_arr,
+        color_arr=color_arr,
+        nbins=nbins,
+        alpha=alpha,
+        histtype=histtype,
+        lw=lw,
+        n_rows=n_rows,
+        n_cols=n_cols,
+        plot_cdf=plot_cdf,
+        unreparameterize=unreparameterize,
+        title=title,
+    )
+
+
 def plot_dists_cov_subplots(
     theta_true_arr, theta_pred_arr, covs_pred_arr, param_names, param_names_plot=None, param_label_dict=None,
     label_arr=None, color_arr=None, nbins=20, xlim_auto=True,
     alpha=0.5, histtype='bar', lw=2, n_rows=1, n_cols=None, plot_cdf=False,
-    title=None,
+    title=None, unreparameterize=False,
 ):
     """
     Plot histograms or CDFs of sigmas-from-truth for selected parameters in subplots.
     """
     from scipy.stats import norm
+
+    if param_label_dict is None:
+        param_label_dict = utils_plot.param_label_dict
+
+    if unreparameterize:
+        if "sigma8_cold" not in param_names:
+            print(
+                "Warning: unreparameterize=True but 'sigma8_cold' not in param_names. Skipping unreparameterization."
+            )
+        else:
+            names_reparam = list(param_names)
+            theta_pred_arr = np.asarray(theta_pred_arr).copy()
+            theta_true_arr = np.asarray(theta_true_arr).copy()
+            covs_pred_arr = np.asarray(covs_pred_arr).copy()
+            was_2d = theta_pred_arr.ndim == 2
+            if was_2d:
+                theta_pred_arr = np.array([theta_pred_arr])
+                theta_true_arr = np.array([theta_true_arr])
+                covs_pred_arr = np.array([covs_pred_arr])
+            names_out = names_reparam
+            for i in range(len(theta_pred_arr)):
+                tp, tt, covs, names_out = utils_inference.unreparameterize_prediction_block(
+                    theta_pred_arr[i],
+                    theta_true_arr[i],
+                    names_reparam,
+                    covs_pred_arr[i],
+                )
+                theta_pred_arr[i] = tp
+                theta_true_arr[i] = tt
+                covs_pred_arr[i] = covs
+            param_names = names_out
+            if was_2d:
+                theta_pred_arr = theta_pred_arr[0]
+                theta_true_arr = theta_true_arr[0]
+                covs_pred_arr = covs_pred_arr[0]
+
+    param_names, theta_pred_arr, theta_true_arr, covs_pred_arr = (
+        _maybe_append_sigma8_cold_x_b1_for_plot(
+            param_names, param_names_plot, theta_pred_arr, theta_true_arr, covs_pred_arr
+        )
+    )
 
     if theta_true_arr.ndim == 2:
         theta_true_arr = np.array([theta_true_arr])

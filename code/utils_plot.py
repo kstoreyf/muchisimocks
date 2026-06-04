@@ -122,6 +122,70 @@ def get_param_names_key():
     return param_names_key, param_names_key_rp
 
 
+def get_param_names_key_plot():
+    """
+    Parameter names for 1D coverage histograms / comparison plots.
+
+    Includes unreparameterized cosmology and ``b1``, plus the NPE training
+    coordinate ``sigma8_cold_x_b1`` (σ₈×b₁) appended after unreparameterization.
+    """
+    param_names_key, _ = get_param_names_key()
+    return param_names_key + ["sigma8_cold_x_b1"]
+
+
+def append_sigma8_cold_x_b1(theta, param_names, covs=None):
+    """
+    Append ``sigma8_cold_x_b1`` = σ₈×b₁ when both factors are already present.
+
+    Parameters
+    ----------
+    theta : array, shape (..., n_params) or (..., n_samples, n_params)
+    param_names : sequence of str
+    covs : optional array, shape (..., n_samples, n_params, n_params)
+
+    Returns
+    -------
+    theta_out, param_names_out, covs_out
+    """
+    names = [str(n) for n in param_names]
+    if "sigma8_cold_x_b1" in names:
+        covs_out = None if covs is None else np.asarray(covs, dtype=float)
+        return np.asarray(theta, dtype=float), names, covs_out
+    if "sigma8_cold" not in names or "b1" not in names:
+        raise ValueError(
+            "append_sigma8_cold_x_b1 requires sigma8_cold and b1 in param_names"
+        )
+
+    theta = np.asarray(theta, dtype=float)
+    i_s8 = names.index("sigma8_cold")
+    i_b1 = names.index("b1")
+    prod = theta[..., i_s8] * theta[..., i_b1]
+    theta_out = np.concatenate([theta, prod[..., np.newaxis]], axis=-1)
+    names_out = names + ["sigma8_cold_x_b1"]
+
+    if covs is None:
+        return theta_out, names_out, None
+
+    covs = np.asarray(covs, dtype=float)
+    if covs.ndim < 3:
+        raise ValueError("covs must have shape (..., n_samples, n_params, n_params)")
+    n = covs.shape[-1]
+    n_samp = covs.shape[-3]
+    lead_shape = covs.shape[:-3]
+    cov_out = np.zeros((*lead_shape, n_samp, n + 1, n + 1), dtype=float)
+    cov_out[..., :n, :n] = covs
+
+    s8 = theta[..., i_s8]
+    b1 = theta[..., i_b1]
+    var_prod = (
+        b1**2 * covs[..., :, i_s8, i_s8]
+        + s8**2 * covs[..., :, i_b1, i_b1]
+        + 2.0 * s8 * b1 * covs[..., :, i_s8, i_b1]
+    )
+    cov_out[..., :, n, n] = var_prod
+    return theta_out, names_out, cov_out
+
+
 def setup_inference_tags(
     data_mode: str,
     tag_params: str,
