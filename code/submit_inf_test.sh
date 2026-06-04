@@ -17,15 +17,15 @@
 
 # --- test matrix (edit these) ---
 #test_preset_arr=(coverage)
-#test_preset_arr=(ood)
+test_preset_arr=(ood)
 #test_preset_arr=(fixed_cosmo_shame_mean)
-test_preset_arr=(ood fixed_cosmo_shame_mean)
+#test_preset_arr=(ood fixed_cosmo_shame_mean)
 #test_preset_arr=(coverage fixed_cosmo_shame_mean ood)
 #test_preset_arr=(coverage ood)
 #test_preset_arr=(coverage fixed_cosmo_shame_mean fixed_cosmo_shame_sample ood)
 
-#noise_mode_arr=(noisy)
-noise_mode_arr=(noisym2)
+noise_mode_arr=(noisy)
+#noise_mode_arr=(noisym2)
 #noise_mode_arr=(noiseless)
 # noise_mode_arr=(noiseless noisy)
 
@@ -45,10 +45,10 @@ bx_arr=(32)
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_stats_arr=("_pk_pgm" "_pk_bispec")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
-#tag_stats_arr=("_pk" "_pk_pgm" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm" "_pk_bispec_pgm")
-#tag_masks_arr=("" "" "_kpgm0.25" "_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
-tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm" "_pk_bispec_pgm")
-tag_masks_arr=("_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
+tag_stats_arr=("_pk" "_pk_pgm" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm" "_pk_bispec_pgm")
+tag_masks_arr=("" "" "_kpgm0.25" "_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
+#tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm" "_pk_bispec_pgm")
+#tag_masks_arr=("_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 
 # true: pair tag_stats / tag_masks by list index; false: nested loops (full grid).
 zip_stats_masks=true
@@ -179,7 +179,9 @@ set_test_tags_from_preset() {
         ood)
             # PARAM_SETS_TEST["ood"]; generate_test_config_ood — no test noise/bias LH tags
             #local tag_mock="_nbar0.00011"
-            local tag_mock="_nbar0.00022"
+            #local tag_mock="_nbar0.00022"
+            #local tag_mock="_nbar0.00022_phase0"
+            local tag_mock="_nbar0.00022_phasepi"
             #local tag_mock="_nbar0.00054"
             tag_data_test="_shame${tag_stats}${tag_masks}${tag_mock}"
             ;;

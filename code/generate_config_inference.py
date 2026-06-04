@@ -131,7 +131,9 @@ PARAM_SETS_TEST = {
         evaluate_mean=False,
         data_mode_test="shame",
         #tag_mock="_nbar0.00011",
-        tag_mock="_nbar0.00022",
+        #tag_mock="_nbar0.00022",
+        #tag_mock="_nbar0.00022_phase0",
+        tag_mock="_nbar0.00022_phasepi",
         #tag_mock="_nbar0.00054",
         idxs_obs=None,
     ),
@@ -618,8 +620,8 @@ def main():
     # Cosmo LH tag (see ``generate_params`` / data dirs); pair with noise_mode for bias+noise tags.
     tag_params_train = "_p5_n10000"
     #noise_mode = "noiseless"  # or "noisy" or "noisym2"; see NOISE_MODE_TRAIN_BIAS
-    #noise_mode = "noisy"
-    noise_mode = "noisym2"
+    noise_mode = "noisy"
+    #noise_mode = "noisym2"
     train_kw = resolve_train_tag_bundle(tag_params_train, noise_mode)
 
     # Optional: full sweep_name tag (under results_sbi/sbi<name>/). None = derive from train tags.
@@ -650,17 +652,17 @@ def main():
     tag_sweep = "-rand30"
 
     stat_arr = [
-        # ["pk"],
-        # ["pk", "pgm"],
-        #["pk", "pgm"],
+        ["pk"],
+        ["pk", "pgm"],
+        ["pk", "pgm"],
         ["pk", "bispec"],
         ["pk", "bispec", "pgm"],
         ["pk", "bispec", "pgm"],
     ]
     tags_mask_arr = [
-        # [""],
-        # ["", ""],    
-        # ["", "_kpgm0.25"],    
+        [""],
+        ["", ""],    
+        ["", "_kpgm0.25"],    
         ["", "_kb0.25"],
         ["", "_kb0.25", ""],
         ["", "_kb0.25", "_kpgm0.25"],
@@ -708,8 +710,8 @@ def main():
                         )
                     elif mode == "test":
                         #for test_name in PARAM_SETS_TEST:
-                        #for test_name in ["ood"]:
-                        for test_name in ["ood", "coverage", "fixed_cosmo_shame_mean"]:
+                        for test_name in ["ood"]:
+                        #for test_name in ["ood", "coverage", "fixed_cosmo_shame_mean"]:
                         #for test_name in ["coverage", "ood"]:
                         #for test_name in ["coverage", "fixed_cosmo_shame_mean"]:
                             generate_test_config_from_preset(

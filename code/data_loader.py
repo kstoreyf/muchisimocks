@@ -361,6 +361,14 @@ def load_params(tag_params=None, tag_biasparams=None,
     return params_df, param_dict_fixed, biasparams_df, biasparams_dict_fixed, random_ints, random_ints_bias
     
     
+def _tag_mock_shame_for_bias(tag_mock):
+    """Map phase-specific data tags to the base mock tag in bias_dict_shame."""
+    for suffix in ('_phase0', '_phasepi'):
+        if tag_mock.endswith(suffix):
+            return tag_mock[: -len(suffix)]
+    return tag_mock
+
+
 def load_params_ood(data_mode, tag_mock, dir_params=None):
     if data_mode == 'shame':
         # needed this line bc was getting error message
@@ -374,9 +382,13 @@ def load_params_ood(data_mode, tag_mock, dir_params=None):
                 kname = 'sigma8_cold'
             param_dict[kname] = v
 
-        if tag_mock not in utils_model.bias_dict_shame:
-            raise ValueError(f"tag_mock {tag_mock} not recognized for shame OOD data!")
-        param_dict.update(utils_model.bias_dict_shame[tag_mock])
+        tag_mock_bias = _tag_mock_shame_for_bias(tag_mock)
+        if tag_mock_bias not in utils_model.bias_dict_shame:
+            raise ValueError(
+                f"tag_mock {tag_mock!r} not recognized for shame OOD data "
+                f"(bias lookup tag {tag_mock_bias!r})!"
+            )
+        param_dict.update(utils_model.bias_dict_shame[tag_mock_bias])
         return param_dict
     else:
         raise ValueError(f"Data mode {data_mode} not recognized!")
