@@ -6,9 +6,9 @@ from pathlib import Path
 import time
 
 from scipy.stats import qmc
-import gethypercube
 
 import data_loader
+import paths
 import utils_model
 import utils_inference
 
@@ -111,6 +111,35 @@ def get_shame_bias_fiducial(tag_mock: str = "_nbar0.00022") -> dict:
     return {pn: param_dict[pn] for pn in utils_model.biasparam_names_ordered}
 
 
+# Keys in PARAM_SETS_* entries that are registry-only (not passed to generators).
+PARAM_SET_REGISTRY_KEYS = frozenset({"_authored", "source"})
+
+
+def param_set_tag(cfg: dict) -> str:
+    """Tag suffix used in filenames, e.g. ``_bias_shame_noisem2best_p0_n1``."""
+    return f"{cfg['tag_bounds']}_p{cfg['n_params_vary']}_n{cfg['n_samples']}"
+
+
+def param_set_run_kwargs(cfg: dict) -> dict:
+    """Strip registry metadata before calling ``generate_params_LH``."""
+    return {k: v for k, v in cfg.items() if k not in PARAM_SET_REGISTRY_KEYS}
+
+
+def write_authored_params_fixed(
+    tag_params: str,
+    fiducial_dict: dict,
+    param_names: list[str] | None = None,
+    dir_params: Path | str | None = None,
+) -> Path:
+    """Write ``params_fixed{tag_params}.txt`` from a notebook (single-row param set)."""
+    dir_params = Path(dir_params or paths.PROJECT_ROOT / "data" / "params")
+    dir_params.mkdir(parents=True, exist_ok=True)
+    names = list(param_names or fiducial_dict.keys())
+    path = dir_params / f"params_fixed{tag_params}.txt"
+    save_fixed_params(names, str(path), fiducial_dict)
+    return path
+
+
 # Named parameter sets for reproducible Latin-hypercube runs.
 PARAM_SETS_LH = {
     # Main cosmology LH
@@ -208,6 +237,27 @@ PARAM_SETS_LH = {
         fiducial_dict=get_shame_bias_fiducial("_nbar0.00022"),
         seed=56,
     ),
+    # Notebook-authored: params_fixed written by 2026-06-03_shame_noise_params.ipynb (do not generate).
+    "bias_shame_noisem2best_p0_n1": dict(
+        bounds_type="biasnoise",
+        anoise_option="Anmultm2p3",
+        n_params_vary=0,
+        n_samples=1,
+        tag_bounds="_bias_shame_noisem2best",
+        seed=56,
+        _authored=True,
+        source="notebooks/2026-06-03_shame_noise_params.ipynb",
+    ),
+    "bias_shame_noisebest_p0_n1": dict(
+        bounds_type="biasnoise",
+        anoise_option="Anmult",
+        n_params_vary=0,
+        n_samples=1,
+        tag_bounds="_bias_shame_noisebest",
+        seed=55,
+        _authored=True,
+        source="notebooks/2026-06-03_shame_noise_params.ipynb",
+    ),
 }
 
 # Named parameter sets for nested LH bias runs.
@@ -279,7 +329,7 @@ def main():
     #param_set_name = "bias_shame_noisem2_p3_n1000"
     # param_set_name = "biasnoisem2coverage_p7_n1000"
     # param_set_cfg = PARAM_SETS_LH[param_set_name]
-    # generate_params_LH(**param_set_cfg)
+    # generate_params_LH(**param_set_run_kwargs(param_set_cfg))
 
     # Example for nested LH:
     # nested_name = "biasnest_p4_n320000"
@@ -307,12 +357,21 @@ def generate_params_LH(
     n_params_vary: int,
     n_samples: int,
     tag_bounds: str,
-    fiducial_dict: dict,
-    seed: int,
+    fiducial_dict: dict | None = None,
+    seed: int = 0,
     anoise_option: str | None = None,
     overwrite: bool = False,
+    **_registry,
 ):
     """Generate LH (and fixed) param files for a given configuration."""
+    if _registry.pop("_authored", False):
+        raise ValueError(
+            "Notebook-authored param set; write params_fixed via "
+            "write_authored_params_fixed() instead of generate_params_LH."
+        )
+    _registry.pop("source", None)
+    if _registry:
+        raise TypeError(f"Unexpected registry keys: {set(_registry)}")
     bounds_dict = get_bounds(bounds_type, anoise_option=anoise_option)
     param_names_ordered = get_param_names_ordered(bounds_type, anoise_option=anoise_option)
     # deterministic selection for reproducibility
@@ -523,6 +582,8 @@ def generate_nested_LH(param_names_vary, bounds_dict, m_layers, fn_params, seed=
 
     print(f'Generating nested LHD: k={k}, m_layers={m_layers}')
     t0 = time.time()
+    import gethypercube
+
     layers = gethypercube.nested_lhd(k=k, m_layers=m_layers, seed=17,
                                      scramble=True, optimization=None)
     t1 = time.time()

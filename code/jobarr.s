@@ -1,18 +1,6 @@
 #!/bin/bash
 #SBATCH --qos=regular
-##SBATCH --job-name=bispec_coverage_p5_n1000_biasnoisem2coverage_p7_n1000_step100
-#SBATCH --job-name=bispec_p5_n10000_biasnoisem2nest_p7_n320000_step100_round2
-##SBATCH --job-name=bispec_shame_p0_n1000_bias_shame_noisem2_p3_n1000_step100
-##SBATCH --job-name=matched_mocks_damping
-##SBATCH --job-name=pnn_coverage_p5_n1000_step100_round2
-##SBATCH --job-name=bispec_p5_n10000_biasnoisenest_p9_n320000_step100_round4
-##SBATCH --job-name=bispec_p5_n10000_biasnest_p4_n320000_step100_round2
-##SBATCH --job-name=bispec_coverage_p5_n1000_biascoverage_p4_n1000_step100
-##SBATCH --job-name=pgm_coverage_p5_n1000_biasnoisecoverage_p9_n1000_step100
-##SBATCH --job-name=bispec_shame_p0_n1000_biasshame_p0_n1_step100
-##SBATCH --job-name=bispec_shame_p0_n1000_biasshame_p0_n1_step100_round2
-##SBATCH --job-name=pgm_p5_n10000_biasnest_p4_n320000_step100_round2
-##SBATCH --job-name=pgm_coverage_p5_n1000_biascoverage_p4_n1000_step100
+#SBATCH --job-name=bispec_shame_p0_n1000_bias_shame_noisebest_p0_n1_step100
 ##SBATCH --time=0:30:00  
 ##SBATCH --time=8:00:00 # time per task, but doing Nsteps; for 20000 (most), use 8h to be safe. lower, 1h fine
 #SBATCH --time=24:00:00 # bispec takes a long time
@@ -23,8 +11,8 @@
 # too many tasks submitted? with 100 at a time... also 50... careful! try 25
 ##x-y%z; start x, end y INCLUSIVE, z tasks at a time max
 ##(Y-X)*step_size = total you want to run
-#SBATCH --array=0-99%40 # for 10000 training set
-##SBATCH --array=0-9 # for 1000 test sets
+##SBATCH --array=0-99%40 # for 10000 training set
+#SBATCH --array=0-9 # for 1000 test sets
 ##SBATCH --array=0-0
 #SBATCH --mem=3G # 2G for bispectrum, 1G too low; 3G for pnn, 2G too low (??)
 ##SBATCH --mem=35G
@@ -87,13 +75,16 @@ echo "idx_mock_start=${idx_mock_start}, idx_mock_end=${idx_mock_end}"
 #python compute_statistics.py --statistic pk --tag_params _coverage_p5_n1000 --tag_biasparams _biasnoisecoverage_p9_n1000 --tag_noise _noise_unit_coverage_p5_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 #python compute_statistics.py --statistic pgm --tag_params _coverage_p5_n1000 --tag_biasparams _biasnoisecoverage_p9_n1000 --tag_noise _noise_unit_coverage_p5_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 #python compute_statistics.py --statistic bispec --tag_params _coverage_p5_n1000 --tag_biasparams _biasnoisecoverage_p9_n1000 --tag_noise _noise_unit_coverage_p5_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
-
+# fixed cosmo test with fixed bias, best noise
+#python compute_statistics.py --statistic pk --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisebest_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+#python compute_statistics.py --statistic pgm --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisebest_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+python compute_statistics.py --statistic bispec --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisebest_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 
 ### noisy m2p3 noise model
 # train
 #python compute_statistics.py --statistic pk --tag_params _p5_n10000 --tag_biasparams _biasnoisem2nest_p7_n320000 --tag_noise _noise_unit_p5_n10000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end}
 #python compute_statistics.py --statistic pgm --tag_params _p5_n10000 --tag_biasparams _biasnoisem2nest_p7_n320000 --tag_noise _noise_unit_p5_n10000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end}
-python compute_statistics.py --statistic bispec --tag_params _p5_n10000 --tag_biasparams _biasnoisem2nest_p7_n320000 --tag_noise _noise_unit_p5_n10000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end}
+#python compute_statistics.py --statistic bispec --tag_params _p5_n10000 --tag_biasparams _biasnoisem2nest_p7_n320000 --tag_noise _noise_unit_p5_n10000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end}
 # coverage test m2p3
 #python compute_statistics.py --statistic pk --tag_params _coverage_p5_n1000 --tag_biasparams _biasnoisem2coverage_p7_n1000 --tag_noise _noise_unit_coverage_p5_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 #python compute_statistics.py --statistic pgm --tag_params _coverage_p5_n1000 --tag_biasparams _biasnoisem2coverage_p7_n1000 --tag_noise _noise_unit_coverage_p5_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
@@ -106,6 +97,10 @@ python compute_statistics.py --statistic bispec --tag_params _p5_n10000 --tag_bi
 #python compute_statistics.py --statistic pk --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisem2_p3_n1000 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 #python compute_statistics.py --statistic pgm --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisem2_p3_n1000 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 #python compute_statistics.py --statistic bispec --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisem2_p3_n1000 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+# fixed cosmo test with fixed bias, best noise m2p3
+#python compute_statistics.py --statistic pk --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisem2best_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+#python compute_statistics.py --statistic pgm --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisem2best_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+#python compute_statistics.py --statistic bispec --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisem2best_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 
 
 ###########################################################

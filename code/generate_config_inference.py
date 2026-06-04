@@ -32,8 +32,6 @@ DEFAULT_CONFIGS_TEST_DIR = REPO_ROOT / "configs" / "configs_test"
 DEFAULT_CONFIGS_RUNLIKE_DIR = REPO_ROOT / "configs" / "configs_runlike"
 
 NOISE_MODES = ("noiseless", "noisy", "noisym2")
-
-# Nested train bias tags (cosmo LH tag is ``tag_params``).
 # noisym2: second-order multiplicative noise (m2p3), see generate_params biasnoisem2nest_*.
 NOISE_MODE_TRAIN_BIAS = {
     "noiseless": "_biasnest_p4_n320000",
@@ -76,6 +74,32 @@ def build_tag_data(
     if tag_noise is not None:
         tag_paramsall += tag_noise
     return f"_{data_mode}{tag_stats}{tag_masks}{tag_paramsall}"
+
+
+def build_config_tag_test(
+    tag_inf_train: str,
+    tag_data_test: str,
+    data_mode: str,
+    data_mode_test: str,
+    statistics: list[str],
+    tags_mask: list[str],
+    evaluate_mean: bool = False,
+) -> str:
+    """
+    Tag for test config filenames: ``config{tag}.yaml``.
+
+    Train and test usually share ``data_mode``, statistics, and k-bin masks; those
+    appear already in ``tag_inf_train``, so omit the repeated prefix from the
+    ``_TEST`` segment. ``tag_data_test`` in the YAML is unchanged.
+    """
+    tag_mean = "_mean" if evaluate_mean else ""
+    tag_stats = f'_{"_".join(statistics)}'
+    tag_masks = "".join(tags_mask)
+    shared_prefix = f"_{data_mode}{tag_stats}{tag_masks}"
+    if data_mode_test == data_mode and tag_data_test.startswith(shared_prefix):
+        test_part = tag_data_test[len(shared_prefix):]
+        return f"_TRAIN{tag_inf_train}_TEST{test_part}{tag_mean}"
+    return f"_TRAIN{tag_inf_train}_TEST{tag_data_test}{tag_mean}"
 
 
 # Default cosmo tag only; prefer ``resolve_train_tag_bundle(tag_params, noise_mode)``.
@@ -123,14 +147,14 @@ _TEST_SCENARIO_TAGS = {
         "noisym2": ("_biasnoisem2coverage_p7_n1000", "__unit__"),
     },
     "fixed_cosmo_shame_mean": {
-        "noiseless": ("_biasshame_p0_n1", None),
-        "noisy": ("_biasshame_p0_n1", "__unit__"),
-        "noisym2": ("_bias_shame_noisem2_p3_n1000", "__unit__"),
+        "noiseless": ("_bias_shame_p0_n1", None),
+        "noisy": ("_bias_shame_noisebest_p0_n1", "__unit__"),
+        "noisym2": ("_bias_shame_noisem2best_p0_n1", "__unit__"),
     },
     "fixed_cosmo_shame_sample": {
-        "noiseless": ("_biasshame_p0_n1", None),
-        "noisy": ("_biasshame_p0_n1", "__unit__"),
-        "noisym2": ("_bias_shame_noisem2_p3_n1000", "__unit__"),
+        "noiseless": ("_bias_shame_p0_n1", None),
+        "noisy": ("_bias_shame_noisebest_p0_n1", "__unit__"),
+        "noisym2": ("_bias_shame_noisem2best_p0_n1", "__unit__"),
     },
 }
 
@@ -321,11 +345,15 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         tag_inf_train = base_inf_train
         sweep_name = None
 
-    if evaluate_mean:
-        tag_mean = '_mean'
-    else:
-        tag_mean = ''
-    tag_test = f"_TRAIN{tag_inf_train}_TEST{tag_data_test}{tag_mean}"
+    tag_test = build_config_tag_test(
+        tag_inf_train,
+        tag_data_test,
+        data_mode,
+        data_mode_test,
+        statistics,
+        tags_mask,
+        evaluate_mean=evaluate_mean,
+    )
     
     config = {
         "data_mode": data_mode,
@@ -422,11 +450,15 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     ### test tags
     tag_data_test = '_'+data_mode_test + tag_stats + tag_masks_train + tag_mock
     
-    if evaluate_mean:
-        tag_mean = '_mean'
-    else:
-        tag_mean = ''
-    tag_test = f"_TRAIN{tag_inf_train}_TEST{tag_data_test}{tag_mean}"
+    tag_test = build_config_tag_test(
+        tag_inf_train,
+        tag_data_test,
+        data_mode,
+        data_mode_test,
+        statistics,
+        tags_mask,
+        evaluate_mean=evaluate_mean,
+    )
     
     config = {
         "data_mode": data_mode,
@@ -582,12 +614,12 @@ def generate_runlike_config(dir_config=str(DEFAULT_CONFIGS_RUNLIKE_DIR), overwri
 
 
 def main():
-    overwrite = True
+    overwrite = False
     # Cosmo LH tag (see ``generate_params`` / data dirs); pair with noise_mode for bias+noise tags.
     tag_params_train = "_p5_n10000"
     #noise_mode = "noiseless"  # or "noisy" or "noisym2"; see NOISE_MODE_TRAIN_BIAS
-    #noise_mode = "noisy"
-    noise_mode = "noisym2"
+    noise_mode = "noisy"
+    #noise_mode = "noisym2"
     train_kw = resolve_train_tag_bundle(tag_params_train, noise_mode)
 
     # Optional: full sweep_name tag (under results_sbi/sbi<name>/). None = derive from train tags.
@@ -597,16 +629,20 @@ def main():
     sweep_name_override = (
         # "_muchisimocks_pk_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
         # "_rp_bx32_ntrain10000_sweep-rand30"
-        "_muchisimocks_pk_pgm_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
+        # "_muchisimocks_pk_pgm_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
+        # "_rp_bx32_ntrain10000_sweep-rand30"
+        #"_muchisimocks_pk_bispec_kb0.25_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
+        #"_rp_bx32_ntrain10000_sweep-rand30"
+        "_muchisimocks_pk_bispec_pgm_kb0.25_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
         "_rp_bx32_ntrain10000_sweep-rand30"
     )
-    # sweep_name_override = None
+    #sweep_name_override = None
 
     # Training: run_mode 'single' | 'sweep' | 'best'; tag_sweep required for sweep/best (e.g. '-rand10').
     # Note: run_mode is only for training; testing is always 'load', and if tag_sweep is passed will use best
     
-    #mode = "test"
-    mode = "train"
+    mode = "test"
+    #mode = "train"
     #run_mode = "single"
     #tag_sweep = None
     #run_mode = "sweep"
@@ -614,32 +650,32 @@ def main():
     tag_sweep = "-rand30"
 
     stat_arr = [
-        #["pk"],
+        # ["pk"],
+        # ["pk", "pgm"],
         ["pk", "pgm"],
         #["pk", "bispec"],
         #["pk", "bispec", "pgm"],
+        #["pk", "bispec", "pgm"],
     ]
-    # stat_arr = [
-    #     ["pk", "bispec"],
-    #     ["pk", "bispec", "pgm"],
-    # ]
-    tags_mask_arr = [["", "_kpgm0.25"]]
+    #tags_mask_arr = [
+        # [""],
+        # ["", ""],    
+        # ["", "_kpgm0.25"],    
+        # ["", "_kb0.25"],
+        #["", "_kb0.25", ""],
+        #["", "_kb0.25", "_kpgm0.25"],
+    #]
+    #tags_mask_arr = [["", "_kpgm0.25"]]
     #tags_mask_arr = [["", ""]]
+    #tags_mask_arr = [[""]]
     #tag_mask_bispec_arr = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
     #tags_mask_arr = [["", tag_mask_bispec] for tag_mask_bispec in tag_mask_bispec_arr]
-    #tag_mask_pgm_arr = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
-    #tags_mask_arr = [["", tag_mask_pgm] for tag_mask_pgm in tag_mask_pgm_arr]
+    tag_mask_pgm_arr = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
+    tags_mask_arr = [["", tag_mask_pgm] for tag_mask_pgm in tag_mask_pgm_arr]
     #tag_mask_bispec_arr = ["_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
     #tag_mask_pgm_arr = ["_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
     #tags_mask_arr = [["", tag_mask_bispec, tag_mask_pgm] for tag_mask_bispec in tag_mask_bispec_arr for tag_mask_pgm in tag_mask_pgm_arr]
-    #tags_mask_arr = [
-        #["", "_kb0.1"],    
-        #["", "_kpgm0.35"],    
-        #["", ""],    
-        #["", "_kb0.25", "_kpgm0.3"]
-    #]
     
-
     n_train_arr = [10000]
     bx_arr = [32]
     #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
@@ -651,7 +687,12 @@ def main():
     for i,statistics in enumerate(stat_arr):
         for n_train in n_train_arr:
             for bx in bx_arr:
-                for tags_mask in tags_mask_arr:
+                for j,tags_mask in enumerate(tags_mask_arr):
+                    # uncomment if you want to run a single tags_mask aligned with the statistics
+                    # if i!=j:
+                    #     continue
+                    # print(statistics)
+                    # print(tags_mask)
                     #tags_mask = [tag_mask_pgm if s == "pgm" else "" for s in statistics]
                     if mode == "train":
                         generate_train_config(
@@ -667,7 +708,9 @@ def main():
                         )
                     elif mode == "test":
                         #for test_name in PARAM_SETS_TEST:
-                        for test_name in ["ood"]:
+                        #for test_name in ["ood"]:
+                        for test_name in ["fixed_cosmo_shame_mean"]:
+                        #for test_name in ["coverage", "ood"]:
                         #for test_name in ["coverage", "fixed_cosmo_shame_mean"]:
                             generate_test_config_from_preset(
                                 test_name,
@@ -679,7 +722,7 @@ def main():
                                 bx=bx,
                                 tags_mask=tags_mask,
                                 tag_sweep=tag_sweep,
-                                sweep_name_override=sweep_name_override,
+                                sweep_name_override=None,
                             )
     # generate_runlike_config(overwrite=overwrite)
 

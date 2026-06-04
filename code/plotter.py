@@ -903,6 +903,25 @@ def plot_contours(samples_arr, labels, colors, param_names, param_label_dict,
 smooth_dict = {'mn': 1, 'sbi': 2, 'emcee': 2, 'dynesty': 2, 'fisher': 2}
 bins_dict = {'mn': None, 'sbi': 4, 'emcee': 10, 'dynesty': 7, 'fisher': 4}
 
+
+def _adjust_corner_figure_margins(fig, title=None, figsize=(7, 7)):
+    """Keep ChainConsumer layout; only fix clipped suptitle / constraint labels."""
+    if isinstance(figsize, (int, float)):
+        small = float(figsize) <= 5.5
+    else:
+        small = min(figsize) <= 5.5
+    if title is not None:
+        multiline = "\n" in title
+        fig.suptitle(title, fontsize=14 if small else 16, y=0.99)
+        # Small nudge from CC default top=0.9 — enough for suptitle, not half the figure
+        fig.subplots_adjust(top=0.84 if multiline else 0.87)
+    for ax in fig.get_axes():
+        t = ax.get_title()
+        if t:
+            ax.set_title(t, pad=6)
+            ax.title.set_clip_on(False)
+
+
 def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       inf_methods, tags_inf, tags_test=None,
                       colors=None, labels=None,
@@ -1066,12 +1085,15 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     # ChainConsumer only flips 1D histograms when n_params==2; flip=True with n>2 still
     # suppresses x ticks/label on the bottom-right diagonal (see _get_triangle_figure).
     flip_corner = len(param_names_any_available) == 2
+    if isinstance(figsize, (int, float)):
+        small_fig = float(figsize) <= 5.5
+    else:
+        small_fig = min(figsize) <= 5.5
     c.set_plot_config(
         chainconsumer.PlotConfig(
             flip=flip_corner,
             labels=utils_plot.param_label_dict,
-            #contour_label_font_size=12,
-            summary_font_size=0,
+            summary_font_size=8 if small_fig else 10,
             extents=extents,
             legend_kwargs={'bbox_to_anchor': loc_legend, 
                            'fontsize':fontsize_legend}
@@ -1146,8 +1168,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     # Plot - ChainConsumer will automatically show all parameters that appear in any chain
     # and leave subplots blank for parameter combinations where data is missing
     fig = c.plotter.plot(figsize=figsize)
-    if title is not None:
-        fig.suptitle(title, fontsize=16)
+    _adjust_corner_figure_margins(fig, title=title, figsize=figsize)
     
     # Don't return the figure to avoid duplicate display in notebooks
     plt.show()
@@ -1314,13 +1335,15 @@ def plot_contours_inf_reparam(param_names, idx_obs, theta_obs_true,
             plot_cloud=False,
         ))
 
-    # Set up plot configuration
+    if isinstance(figsize, (int, float)):
+        small_fig = float(figsize) <= 5.5
+    else:
+        small_fig = min(figsize) <= 5.5
     c.set_plot_config(
         chainconsumer.PlotConfig(
             flip=True,
             labels=utils_plot.param_label_dict,
-            #contour_label_font_size=12,
-            summary_font_size=0,
+            summary_font_size=8 if small_fig else 10,
             extents=extents,
             legend_kwargs={'bbox_to_anchor': (1.05, 1.0), 
                            'fontsize':18}
@@ -1357,8 +1380,7 @@ def plot_contours_inf_reparam(param_names, idx_obs, theta_obs_true,
     # Plot - ChainConsumer will automatically show all parameters that appear in any chain
     # and leave subplots blank for parameter combinations where data is missing
     fig = c.plotter.plot(figsize=figsize)
-    if title is not None:
-        fig.suptitle(title, fontsize=16)
+    _adjust_corner_figure_margins(fig, title=title, figsize=figsize)
     
     # Don't return the figure to avoid duplicate display in notebooks
     plt.show()

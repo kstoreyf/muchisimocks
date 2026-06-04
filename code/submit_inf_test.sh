@@ -17,14 +17,15 @@
 
 # --- test matrix (edit these) ---
 #test_preset_arr=(coverage)
-test_preset_arr=(ood)
+#test_preset_arr=(ood)
 #test_preset_arr=(fixed_cosmo_shame_mean)
-#test_preset_arr=(fixed_cosmo_shame_mean)
+test_preset_arr=(fixed_cosmo_shame_mean)
 #test_preset_arr=(coverage fixed_cosmo_shame_mean ood)
 #test_preset_arr=(coverage ood)
 #test_preset_arr=(coverage fixed_cosmo_shame_mean fixed_cosmo_shame_sample ood)
 
 noise_mode_arr=(noisy)
+#noise_mode_arr=(noisym2)
 #noise_mode_arr=(noiseless)
 # noise_mode_arr=(noiseless noisy)
 
@@ -37,28 +38,38 @@ bx_arr=(32)
 #tag_stats_arr=("_pk")
 #tag_stats_arr=("_pk_pgm")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
-tag_stats_arr=("_pk_bispec_pgm")
-#tag_stats_arr=("_pk_bispec")
+#tag_stats_arr=("_pk_bispec_pgm")
+#tag_masks_arr=("_kb0.25_kpgm0.25")
+tag_stats_arr=("_pk_bispec")
 #tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_stats_arr=("_pk_pgm" "_pk_bispec")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
-#tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
+#tag_stats_arr=("_pk" "_pk_pgm" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm" "_pk_bispec_pgm")
+#tag_masks_arr=("" "" "_kpgm0.25" "_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
+
+# true: pair tag_stats / tag_masks by list index; false: nested loops (full grid).
+#zip_stats_masks=true
+zip_stats_masks=false
 #tag_masks_arr=("_kb0.25_kpgm0.3")
 #tag_masks_arr=("_kpgm0.3")
 #tag_masks_arr=("_kpgm0.1" "_kpgm0.15")
 #tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.3" "_kb0.35")
-#tag_masks_arr=("_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
+#tag_masks_arr=("_kpgm0.1" "_kpgm0.15" "_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
+tag_masks_arr=("_kb0.1" "_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_masks_arr=("" "_kb0.1")
-tag_mask_bispec_arr=("_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
-tag_mask_pgm_arr=("_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
-tag_masks_arr=()
-for kb in "${tag_mask_bispec_arr[@]}"; do
-    for kpgm in "${tag_mask_pgm_arr[@]}"; do
-        tag_masks_arr+=("${kb}${kpgm}")
-    done
-done
+# tag_mask_bispec_arr=("_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
+# tag_mask_pgm_arr=("_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
+# tag_masks_arr=()
+# for kb in "${tag_mask_bispec_arr[@]}"; do
+#    for kpgm in "${tag_mask_pgm_arr[@]}"; do
+#        tag_masks_arr+=("${kb}${kpgm}")
+#    done
+# done
+#tag_masks_arr=("" "_kpgm0.25")
+#tag_masks_arr=("")
+#tag_masks_arr=("_kb0.25")
 
 # Train cosmo LH tag (must match generated configs)
 tag_params_train="_p5_n10000"
@@ -120,9 +131,12 @@ set_test_tags_from_preset() {
             elif [[ "${noise_mode}" == "noisy" ]]; then
                 tag_biasparams_test="_biasnoisecoverage_p9_n1000"
                 tag_noise_test="_noise_unit${tag_params_test}"
-            else
+            elif [[ "${noise_mode}" == "noisym2" ]]; then
                 tag_biasparams_test="_biasnoisem2coverage_p7_n1000"
                 tag_noise_test="_noise_unit${tag_params_test}"
+            else
+                echo "ERROR: unknown noise_mode=${noise_mode}; expected noiseless, noisy, or noisym2" >&2
+                return 1
             fi
             tag_data_test="_muchisimocks${tag_stats}${tag_masks}${tag_params_test}${tag_biasparams_test}${tag_noise_test}"
             ;;
@@ -131,7 +145,9 @@ set_test_tags_from_preset() {
             tag_params_test="_shame_p0_n1000"
             tag_mean="_mean"
             if [[ "${noise_mode}" == "noisym2" ]]; then
-                tag_biasparams_test="_bias_shame_noisem2_p3_n1000"
+                tag_biasparams_test="_bias_shame_noisem2best_p0_n1"
+            elif [[ "${noise_mode}" == "noisy" ]]; then
+                tag_biasparams_test="_bias_shame_noisebest_p0_n1"
             else
                 tag_biasparams_test="_biasshame_p0_n1"
             fi
@@ -145,7 +161,9 @@ set_test_tags_from_preset() {
         fixed_cosmo_shame_sample)
             tag_params_test="_shame_p0_n1000"
             if [[ "${noise_mode}" == "noisym2" ]]; then
-                tag_biasparams_test="_bias_shame_noisem2_p3_n1000"
+                tag_biasparams_test="_bias_shame_noisem2best_p0_n1"
+            elif [[ "${noise_mode}" == "noisy" ]]; then
+                tag_biasparams_test="_bias_shame_noisebest_p0_n1"
             else
                 tag_biasparams_test="_biasshame_p0_n1"
             fi
@@ -170,46 +188,57 @@ set_test_tags_from_preset() {
     esac
 }
 
-for n_train in "${n_train_arr[@]}"; do
-    for bx in "${bx_arr[@]}"; do
-        for tag_stats in "${tag_stats_arr[@]}"; do
-            for tag_masks in "${tag_masks_arr[@]}"; do
-                for test_preset in "${test_preset_arr[@]}"; do
-                    for noise_mode in "${noise_mode_arr[@]}"; do
+submit_one_test_job() {
+    local test_preset="$1"
+    local noise_mode="$2"
 
-                        if ! set_train_tags_from_noise_mode "${noise_mode}"; then
-                            exit 1
-                        fi
-                        # only set given mask name when bispec is present
-                        #if [[ "$tag_stats" != *bispec* ]]; then 
-                        #    tag_masks=""
-                        #fi
-                        if ! set_test_tags_from_preset "${test_preset}" "${noise_mode}"; then
-                            exit 1
-                        fi
+    if ! set_train_tags_from_noise_mode "${noise_mode}"; then
+        exit 1
+    fi
 
-                        tag_data_train="_muchisimocks${tag_stats}${tag_masks}${tag_params}${tag_biasparams}${tag_noise}"
-                        tag_inf_num="_bx${bx}_ntrain${n_train}"
-                        tag_inf="${tag_data_train}${tag_rp}${tag_inf_num}${tag_sweep}"
+    # only set given mask name when bispec is present
+    #if [[ "$tag_stats" != *bispec* ]]; then
+    #    tag_masks=""
+    #fi
+    if ! set_test_tags_from_preset "${test_preset}" "${noise_mode}"; then
+        exit 1
+    fi
 
-                        # config stem matches generate_test_config / generate_test_config_ood: tag_test = _TRAIN..._TEST${tag_data_test}${tag_mean}
-                        config_test_file="../configs/configs_test/config_TRAIN${tag_inf}_TEST${tag_data_test}${tag_mean}.yaml"
+    tag_data_train="_muchisimocks${tag_stats}${tag_masks}${tag_params}${tag_biasparams}${tag_noise}"
+    tag_inf_num="_bx${bx}_ntrain${n_train}"
+    tag_inf="${tag_data_train}${tag_rp}${tag_inf_num}${tag_sweep}"
 
-                        job_name="inf_test_${test_preset}_${noise_mode}_TRAIN${tag_inf}_TEST${tag_data_test}${tag_mean}"
-                        # Slurm --output basename must fit NAME_MAX (typically 255). Drop redundant
-                        # coverage_noisy prefix when the log filename would be too long.
-                        if (( ${#job_name} + 4 > 255 )); then
-                            job_name="inf_test_TRAIN${tag_inf}_TEST${tag_data_test}${tag_mean}"
-                        fi
+    # Omit repeated _muchisimocks{stats}{masks} from TEST when same as train (build_config_tag_test).
+    shared_prefix="_muchisimocks${tag_stats}${tag_masks}"
+    if [[ "${tag_data_test}" == "${shared_prefix}"* ]]; then
+        test_part="${tag_data_test#${shared_prefix}}"
+        tag_test="_TRAIN${tag_inf}_TEST${test_part}${tag_mean}"
+        test_suffix="${test_part}${tag_mean}"
+    else
+        tag_test="_TRAIN${tag_inf}_TEST${tag_data_test}${tag_mean}"
+        test_suffix="${tag_data_test}${tag_mean}"
+    fi
+    config_test_file="../configs/configs_test/config${tag_test}.yaml"
 
-                        code_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-                        mkdir -p "${code_dir}/logs" || { echo "ERROR: Failed to create logs directory" >&2; exit 1; }
+    job_name="inf_test_${test_preset}_${noise_mode}_TRAIN${tag_inf}_TEST${test_suffix}"
+    # Slurm log basename must fit NAME_MAX (255). Drop preset/noise prefix, then hash.
+    if (( ${#job_name} + 4 > 255 )); then
+        job_name="inf_test_TRAIN${tag_inf}_TEST${test_suffix}"
+    fi
+    if (( ${#job_name} + 4 > 255 )); then
+        job_name_hash=$(printf '%s' "${job_name}" | md5sum | awk '{print substr($1,1,12)}')
+        job_name="inf_test_${job_name_hash}"
+    fi
 
-                        sbatch <<EOF
+    code_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+    mkdir -p "${code_dir}/logs" || { echo "ERROR: Failed to create logs directory" >&2; exit 1; }
+
+    # Use %j for log path: long job_name basenames fail silently (job exits, no .out).
+    submit_out=$(sbatch <<EOF
 #!/bin/bash
 #SBATCH --qos=regular
 #SBATCH --job-name=${job_name}
-#SBATCH --output=${code_dir}/logs/${job_name}.out
+#SBATCH --output=${code_dir}/logs/inf_test_%j.out
 ##SBATCH --time=0:30:00
 #SBATCH --time=24:00:00
 #SBATCH --nodes=1
@@ -224,6 +253,8 @@ echo "Slurm job id is \${SLURM_JOB_ID}"
 echo "Running on node \${SLURMD_NODENAME}"
 echo "Working directory: \$(pwd)"
 echo "test_preset=${test_preset} noise_mode=${noise_mode}"
+echo "tag_stats=${tag_stats} tag_masks=${tag_masks}"
+echo "tag_test=${tag_test}"
 echo "config_test_file: ${config_test_file}"
 
 . ~/load_modules.sh
@@ -233,9 +264,48 @@ conda activate benv
 echo "python run_inference.py --config-test=${config_test_file}"
 python run_inference.py --config-test="${config_test_file}"
 EOF
+)
+    if [[ $? -ne 0 || -z "${submit_out}" ]]; then
+        echo "ERROR: sbatch failed for preset=${test_preset} noise_mode=${noise_mode}" >&2
+        exit 1
+    fi
+    echo "${submit_out}"
+    job_id="${submit_out##* }"
+    echo "  log: ${code_dir}/logs/inf_test_${job_id}.out"
+}
+
+if [[ "${zip_stats_masks}" == true ]]; then
+    if (( ${#tag_stats_arr[@]} != ${#tag_masks_arr[@]} )); then
+        echo "ERROR: zip_stats_masks=true requires tag_stats_arr and tag_masks_arr to have the same length" >&2
+        echo "  lens: stats=${#tag_stats_arr[@]} masks=${#tag_masks_arr[@]}" >&2
+        exit 1
+    fi
+    for n_train in "${n_train_arr[@]}"; do
+        for bx in "${bx_arr[@]}"; do
+            for i in "${!tag_stats_arr[@]}"; do
+                tag_stats="${tag_stats_arr[$i]}"
+                tag_masks="${tag_masks_arr[$i]}"
+                for test_preset in "${test_preset_arr[@]}"; do
+                    for noise_mode in "${noise_mode_arr[@]}"; do
+                        submit_one_test_job "${test_preset}" "${noise_mode}"
                     done
                 done
             done
         done
     done
-done
+else
+    # Full grid: tag_stats x tag_masks (restore by setting zip_stats_masks=false).
+    for n_train in "${n_train_arr[@]}"; do
+        for bx in "${bx_arr[@]}"; do
+            for tag_stats in "${tag_stats_arr[@]}"; do
+                for tag_masks in "${tag_masks_arr[@]}"; do
+                    for test_preset in "${test_preset_arr[@]}"; do
+                        for noise_mode in "${noise_mode_arr[@]}"; do
+                            submit_one_test_job "${test_preset}" "${noise_mode}"
+                        done
+                    done
+                done
+            done
+        done
+    done
+fi
