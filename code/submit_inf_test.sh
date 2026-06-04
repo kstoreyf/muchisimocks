@@ -19,13 +19,13 @@
 #test_preset_arr=(coverage)
 #test_preset_arr=(ood)
 #test_preset_arr=(fixed_cosmo_shame_mean)
-test_preset_arr=(fixed_cosmo_shame_mean)
+test_preset_arr=(ood fixed_cosmo_shame_mean)
 #test_preset_arr=(coverage fixed_cosmo_shame_mean ood)
 #test_preset_arr=(coverage ood)
 #test_preset_arr=(coverage fixed_cosmo_shame_mean fixed_cosmo_shame_sample ood)
 
-noise_mode_arr=(noisy)
-#noise_mode_arr=(noisym2)
+#noise_mode_arr=(noisy)
+noise_mode_arr=(noisym2)
 #noise_mode_arr=(noiseless)
 # noise_mode_arr=(noiseless noisy)
 
@@ -40,23 +40,25 @@ bx_arr=(32)
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_masks_arr=("_kb0.25_kpgm0.25")
-tag_stats_arr=("_pk_bispec")
+#tag_stats_arr=("_pk_bispec")
 #tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_stats_arr=("_pk_pgm" "_pk_bispec")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk" "_pk_pgm" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm" "_pk_bispec_pgm")
 #tag_masks_arr=("" "" "_kpgm0.25" "_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
+tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm" "_pk_bispec_pgm")
+tag_masks_arr=("_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 
 # true: pair tag_stats / tag_masks by list index; false: nested loops (full grid).
-#zip_stats_masks=true
-zip_stats_masks=false
+zip_stats_masks=true
+#zip_stats_masks=false
 #tag_masks_arr=("_kb0.25_kpgm0.3")
 #tag_masks_arr=("_kpgm0.3")
 #tag_masks_arr=("_kpgm0.1" "_kpgm0.15")
 #tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.3" "_kb0.35")
 #tag_masks_arr=("_kpgm0.1" "_kpgm0.15" "_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
-tag_masks_arr=("_kb0.1" "_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
+#tag_masks_arr=("_kb0.1" "_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_masks_arr=("" "_kb0.1")
 # tag_mask_bispec_arr=("_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
