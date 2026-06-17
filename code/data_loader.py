@@ -372,7 +372,7 @@ def _tag_mock_shame_for_bias(tag_mock):
 def load_params_ood(data_mode, tag_mock, dir_params=None):
     if data_mode == 'shame':
         # needed this line bc was getting error message
-        import bacco
+        #import bacco
         cosmo_mock = utils_model.get_cosmo(utils_model.cosmo_dict_shame)
 
         param_dict = {}

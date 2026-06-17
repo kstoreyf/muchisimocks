@@ -1,4 +1,5 @@
 #!/bin/bash
+# Submit: cd "$(dirname "$0")" && mkdir -p logs && sbatch "$0"
 #SBATCH --qos=regular
 ##SBATCH --job-name=datagen_test_p5_n1000_vel_step100
 ##SBATCH --job-name=datagen_quijote_p0_n1000_vel_step100

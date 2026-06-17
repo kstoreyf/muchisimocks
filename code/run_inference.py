@@ -29,6 +29,18 @@ from generate_config_inference import (
     tags_mask_for_sweep,
 )
 
+# Coverage test-set batching (evaluate_test_set); not written to YAML configs.
+TEST_CHECKPOINT_EVERY = 20
+TEST_BATCH_TIMEOUT_SECONDS = 3600.0  # 1 h; timed-out batches get NaN placeholders
+
+
+def _evaluate_test_set_batch_kwargs(evaluate_mean: bool) -> dict:
+    """Batch size / timeout for evaluate_test_set (timeout only for multi-mock coverage runs)."""
+    return {
+        "checkpoint_every": TEST_CHECKPOINT_EVERY,
+        "batch_timeout_seconds": None if evaluate_mean else TEST_BATCH_TIMEOUT_SECONDS,
+    }
+
 
 def _build_tags_mask(statistics, config) -> list[str]:
     """
@@ -58,6 +70,16 @@ def main():
     parser.add_argument("-tr", "--config-train", type=str, help="Path to the training YAML configuration file.")
     parser.add_argument("-te", "--config-test", type=str, help="Path to the testing YAML configuration file.")
     parser.add_argument("-l", "--config-runlike", type=str, help="Path to the runlike YAML configuration file.")
+    parser.add_argument(
+        "--overwrite-train",
+        action="store_true",
+        help="Re-run training even if posterior.p already exists in the output dir.",
+    )
+    parser.add_argument(
+        "--overwrite-test",
+        action="store_true",
+        help="Re-run testing even if samples_test*_pred.npy already exists.",
+    )
     args = parser.parse_args()
 
     
@@ -66,7 +88,11 @@ def main():
     if args.config_train:
         with open(args.config_train, "r") as file:
             train_config = yaml.safe_load(file)
-        train_likefree_inference(train_config, config_yaml_path=args.config_train)
+        train_likefree_inference(
+            train_config,
+            overwrite=args.overwrite_train,
+            config_yaml_path=args.config_train,
+        )
 
     # Run testing if a testing config file is provided
     if args.config_test:
@@ -74,10 +100,9 @@ def main():
             test_config = yaml.safe_load(file)
         data_mode_test_default = "muchisimocks"
         if test_config.get("data_mode_test", data_mode_test_default) == "muchisimocks":
-            test_likefree_inference(test_config)
+            test_likefree_inference(test_config, overwrite=args.overwrite_test)
         else:
-            overwrite = True
-            test_likefree_inference_ood(test_config, overwrite=overwrite)
+            test_likefree_inference_ood(test_config, overwrite=args.overwrite_test)
 
     # WARNING not implemented yet !
     if args.config_runlike:
@@ -311,6 +336,7 @@ def test_likefree_inference(config, overwrite=False):
     tag_inf_train = config["tag_inf_train"]
     n_test_eval = config.get("n_test_eval", None)
     tags_mask = _build_tags_mask(statistics, config)
+    batch_kwargs = _evaluate_test_set_batch_kwargs(evaluate_mean)
     #print("BEWARNED: manually setting n_test_eval to 100")
     #n_test_eval = 100
     
@@ -372,11 +398,21 @@ def test_likefree_inference(config, overwrite=False):
         for i_stat in range(len(statistics)):
             y_mean_i = np.mean(y[i_stat], axis=0)
             y_mean.append(y_mean_i)
-        sbi_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test_eval=tag_test_eval, n_test_eval=n_test_eval)
+        sbi_network.evaluate_test_set(
+            y_test_unscaled=y_mean,
+            tag_test_eval=tag_test_eval,
+            n_test_eval=n_test_eval,
+            **batch_kwargs,
+        )
     else:
         # run on full test set
         print(f"y_obs shape: {len(y_obs)}, {len(y_obs[0])}, {len(y_obs[0][0])}")
-        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test_eval=tag_test_eval, n_test_eval=n_test_eval)
+        sbi_network.evaluate_test_set(
+            y_test_unscaled=y_obs,
+            tag_test_eval=tag_test_eval,
+            n_test_eval=n_test_eval,
+            **batch_kwargs,
+        )
 
 
 def test_likefree_inference_ood(config, overwrite=False):
@@ -406,6 +442,7 @@ def test_likefree_inference_ood(config, overwrite=False):
     tag_data_test = config["tag_data_test"]
     n_test_eval = config.get("n_test_eval", None)
     tags_mask = _build_tags_mask(statistics, config)
+    batch_kwargs = _evaluate_test_set_batch_kwargs(evaluate_mean)
     
     if evaluate_mean:
         tag_test = f'{tag_data_test}_mean'
@@ -457,11 +494,21 @@ def test_likefree_inference_ood(config, overwrite=False):
         for i_stat in range(len(statistics)):
             y_mean_i = np.mean(y[i_stat], axis=0)
             y_mean.append(y_mean_i)
-        sbi_network.evaluate_test_set(y_test_unscaled=y_mean, tag_test_eval=tag_test_eval, n_test_eval=n_test_eval)
+        sbi_network.evaluate_test_set(
+            y_test_unscaled=y_mean,
+            tag_test_eval=tag_test_eval,
+            n_test_eval=n_test_eval,
+            **batch_kwargs,
+        )
     else:
         # run on full test set
         #print(f"y_obs shape: {len(y_obs)}, {len(y_obs[0])}, {len(y_obs[0][0])}")
-        sbi_network.evaluate_test_set(y_test_unscaled=y_obs, tag_test_eval=tag_test_eval, n_test_eval=n_test_eval)
+        sbi_network.evaluate_test_set(
+            y_test_unscaled=y_obs,
+            tag_test_eval=tag_test_eval,
+            n_test_eval=n_test_eval,
+            **batch_kwargs,
+        )
 
 
 def run_likelihood_inference(config):

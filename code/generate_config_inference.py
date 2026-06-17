@@ -2,6 +2,7 @@ import os
 import yaml
 from pathlib import Path
 
+import paths
 import utils_model
 
 '''
@@ -76,6 +77,53 @@ def build_tag_data(
     return f"_{data_mode}{tag_stats}{tag_masks}{tag_paramsall}"
 
 
+def nth_passing_run_id(sweep_dir: Path, nth: int = 0) -> str:
+    """Line ``nth`` of ``best_runs.txt`` (0-based). ``nth=0`` may fall back to ``best_run.txt``."""
+    runs_path = sweep_dir / "best_runs.txt"
+    if runs_path.is_file():
+        ids = [
+            ln.strip()
+            for ln in runs_path.read_text(encoding="utf-8").splitlines()
+            if ln.strip()
+        ]
+        if nth < len(ids):
+            return ids[nth]
+        raise IndexError(
+            "nth_best_run=%d but %s has only %d id(s). "
+            "Re-run choose_best_run.py with --n-passing at least %d."
+            % (nth, runs_path, len(ids), nth + 1)
+        )
+    if nth == 0:
+        id_path = sweep_dir / "best_run.txt"
+        if id_path.is_file():
+            rid = id_path.read_text(encoding="utf-8").split()[0].strip()
+            if rid:
+                return rid
+    raise FileNotFoundError(
+        "nth_best_run=%d needs %s with >= %d lines (or run choose_best_run.py). Path: %s"
+        % (nth, runs_path.name, nth + 1, sweep_dir)
+    )
+
+
+def _tag_inf_train_for_test(
+    base_inf_train: str,
+    base_inf_sweep: str,
+    tag_sweep: str | None,
+    nth_best_run: int | None,
+    sweep_name_override: str | None,
+) -> tuple[str, str | None]:
+    if tag_sweep is None:
+        return base_inf_train, None
+    ts = tag_sweep.removeprefix("_best")
+    sweep_name = base_inf_sweep + f"_sweep{ts}"
+    if sweep_name_override is not None:
+        sweep_name = sweep_name_override
+    if nth_best_run is None:
+        return base_inf_train + f"_best{ts}", sweep_name
+    d = paths.DIR_RESULTS / "results_sbi" / ("sbi" + sweep_name)
+    return f"{sweep_name}/{nth_passing_run_id(d, nth_best_run)}", sweep_name
+
+
 def build_config_tag_test(
     tag_inf_train: str,
     tag_data_test: str,
@@ -84,6 +132,7 @@ def build_config_tag_test(
     statistics: list[str],
     tags_mask: list[str],
     evaluate_mean: bool = False,
+    nth_best_run: int | None = None,
 ) -> str:
     """
     Tag for test config filenames: ``config{tag}.yaml``.
@@ -91,15 +140,22 @@ def build_config_tag_test(
     Train and test usually share ``data_mode``, statistics, and k-bin masks; those
     appear already in ``tag_inf_train``, so omit the repeated prefix from the
     ``_TEST`` segment. ``tag_data_test`` in the YAML is unchanged.
+
+    When ``nth_best_run`` is set and ``tag_inf_train`` is ``sweep_name/run_id``,
+    the filename uses ``sweep_name_nbest<n>`` (not the W&B run id).
     """
     tag_mean = "_mean" if evaluate_mean else ""
+    if nth_best_run is not None and "/" in tag_inf_train:
+        tag_inf_file = f"{tag_inf_train.split('/', 1)[0]}_nbest{nth_best_run}"
+    else:
+        tag_inf_file = tag_inf_train.replace("/", "_")
     tag_stats = f'_{"_".join(statistics)}'
     tag_masks = "".join(tags_mask)
     shared_prefix = f"_{data_mode}{tag_stats}{tag_masks}"
     if data_mode_test == data_mode and tag_data_test.startswith(shared_prefix):
         test_part = tag_data_test[len(shared_prefix):]
-        return f"_TRAIN{tag_inf_train}_TEST{test_part}{tag_mean}"
-    return f"_TRAIN{tag_inf_train}_TEST{tag_data_test}{tag_mean}"
+        return f"_TRAIN{tag_inf_file}_TEST{test_part}{tag_mean}"
+    return f"_TRAIN{tag_inf_file}_TEST{tag_data_test}{tag_mean}"
 
 
 # Default cosmo tag only; prefer ``resolve_train_tag_bundle(tag_params, noise_mode)``.
@@ -131,9 +187,9 @@ PARAM_SETS_TEST = {
         evaluate_mean=False,
         data_mode_test="shame",
         #tag_mock="_nbar0.00011",
-        #tag_mock="_nbar0.00022",
+        tag_mock="_nbar0.00022",
         #tag_mock="_nbar0.00022_phase0",
-        tag_mock="_nbar0.00022_phasepi",
+        #tag_mock="_nbar0.00022_phasepi",
         #tag_mock="_nbar0.00054",
         idxs_obs=None,
     ),
@@ -149,14 +205,14 @@ _TEST_SCENARIO_TAGS = {
         "noisym2": ("_biasnoisem2coverage_p7_n1000", "__unit__"),
     },
     "fixed_cosmo_shame_mean": {
-        "noiseless": ("_bias_shame_p0_n1", None),
-        "noisy": ("_bias_shame_noisebest_p0_n1", "__unit__"),
-        "noisym2": ("_bias_shame_noisem2best_p0_n1", "__unit__"),
+        "noiseless": ("_biasshame_p0_n1", None),
+        "noisy": ("_biasshame_noisebest_p0_n1", "__unit__"),
+        "noisym2": ("_biasshame_noisem2best_p0_n1", "__unit__"),
     },
     "fixed_cosmo_shame_sample": {
-        "noiseless": ("_bias_shame_p0_n1", None),
-        "noisy": ("_bias_shame_noisebest_p0_n1", "__unit__"),
-        "noisym2": ("_bias_shame_noisem2best_p0_n1", "__unit__"),
+        "noiseless": ("_biasshame_p0_n1", None),
+        "noisy": ("_biasshame_noisebest_p0_n1", "__unit__"),
+        "noisym2": ("_biasshame_noisem2best_p0_n1", "__unit__"),
     },
 }
 
@@ -288,6 +344,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                          tags_mask=None,
                          reparameterize=True,
                          tag_sweep=None,
+                         nth_best_run: int | None = 0,
                          data_mode_test="muchisimocks",
                          idxs_obs=None,
                          evaluate_mean=True,
@@ -302,9 +359,8 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     (e.g. ``""`` or ``"_kb0.25"`` for bispec); joined into ``tag_masks`` for
     ``tag_data_train`` / ``tag_data_test`` / ``tag_inf_train``, matching training configs.
 
-    If ``tag_sweep`` is set (e.g. ``'-rand30'``), ``tag_inf_train`` ends with
-    ``_best<tag_sweep>`` (same checkpoint tree as training with that sweep's best run);
-    if ``tag_sweep`` is ``None``, the plain training tag without ``_best`` is used.
+    If ``tag_sweep`` is set, ``nth_best_run`` (default 0) picks a line from
+    ``best_runs.txt`` under the sweep dir; ``None`` uses legacy ``_best<tag_sweep>``.
     """
     tag_stats = f'_{"_".join(statistics)}'
 
@@ -318,34 +374,24 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     tag_data_train = build_tag_data(
         data_mode, statistics, tags_mask, tag_params, tag_biasparams, tag_noise
     )
-
     tag_paramsall_test = tag_params_test + tag_biasparams_test
     if tag_noise_test is not None:
         tag_paramsall_test += tag_noise_test
     tag_data_test = f"_{data_mode_test}{tag_stats}{tag_masks}{tag_paramsall_test}"
 
-    # Train checkpoint tag -> results_sbi/sbi<tag_inf_train> (optional _best from tag_sweep).
-    tag_inf_num = f'_bx{bx}_ntrain{n_train}'
-    base_inf_train = tag_data_train + ('_rp' if reparameterize else '') + tag_inf_num
-    tag_inf_num_sweep = f'_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}'
-    tag_data_sweep = build_tag_data(
-        data_mode,
-        statistics,
-        tags_mask_for_sweep(statistics),
-        tag_params,
-        tag_biasparams,
-        tag_noise,
+    tag_inf_num = f"_bx{bx}_ntrain{n_train}"
+    base_inf_train = tag_data_train + ("_rp" if reparameterize else "") + tag_inf_num
+    base_inf_sweep = (
+        build_tag_data(
+            data_mode, statistics, tags_mask_for_sweep(statistics),
+            tag_params, tag_biasparams, tag_noise,
+        )
+        + ("_rp" if reparameterize else "")
+        + f"_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}"
     )
-    base_inf_train_sweep = tag_data_sweep + ('_rp' if reparameterize else '') + tag_inf_num_sweep
-    if tag_sweep is not None:
-        # Same directory layout as training that finished a sweep and kept the best run.
-        tag_inf_train = base_inf_train + f'_best{tag_sweep}'
-        sweep_name = base_inf_train_sweep + f'_sweep{tag_sweep}'
-        if sweep_name_override is not None:
-            sweep_name = sweep_name_override
-    else:
-        tag_inf_train = base_inf_train
-        sweep_name = None
+    tag_inf_train, sweep_name = _tag_inf_train_for_test(
+        base_inf_train, base_inf_sweep, tag_sweep, nth_best_run, sweep_name_override
+    )
 
     tag_test = build_config_tag_test(
         tag_inf_train,
@@ -355,6 +401,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         statistics,
         tags_mask,
         evaluate_mean=evaluate_mean,
+        nth_best_run=nth_best_run,
     )
     
     config = {
@@ -371,6 +418,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         "n_train": n_train,
         "bx": bx,
         "tag_sweep": tag_sweep,
+        "nth_best_run": nth_best_run,
         "evaluate_mean": evaluate_mean,
         "idxs_obs": idxs_obs,
         "tag_data_train": tag_data_train,
@@ -407,6 +455,7 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                              tags_mask=None,
                              reparameterize=True,
                              tag_sweep=None,
+                             nth_best_run: int | None = 0,
                              idxs_obs=None,
                              evaluate_mean=False,
                              data_mode_test="shame",
@@ -426,28 +475,19 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     tag_data_train = build_tag_data(
         data_mode, statistics, tags_mask, tag_params, tag_biasparams, tag_noise
     )
-    tag_data_train_sweep = build_tag_data(
-        data_mode,
-        statistics,
-        tags_mask_for_sweep(statistics),
-        tag_params,
-        tag_biasparams,
-        tag_noise,
+    tag_inf_num = f"_bx{bx}_ntrain{n_train}"
+    base_inf_train = tag_data_train + ("_rp" if reparameterize else "") + tag_inf_num
+    base_inf_sweep = (
+        build_tag_data(
+            data_mode, statistics, tags_mask_for_sweep(statistics),
+            tag_params, tag_biasparams, tag_noise,
+        )
+        + ("_rp" if reparameterize else "")
+        + f"_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}"
     )
-
-    # Train checkpoint tag -> results_sbi/sbi<tag_inf_train> (optional _best from tag_sweep).
-    tag_inf_num = f'_bx{bx}_ntrain{n_train}'
-    base_inf_train = tag_data_train + ('_rp' if reparameterize else '') + tag_inf_num
-    tag_inf_num_sweep = f'_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}'
-    base_inf_train_sweep = tag_data_train_sweep + ('_rp' if reparameterize else '') + tag_inf_num_sweep
-    if tag_sweep is not None:
-        tag_inf_train = base_inf_train + f'_best{tag_sweep}'
-        sweep_name = base_inf_train_sweep + f'_sweep{tag_sweep}'
-        if sweep_name_override is not None:
-            sweep_name = sweep_name_override
-    else:
-        tag_inf_train = base_inf_train
-        sweep_name = None
+    tag_inf_train, sweep_name = _tag_inf_train_for_test(
+        base_inf_train, base_inf_sweep, tag_sweep, nth_best_run, sweep_name_override
+    )
 
     ### test tags
     tag_data_test = '_'+data_mode_test + tag_stats + tag_masks_train + tag_mock
@@ -460,6 +500,7 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         statistics,
         tags_mask,
         evaluate_mean=evaluate_mean,
+        nth_best_run=nth_best_run,
     )
     
     config = {
@@ -473,6 +514,7 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         "n_train": n_train,
         "bx": bx,
         "tag_sweep": tag_sweep,
+        "nth_best_run": nth_best_run,
         "evaluate_mean": evaluate_mean,
         "idxs_obs": idxs_obs,
         "tag_data_train": tag_data_train,
@@ -525,8 +567,8 @@ def generate_test_config_from_preset(
     ``tag_inf_train``, and (in-distribution) ``tag_data_test`` include the correct
     ``tag_masks`` segment (e.g. bispec k-bin masks).
 
-    Pass ``tag_sweep`` (e.g. ``'-rand30'``) to point at the ``_best<tag_sweep>`` checkpoint;
-    omit it to load the non-sweep training run.
+    Pass ``tag_sweep`` (e.g. ``'-rand30'``) and ``nth_best_run`` (default 0, from
+    ``best_runs.txt``). Omit ``tag_sweep`` for a non-sweep training run.
     """
     if preset_name not in PARAM_SETS_TEST:
         raise KeyError(
@@ -628,17 +670,17 @@ def main():
     # Fiducial noisy rand30 pk sweep while training on noisym2:
     # NOTE: we are not changing the saving tags! if we eventually 
     # do sweep for this noise model, we should manually change this saved training run
-    sweep_name_override = (
-        # "_muchisimocks_pk_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
-        # "_rp_bx32_ntrain10000_sweep-rand30"
-        # "_muchisimocks_pk_pgm_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
-        # "_rp_bx32_ntrain10000_sweep-rand30"
-        #"_muchisimocks_pk_bispec_kb0.25_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
-        #"_rp_bx32_ntrain10000_sweep-rand30"
-        "_muchisimocks_pk_bispec_pgm_kb0.25_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
-        "_rp_bx32_ntrain10000_sweep-rand30"
-    )
-    #sweep_name_override = None
+    # sweep_name_override = (
+    #     # "_muchisimocks_pk_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
+    #     # "_rp_bx32_ntrain10000_sweep-rand30"
+    #     # "_muchisimocks_pk_pgm_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
+    #     # "_rp_bx32_ntrain10000_sweep-rand30"
+    #     #"_muchisimocks_pk_bispec_kb0.25_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
+    #     #"_rp_bx32_ntrain10000_sweep-rand30"
+    #     "_muchisimocks_pk_bispec_pgm_kb0.25_p5_n10000_biasnoisenest_p9_n320000_noise_unit_p5_n10000" \
+    #     "_rp_bx32_ntrain10000_sweep-rand30"
+    # )
+    sweep_name_override = None
 
     # Training: run_mode 'single' | 'sweep' | 'best'; tag_sweep required for sweep/best (e.g. '-rand10').
     # Note: run_mode is only for training; testing is always 'load', and if tag_sweep is passed will use best
@@ -650,22 +692,22 @@ def main():
     #run_mode = "sweep"
     run_mode = "best"
     tag_sweep = "-rand30"
+    nth_best_run = None
+    #nth_best_run = 4  # index in best_runs.txt; loop range(5) for top-5 configs
 
     stat_arr = [
         ["pk"],
         ["pk", "pgm"],
-        ["pk", "pgm"],
         ["pk", "bispec"],
-        ["pk", "bispec", "pgm"],
-        ["pk", "bispec", "pgm"],
+        # ["pk", "bispec", "pgm"],
+        #["pk", "bispec", "pgm"],
     ]
     tags_mask_arr = [
         [""],
-        ["", ""],    
         ["", "_kpgm0.25"],    
         ["", "_kb0.25"],
-        ["", "_kb0.25", ""],
-        ["", "_kb0.25", "_kpgm0.25"],
+        #["", "_kb0.25", ""],
+        #["", "_kb0.25", "_kpgm0.25"],
     ]
     #tags_mask_arr = [["", "_kpgm0.25"]]
     #tags_mask_arr = [["", ""]]
@@ -678,10 +720,10 @@ def main():
     #tag_mask_pgm_arr = ["_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
     #tags_mask_arr = [["", tag_mask_bispec, tag_mask_pgm] for tag_mask_bispec in tag_mask_bispec_arr for tag_mask_pgm in tag_mask_pgm_arr]
     
-    n_train_arr = [10000]
-    bx_arr = [32]
-    #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
-    #bx_arr = [1, 2, 4, 8, 16, 32]
+    #n_train_arr = [10000]
+    #bx_arr = [32]
+    n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
+    bx_arr = [1, 2, 4, 8, 16, 32]
 
     # assert len(tags_mask_arr) == len(stat_arr), (
     #     "tags_mask_arr must have one entry per stat_arr row (aligned lengths and statistics)"
@@ -710,8 +752,8 @@ def main():
                         )
                     elif mode == "test":
                         #for test_name in PARAM_SETS_TEST:
-                        for test_name in ["ood"]:
-                        #for test_name in ["ood", "coverage", "fixed_cosmo_shame_mean"]:
+                        #for test_name in ["ood"]:
+                        for test_name in ["ood", "coverage", "fixed_cosmo_shame_mean"]:
                         #for test_name in ["coverage", "ood"]:
                         #for test_name in ["coverage", "fixed_cosmo_shame_mean"]:
                             generate_test_config_from_preset(
@@ -724,6 +766,7 @@ def main():
                                 bx=bx,
                                 tags_mask=tags_mask,
                                 tag_sweep=tag_sweep,
+                                nth_best_run=nth_best_run,
                                 sweep_name_override=None,
                             )
     # generate_runlike_config(overwrite=overwrite)

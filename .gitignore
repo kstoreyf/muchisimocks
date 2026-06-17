@@ -2,6 +2,9 @@ __pycache__
 *.egg-info
 sbi-logs/
 logs/
+code/logs/
+code/slurm-*.out
+code/*.out
 old/
 artifacts/
 

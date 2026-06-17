@@ -1,4 +1,5 @@
 #!/bin/bash
+# Submit: cd "$(dirname "$0")" && mkdir -p logs && sbatch "$0"
 #SBATCH --qos=regular
 #SBATCH --job-name=matched_mocks_0663_damping
 ##SBATCH --job-name=generate_emupks_p5_n10000_biaszen_p4_n1000

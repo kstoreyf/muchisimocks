@@ -1,3 +1,4 @@
+import multiprocessing as mp
 import os
 import re
 import shutil
@@ -18,7 +19,6 @@ import torch
 
 import paths
 import scaler_custom as scl
-import generate_params as genp
 import utils_inference
 
 
@@ -311,6 +311,7 @@ class SBIModel():
                      ):
 
         self.dir_sbi = str(paths.DIR_RESULTS / "results_sbi" / f"sbi{tag_sbi}")
+        self.tag_sbi = tag_sbi
         p = pathlib.Path(self.dir_sbi)
         p.mkdir(parents=True, exist_ok=True)
         
@@ -821,9 +822,86 @@ class SBIModel():
     
     
     
+    @staticmethod
+    def _n_test_obs_in_samples(samples_arr):
+        """Test observations saved along axis 1: (n_draws, n_obs, n_params) or (n_draws, n_params)."""
+        if samples_arr.ndim == 3:
+            return samples_arr.shape[1]
+        if samples_arr.ndim == 2:
+            return 1
+        raise ValueError(
+            f"Unexpected samples array shape {samples_arr.shape}; expected 2D or 3D"
+        )
+
+    @staticmethod
+    def _nan_batch_samples(n_samples, batch_size, n_params):
+        """Placeholder block for a timed-out coverage batch (axis-1 slots stay aligned)."""
+        if batch_size == 1:
+            return np.full((n_samples, n_params), np.nan, dtype=np.float64)
+        return np.full((n_samples, batch_size, n_params), np.nan, dtype=np.float64)
+
+    def _evaluate_batch_with_timeout(
+        self,
+        y_test_unscaled_batch,
+        *,
+        n_samples,
+        batch_size,
+        batch_timeout_seconds,
+    ):
+        """
+        Run posterior sampling for one batch in a subprocess so a stall can be killed.
+        Returns (samples, timed_out).
+        """
+        if batch_timeout_seconds is None or batch_timeout_seconds <= 0:
+            return self.evaluate(y_test_unscaled_batch, n_samples=n_samples), False
+
+        ctx = mp.get_context("spawn")
+        q = ctx.Queue(maxsize=1)
+        proc = ctx.Process(
+            target=_evaluate_test_batch_worker,
+            args=(
+                q,
+                self.tag_sbi,
+                list(self.statistics),
+                np.asarray(self.param_names, dtype=str),
+                y_test_unscaled_batch,
+                int(n_samples),
+                bool(self.overwrite),
+            ),
+        )
+        proc.start()
+        try:
+            proc.join(timeout=float(batch_timeout_seconds))
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(timeout=10.0)
+                print(
+                    f"Batch timed out after {batch_timeout_seconds:.0f}s — "
+                    f"filling {batch_size} observation(s) with NaN and continuing"
+                )
+                return (
+                    self._nan_batch_samples(
+                        n_samples, batch_size, len(self.param_names),
+                    ),
+                    True,
+                )
+            if proc.exitcode not in (0, None):
+                raise RuntimeError(
+                    f"Batch worker exited with code {proc.exitcode}"
+                )
+            status, payload = q.get(timeout=5.0)
+            if status != "ok":
+                raise RuntimeError(f"Batch worker failed: {payload}")
+            return payload, False
+        finally:
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(timeout=5.0)
+
     def evaluate_test_set(self, y_test_unscaled=None, tag_test_eval='',
-                          n_samples=10000, checkpoint_every=100,
-                          resume=True, n_test_eval=100):
+                          n_samples=10000, checkpoint_every=10,
+                          resume=True, n_test_eval=100,
+                          batch_timeout_seconds=None):
         
         # y_test_unscaled is an array of length n_statistics, each with shape (n_test, n_dim);
         # concatenate inside evaluate bc we need to scale based on each stat
@@ -843,6 +921,7 @@ class SBIModel():
         fn_samples_test_pred = f'{self.dir_sbi}/samples_test{tag_test_eval}_pred.npy'
         fn_samples_test_pred_inprogress = f'{self.dir_sbi}/samples_test{tag_test_eval}_pred_inprogress.npy'
         checkpoint_file = f"{self.dir_sbi}/checkpoint_samples_test{tag_test_eval}.txt"
+        fn_failed_indices = f"{self.dir_sbi}/failed_obs_indices_test{tag_test_eval}.txt"
 
         if y_test_unscaled[0].ndim == 1:
             samples_total = 1
@@ -858,42 +937,63 @@ class SBIModel():
             # Check if final file already exists (complete run)
             if os.path.exists(fn_samples_test_pred):
                 existing_samples = np.load(fn_samples_test_pred)
-                if existing_samples.shape[0] >= samples_total:
-                    print(f"Found complete samples file: {fn_samples_test_pred} with {existing_samples.shape[0]} samples")
+                n_obs_done = self._n_test_obs_in_samples(existing_samples)
+                if n_obs_done >= samples_total:
+                    print(
+                        f"Found complete samples file: {fn_samples_test_pred} "
+                        f"with {n_obs_done}/{samples_total} test observations "
+                        f"(array shape {existing_samples.shape})"
+                    )
                     return
             
             # Check existing in-progress samples file
             if os.path.exists(fn_samples_test_pred_inprogress):
                 existing_samples = np.load(fn_samples_test_pred_inprogress)
-                samples_completed = existing_samples.shape[0]
-                print(f"Found existing in-progress samples file with {samples_completed} samples")
+                samples_completed = self._n_test_obs_in_samples(existing_samples)
+                print(
+                    f"Found existing in-progress samples file with "
+                    f"{samples_completed}/{samples_total} test observations "
+                    f"(array shape {existing_samples.shape})"
+                )
                 
             # Check checkpoint file for consistency
             if os.path.exists(checkpoint_file):
                 with open(checkpoint_file, 'r') as f:
                     checkpoint_count = int(f.read().strip())
-                print(f"Checkpoint file indicates {checkpoint_count} completed samples")
+                print(f"Checkpoint file indicates {checkpoint_count} completed test observations")
                 
                 # Use the checkpoint count if consistent, otherwise trust the samples file
-                if existing_samples is not None and checkpoint_count == existing_samples.shape[0]:
-                    samples_completed = checkpoint_count
-                elif existing_samples is not None:
-                    print(f"Checkpoint mismatch - using samples file count: {existing_samples.shape[0]}")
-                    samples_completed = existing_samples.shape[0]
+                if existing_samples is not None:
+                    n_obs_in_file = self._n_test_obs_in_samples(existing_samples)
+                    if checkpoint_count == n_obs_in_file:
+                        samples_completed = checkpoint_count
+                    else:
+                        print(
+                            f"Checkpoint mismatch (checkpoint={checkpoint_count}, "
+                            f"file axis-1={n_obs_in_file}) - using file count"
+                        )
+                        samples_completed = n_obs_in_file
                 else:
                     samples_completed = checkpoint_count
             
             if samples_completed >= samples_total:
-                print(f"All {samples_total} samples already completed!")
+                print(f"All {samples_total} test observations already completed!")
                 return
                 
             if samples_completed > 0:
-                print(f"Resuming from {samples_completed} completed samples")
+                print(f"Resuming from {samples_completed}/{samples_total} completed test observations")
         
         if self.overwrite:
             print("Overwrite is True - starting fresh")
             samples_completed = 0
             existing_samples = None
+            if os.path.exists(fn_failed_indices):
+                os.remove(fn_failed_indices)
+        
+        print(
+            f"Batching: checkpoint_every={checkpoint_every}, "
+            f"batch_timeout_seconds={batch_timeout_seconds}"
+        )
         
         start_time = time.time()
         
@@ -918,10 +1018,19 @@ class SBIModel():
                     y_test_unscaled_batch = [y_stat[start_idx:end_idx] for y_stat in y_test_unscaled]
                 
                 batch_start = time.time()
-                # Use the existing evaluate method for this batch
                 print(f"Evaluating batch {start_idx} to {end_idx}")
-                batch_samples = self.evaluate(y_test_unscaled_batch, n_samples=n_samples)
+                batch_samples, timed_out = self._evaluate_batch_with_timeout(
+                    y_test_unscaled_batch,
+                    n_samples=n_samples,
+                    batch_size=batch_size,
+                    batch_timeout_seconds=batch_timeout_seconds,
+                )
                 batch_end = time.time()
+                
+                if timed_out:
+                    with open(fn_failed_indices, "a", encoding="utf-8") as f:
+                        for obs_idx in range(start_idx, end_idx):
+                            f.write(f"{obs_idx}\n")
                 
                 print(f"Batch samples shape: {batch_samples.shape}")
                 
@@ -944,7 +1053,7 @@ class SBIModel():
                 with open(checkpoint_file, 'w') as f:
                     f.write(str(samples_completed))
                 
-                print(f"Batch completed in {batch_end - batch_start:.2f}s ({(batch_end - batch_start) / 60:.2f} min) ({(batch_end - batch_start) / 3600:.2f} hrs")
+                print(f"Batch completed in {batch_end - batch_start:.2f}s ({(batch_end - batch_start) / 60:.2f} min) ({(batch_end - batch_start) / 3600:.2f} hrs){' [TIMED OUT — NaN placeholder]' if timed_out else ''}")
                 print(f"Saved {samples_completed}/{samples_total} samples")
                 
         except Exception as e:
@@ -961,3 +1070,29 @@ class SBIModel():
         if os.path.exists(fn_samples_test_pred_inprogress):
             os.rename(fn_samples_test_pred_inprogress, fn_samples_test_pred)
             print(f"Sampling complete! Moved to final file: {fn_samples_test_pred}")
+
+
+def _evaluate_test_batch_worker(
+    q,
+    tag_sbi,
+    statistics,
+    param_names,
+    y_batch,
+    n_samples,
+    overwrite,
+):
+    """Subprocess entry point for one coverage batch (enables hard timeout via terminate)."""
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    try:
+        model = SBIModel(
+            tag_sbi=tag_sbi,
+            run_mode="load",
+            param_names=param_names,
+            statistics=statistics,
+            overwrite=overwrite,
+        )
+        model.run()
+        samples = model.evaluate(y_batch, n_samples=n_samples)
+        q.put(("ok", samples))
+    except Exception as ex:
+        q.put(("error", repr(ex)))

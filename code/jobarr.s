@@ -1,6 +1,7 @@
 #!/bin/bash
+# Submit: cd "$(dirname "$0")" && mkdir -p logs && sbatch "$0"
 #SBATCH --qos=regular
-#SBATCH --job-name=bispec_shame_p0_n1000_bias_shame_noisebest_p0_n1_step100
+#SBATCH --job-name=bispec_shame_p0_n1000_biasshame_noisebest_p0_n1_step100
 ##SBATCH --time=0:30:00  
 ##SBATCH --time=8:00:00 # time per task, but doing Nsteps; for 20000 (most), use 8h to be safe. lower, 1h fine
 #SBATCH --time=24:00:00 # bispec takes a long time
@@ -76,9 +77,9 @@ echo "idx_mock_start=${idx_mock_start}, idx_mock_end=${idx_mock_end}"
 #python compute_statistics.py --statistic pgm --tag_params _coverage_p5_n1000 --tag_biasparams _biasnoisecoverage_p9_n1000 --tag_noise _noise_unit_coverage_p5_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 #python compute_statistics.py --statistic bispec --tag_params _coverage_p5_n1000 --tag_biasparams _biasnoisecoverage_p9_n1000 --tag_noise _noise_unit_coverage_p5_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 # fixed cosmo test with fixed bias, best noise
-#python compute_statistics.py --statistic pk --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisebest_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
-#python compute_statistics.py --statistic pgm --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisebest_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
-python compute_statistics.py --statistic bispec --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisebest_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+#python compute_statistics.py --statistic pk --tag_params _shame_p0_n1000 --tag_biasparams _biasshame_noisebest_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+#python compute_statistics.py --statistic pgm --tag_params _shame_p0_n1000 --tag_biasparams _biasshame_noisebest_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+python compute_statistics.py --statistic bispec --tag_params _shame_p0_n1000 --tag_biasparams _biasshame_noisebest_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 
 ### noisy m2p3 noise model
 # train
@@ -98,9 +99,9 @@ python compute_statistics.py --statistic bispec --tag_params _shame_p0_n1000 --t
 #python compute_statistics.py --statistic pgm --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisem2_p3_n1000 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 #python compute_statistics.py --statistic bispec --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisem2_p3_n1000 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 # fixed cosmo test with fixed bias, best noise m2p3
-#python compute_statistics.py --statistic pk --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisem2best_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
-#python compute_statistics.py --statistic pgm --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisem2best_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
-#python compute_statistics.py --statistic bispec --tag_params _shame_p0_n1000 --tag_biasparams _bias_shame_noisem2best_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+#python compute_statistics.py --statistic pk --tag_params _shame_p0_n1000 --tag_biasparams _biasshame_noisem2best_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+#python compute_statistics.py --statistic pgm --tag_params _shame_p0_n1000 --tag_biasparams _biasshame_noisem2best_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
+#python compute_statistics.py --statistic bispec --tag_params _shame_p0_n1000 --tag_biasparams _biasshame_noisem2best_p0_n1 --tag_noise _noise_unit_shame_p0_n1000 --idx_mock_start ${idx_mock_start} --idx_mock_end ${idx_mock_end} 
 
 
 ###########################################################

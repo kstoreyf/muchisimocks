@@ -116,7 +116,7 @@ PARAM_SET_REGISTRY_KEYS = frozenset({"_authored", "source"})
 
 
 def param_set_tag(cfg: dict) -> str:
-    """Tag suffix used in filenames, e.g. ``_bias_shame_noisem2best_p0_n1``."""
+    """Tag suffix used in filenames, e.g. ``_biasshame_noisem2best_p0_n1``."""
     return f"{cfg['tag_bounds']}_p{cfg['n_params_vary']}_n{cfg['n_samples']}"
 
 
@@ -238,22 +238,22 @@ PARAM_SETS_LH = {
         seed=56,
     ),
     # Notebook-authored: params_fixed written by 2026-06-03_shame_noise_params.ipynb (do not generate).
-    "bias_shame_noisem2best_p0_n1": dict(
+    "biasshame_noisem2best_p0_n1": dict(
         bounds_type="biasnoise",
         anoise_option="Anmultm2p3",
         n_params_vary=0,
         n_samples=1,
-        tag_bounds="_bias_shame_noisem2best",
+        tag_bounds="_biasshame_noisem2best",
         seed=56,
         _authored=True,
         source="notebooks/2026-06-03_shame_noise_params.ipynb",
     ),
-    "bias_shame_noisebest_p0_n1": dict(
+    "biasshame_noisebest_p0_n1": dict(
         bounds_type="biasnoise",
         anoise_option="Anmult",
         n_params_vary=0,
         n_samples=1,
-        tag_bounds="_bias_shame_noisebest",
+        tag_bounds="_biasshame_noisebest",
         seed=55,
         _authored=True,
         source="notebooks/2026-06-03_shame_noise_params.ipynb",

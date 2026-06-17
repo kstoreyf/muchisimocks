@@ -6,6 +6,8 @@
 #
 # Pick one or more presets (keys of PARAM_SETS_TEST):
 #   coverage                 — PARAM_SETS_TEST["coverage"]
+#                              Batched inference (defaults in run_inference.py): 20 mocks/batch;
+#                              batches >1 h get NaN placeholders (index-aligned) and continue.
 #   fixed_cosmo_shame_mean   — shame + evaluate_mean (tag_mean=_mean in filename)
 #   fixed_cosmo_shame_sample — shame, per-realization
 #   ood                      — shame OOD (tag_mock from preset); train noise_mode still
@@ -16,8 +18,8 @@
 #
 
 # --- test matrix (edit these) ---
-#test_preset_arr=(coverage)
-test_preset_arr=(ood)
+test_preset_arr=(coverage)
+#test_preset_arr=(ood)
 #test_preset_arr=(fixed_cosmo_shame_mean)
 #test_preset_arr=(ood fixed_cosmo_shame_mean)
 #test_preset_arr=(coverage fixed_cosmo_shame_mean ood)
@@ -30,23 +32,28 @@ noise_mode_arr=(noisy)
 # noise_mode_arr=(noiseless noisy)
 
 # --- training / stats grid (same as before) ---
-n_train_arr=(10000)
-bx_arr=(32)
-#n_train_arr=(500 1000 2000 4000 6000 8000 10000)
-#bx_arr=(1 2 4 8 16 32)
+#n_train_arr=(10000)
+#bx_arr=(16)
+n_train_arr=(500 1000 2000 4000 6000 8000 10000)
+bx_arr=(1 2 4 8 16 32)
 
 #tag_stats_arr=("_pk")
+#tag_masks_arr=("")
 #tag_stats_arr=("_pk_pgm")
+#tag_masks_arr=("_kpgm0.25")
+#tag_stats_arr=("_pk_bispec")
+#tag_masks_arr=("_kb0.25")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_masks_arr=("_kb0.25_kpgm0.25")
 #tag_stats_arr=("_pk_bispec")
-#tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec_pgm")
+tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
+tag_masks_arr=("" "_kpgm0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_stats_arr=("_pk_pgm" "_pk_bispec")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
-tag_stats_arr=("_pk" "_pk_pgm" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm" "_pk_bispec_pgm")
-tag_masks_arr=("" "" "_kpgm0.25" "_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
+#tag_stats_arr=("_pk" "_pk_pgm" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm" "_pk_bispec_pgm")
+#tag_masks_arr=("" "" "_kpgm0.25" "_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm" "_pk_bispec_pgm")
 #tag_masks_arr=("_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 
@@ -78,8 +85,14 @@ tag_params_train="_p5_n10000"
 
 tag_rp="_rp"
 #tag_rp=""
-tag_sweep="_best-rand30"
+tag_sweep="-rand30"
 #tag_sweep=""
+# nth_best_run: leave unset (or empty) to load _best<tag_sweep> directly (no best_run.txt).
+# Set to 0, 1, ... to pick a line from best_runs.txt under _sweep<tag_sweep>/.
+#nth_best_run=0
+#nth_best_run=2
+# for top-5: nth_best_run=0..4 in a loop, or re-run submit with each index
+results_sbi_root="/scratch/kstoreyf/muchisimocks/results/results_sbi"
 
 # ---------------------------------------------------------------------------
 # Train-side tags: same strings as ``resolve_train_tag_bundle`` / NOISE_MODE_TRAIN_BIAS
@@ -147,9 +160,9 @@ set_test_tags_from_preset() {
             tag_params_test="_shame_p0_n1000"
             tag_mean="_mean"
             if [[ "${noise_mode}" == "noisym2" ]]; then
-                tag_biasparams_test="_bias_shame_noisem2best_p0_n1"
+                tag_biasparams_test="_biasshame_noisem2best_p0_n1"
             elif [[ "${noise_mode}" == "noisy" ]]; then
-                tag_biasparams_test="_bias_shame_noisebest_p0_n1"
+                tag_biasparams_test="_biasshame_noisebest_p0_n1"
             else
                 tag_biasparams_test="_biasshame_p0_n1"
             fi
@@ -163,9 +176,9 @@ set_test_tags_from_preset() {
         fixed_cosmo_shame_sample)
             tag_params_test="_shame_p0_n1000"
             if [[ "${noise_mode}" == "noisym2" ]]; then
-                tag_biasparams_test="_bias_shame_noisem2best_p0_n1"
+                tag_biasparams_test="_biasshame_noisem2best_p0_n1"
             elif [[ "${noise_mode}" == "noisy" ]]; then
-                tag_biasparams_test="_bias_shame_noisebest_p0_n1"
+                tag_biasparams_test="_biasshame_noisebest_p0_n1"
             else
                 tag_biasparams_test="_biasshame_p0_n1"
             fi
@@ -179,9 +192,9 @@ set_test_tags_from_preset() {
         ood)
             # PARAM_SETS_TEST["ood"]; generate_test_config_ood — no test noise/bias LH tags
             #local tag_mock="_nbar0.00011"
-            #local tag_mock="_nbar0.00022"
+            local tag_mock="_nbar0.00022"
             #local tag_mock="_nbar0.00022_phase0"
-            local tag_mock="_nbar0.00022_phasepi"
+            #local tag_mock="_nbar0.00022_phasepi"
             #local tag_mock="_nbar0.00054"
             tag_data_test="_shame${tag_stats}${tag_masks}${tag_mock}"
             ;;
@@ -210,16 +223,36 @@ submit_one_test_job() {
 
     tag_data_train="_muchisimocks${tag_stats}${tag_masks}${tag_params}${tag_biasparams}${tag_noise}"
     tag_inf_num="_bx${bx}_ntrain${n_train}"
-    tag_inf="${tag_data_train}${tag_rp}${tag_inf_num}${tag_sweep}"
-
-    # Omit repeated _muchisimocks{stats}{masks} from TEST when same as train (build_config_tag_test).
+    if [[ -n "${tag_sweep}" ]]; then
+        if [[ -n "${nth_best_run}" ]]; then
+            sweep_name="${tag_data_train}${tag_rp}${tag_inf_num}_sweep${tag_sweep}"
+            sweep_dir="${results_sbi_root}/sbi${sweep_name}"
+            run_id=$(sed -n "$((nth_best_run + 1))p" "${sweep_dir}/best_runs.txt")
+            if [[ -z "${run_id}" ]]; then
+                run_id=$(head -1 "${sweep_dir}/best_run.txt")
+            fi
+            if [[ -z "${run_id}" ]]; then
+                echo "ERROR: no run id in ${sweep_dir}/best_runs.txt or best_run.txt (nth_best_run=${nth_best_run})" >&2
+                exit 1
+            fi
+            tag_inf="${sweep_name}/${run_id}"
+            # Config filename uses index in best_runs.txt, not W&B run id.
+            tag_inf_file="${sweep_name}_nbest${nth_best_run}"
+        else
+            tag_inf="${tag_data_train}${tag_rp}${tag_inf_num}_best${tag_sweep}"
+            tag_inf_file="${tag_inf}"
+        fi
+    else
+        tag_inf="${tag_data_train}${tag_rp}${tag_inf_num}"
+        tag_inf_file="${tag_inf}"
+    fi
     shared_prefix="_muchisimocks${tag_stats}${tag_masks}"
     if [[ "${tag_data_test}" == "${shared_prefix}"* ]]; then
         test_part="${tag_data_test#${shared_prefix}}"
-        tag_test="_TRAIN${tag_inf}_TEST${test_part}${tag_mean}"
+        tag_test="_TRAIN${tag_inf_file}_TEST${test_part}${tag_mean}"
         test_suffix="${test_part}${tag_mean}"
     else
-        tag_test="_TRAIN${tag_inf}_TEST${tag_data_test}${tag_mean}"
+        tag_test="_TRAIN${tag_inf_file}_TEST${tag_data_test}${tag_mean}"
         test_suffix="${tag_data_test}${tag_mean}"
     fi
     config_test_file="../configs/configs_test/config${tag_test}.yaml"
@@ -241,10 +274,12 @@ submit_one_test_job() {
     submit_out=$(sbatch <<EOF
 #!/bin/bash
 #SBATCH --qos=regular
+##SBATCH --qos=long
 #SBATCH --job-name=${job_name}
 #SBATCH --output=${code_dir}/logs/inf_test_%j.out
 ##SBATCH --time=0:30:00
 #SBATCH --time=24:00:00
+##SBATCH --time=48:00:00
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=48G
@@ -256,9 +291,9 @@ echo "Current date and time: \$(date)"
 echo "Slurm job id is \${SLURM_JOB_ID}"
 echo "Running on node \${SLURMD_NODENAME}"
 echo "Working directory: \$(pwd)"
-echo "test_preset=${test_preset} noise_mode=${noise_mode}"
-echo "tag_stats=${tag_stats} tag_masks=${tag_masks}"
-echo "tag_test=${tag_test}"
+    echo "test_preset=${test_preset} noise_mode=${noise_mode} nth_best_run=${nth_best_run:-unset}"
+    echo "tag_stats=${tag_stats} tag_masks=${tag_masks}"
+    echo "tag_test=${tag_test}"
 echo "config_test_file: ${config_test_file}"
 
 . ~/load_modules.sh

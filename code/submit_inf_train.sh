@@ -1,35 +1,30 @@
 #!/bin/bash
 
-n_train_arr=(10000)
-bx_arr=(32)
-#n_train_arr=(500 1000 2000 4000 6000 8000 10000)
-#bx_arr=(1 2 4 8 16 32)
+#n_train_arr=(10000)
+#bx_arr=(32)
+n_train_arr=(500 1000 2000 4000 6000 8000 10000)
+bx_arr=(1 2 4 8 16 32)
 #n_train_arr=(80000 10000)
 #n_train_arr=(500 1000 2000 4000 6000)
 #bx_arr=(8 16 32)
 #bx_arr=(16 32)
 #bx_arr=(1 2 4)
 #bx_arr=(8 16 32)
-#tag_stats_arr=("_pk") 
+tag_stats_arr=("_pk_bispec")
+tag_masks_arr=("_kb0.25")
 #tag_stats_arr=("_pk_bispec")
 #tag_stats_arr=("_pk_pgm") 
 #tag_stats_arr=("_pk" "_pk_pgm") 
-#tag_stats_arr=("_pk_pgm" "_pk_bispec") 
-tag_stats_arr=("_pk_bispec_pgm")
-#tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
-#tag_stats_arr=("pk" "_pk_pgm" "_pk_bispec_pgm")
-#tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
-#tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.3" "_kb0.35" "_kb0.4")
-#tag_masks_arr=("_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "_kb0.4")
-#tag_masks_arr=("_kb0.25_kpgm0.35")
-#tag_masks_arr=("_kb0.1")
+#tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec") 
+#tag_masks_arr=("" "_kpgm0.25" "_kb0.25")
+#tag_stats_arr=("_pk_bispec_pgm")
+#tag_masks_arr=("_kb0.25_kpgm0.25")
 #tag_masks_arr=("")
 # _pk_bispec_pgm: same grid as generate_config_inference.py main() (tags_mask = ["", kb, kpgm] → tag_masks = kb+kpgm).
 #tag_mask_bispec_arr=("_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
 #tag_mask_pgm_arr=("_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
 #tag_masks_arr=("" "_kpgm0.25")
 #tag_masks_arr=("_kb0.25")
-tag_masks_arr=("_kb0.25" "_kb0.25_kpgm0.25")
 
 # for kb in "${tag_mask_bispec_arr[@]}"; do
 #     for kpgm in "${tag_mask_pgm_arr[@]}"; do
@@ -46,8 +41,8 @@ for n_train in "${n_train_arr[@]}"; do
                 tag_params="_p5_n10000"
                 #tag_biasparams="_biasnest_p4_n320000"  
                 #tag_noise=""
-                #tag_biasparams="_biasnoisenest_p9_n320000"
-                tag_biasparams="_biasnoisem2nest_p7_n320000"
+                tag_biasparams="_biasnoisenest_p9_n320000"
+                #tag_biasparams="_biasnoisem2nest_p7_n320000"
                 tag_noise="_noise_unit_p5_n10000"
                 #if [[ "$tag_stats" != *bispec* ]]; then # fiducial masks
                 # if [[ "$tag_stats" != *pgm* ]]; then # fiducial masks

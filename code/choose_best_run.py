@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
 """
-Rank sweep runs by min validation loss, smoke-test in order, write ``best_run_log.csv``
-and ``best_run.txt`` under the sweep ``dir_sbi``. Stops after the first run that passes.
+Rank sweep runs by min validation loss, smoke-test in order, write ``best_run_log.csv``,
+``best_run.txt`` (lowest-loss passing run), and ``best_runs.txt`` (up to ``--n-passing``
+passing runs, in loss order). Keeps testing until that many runs pass or the ranked list
+is exhausted.
+
+Each candidate run must pass **both** smoke tests (same ``--batch-timeout-seconds``):
+
+1. **Coverage** — first ``--stall-batch-size`` rows; ``--n-samples`` (default 20).
+2. **SHAMe OOD** — single mock at ``--shame-tag-mock`` (default ``_nbar0.00022``); ``--n-samples-shame`` (default 100).
+   Pass ``--n-samples-shame 0`` to skip SHAMe entirely (coverage-only stall test).
+
+``pass_stall_test`` in the log is ``true`` only when all enabled component columns are ``true``.
 
 Use ``--tags_stat`` like ``_pk_bispec`` (leading ``_`` optional). Masking is chosen
 automatically: fiducial empty ``''`` per statistic, except ``_kb0.25`` on ``bispec``
@@ -56,6 +66,19 @@ _RUN_DIR_RE = re.compile(r"^[a-z0-9]{8,}$")
 
 BEST_RUN_LOG_CSV = "best_run_log.csv"
 BEST_RUN_ID_TXT = "best_run.txt"
+BEST_RUNS_TXT = "best_runs.txt"
+
+# best_run_log.csv columns (pass_* are '', 'true', or 'false')
+LOG_COL_PASS_COVERAGE = "pass_coverage_stall_test"
+LOG_COL_PASS_SHAME = "pass_shame_ood_stall_test"
+LOG_COL_PASS_COMBINED = "pass_stall_test"
+LOG_CSV_HEADER = [
+    "run_name",
+    "best_val_loss",
+    LOG_COL_PASS_COVERAGE,
+    LOG_COL_PASS_SHAME,
+    LOG_COL_PASS_COMBINED,
+]
 
 
 def parse_tags_stat(tags_stat: str) -> tuple[list[str], list[str]]:
@@ -166,6 +189,16 @@ def load_coverage_blocks(
     return [np.asarray(y_raw[i][:n_use], dtype=np.float64) for i in range(len(statistics))]
 
 
+def load_shame_ood_y_obs(
+    statistics: list[str],
+    tags_mask: list[str],
+    tag_mock: str,
+) -> list[np.ndarray]:
+    """SHAMe OOD mock: one 1D summary vector per statistic (same masks as training)."""
+    _, y, _ = data_loader.load_data_ood("shame", statistics, tag_mock, tags_mask=tags_mask)
+    return [np.asarray(y[i], dtype=np.float64).ravel() for i in range(len(statistics))]
+
+
 def _tag_sbi_for_run_dir(sweep_root: Path, run_dir: Path) -> str:
     name = sweep_root.name
     if not name.startswith("sbi") or len(name) < 4:
@@ -195,8 +228,13 @@ def _rank_run_dirs(
 
 # --- best_run_log.csv: resume + full ranking each write --------------------
 
+def _norm_pass_cell(value: str | None) -> str:
+    p = (value or "").strip().lower()
+    return p if p in ("true", "false") else ""
+
+
 def read_best_run_log(path: Path) -> dict[str, dict[str, str]]:
-    """run_name -> {best_val_loss, pass_stall_test}; pass empty if pending."""
+    """run_name -> log columns; pass fields empty if pending."""
     if not path.is_file():
         return {}
     out: dict[str, dict[str, str]] = {}
@@ -214,28 +252,39 @@ def read_best_run_log(path: Path) -> dict[str, dict[str, str]]:
                 continue
             out[rid] = {
                 "best_val_loss": (row.get("best_val_loss") or "").strip(),
-                "pass_stall_test": (row.get("pass_stall_test") or "").strip().lower(),
+                LOG_COL_PASS_COVERAGE: _norm_pass_cell(
+                    row.get(LOG_COL_PASS_COVERAGE)
+                ),
+                LOG_COL_PASS_SHAME: _norm_pass_cell(row.get(LOG_COL_PASS_SHAME)),
+                LOG_COL_PASS_COMBINED: _norm_pass_cell(
+                    row.get(LOG_COL_PASS_COMBINED) or row.get("pass_stall_test")
+                ),
             }
     return out
 
 
-def write_best_run_log(
-    path: Path,
-    rows: list[tuple[str, float | None, str]],
-) -> None:
+def write_best_run_log(path: Path, rows: list[tuple[str, float | None, str, str, str]]) -> None:
     """
-    rows: (run_name, best_val_loss, pass_stall_test) — pass is '', 'true', or 'false'.
+    rows: (run_name, best_val_loss, pass_coverage, pass_shame, pass_combined).
     Sorted by loss (min first) already expected.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     with open(tmp, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f, lineterminator="\n")
-        w.writerow(["run_name", "best_val_loss", "pass_stall_test"])
-        for name, loss, p in rows:
+        w.writerow(LOG_CSV_HEADER)
+        for name, loss, p_cov, p_shame, p_all in rows:
             loss_s = "" if loss is None else "%.8g" % loss
-            w.writerow([name, loss_s, p])
+            w.writerow([name, loss_s, p_cov, p_shame, p_all])
     tmp.replace(path)
+
+
+def log_row_fully_scored(rec: dict[str, str], *, skip_shame: bool = False) -> bool:
+    """True when enabled component smoke tests and combined pass are recorded."""
+    cols = [LOG_COL_PASS_COVERAGE, LOG_COL_PASS_COMBINED]
+    if not skip_shame:
+        cols.insert(1, LOG_COL_PASS_SHAME)
+    return all(rec.get(col) in ("true", "false") for col in cols)
 
 
 def write_best_run_id(path: Path, run_id: str) -> None:
@@ -251,19 +300,71 @@ def clear_best_run_id(path: Path) -> None:
         path.unlink()
 
 
+def clear_best_runs_ids(path: Path) -> None:
+    if path.is_file():
+        path.unlink()
+
+
+def count_passing_rows(rows: list[tuple[str, float | None, str, str, str]]) -> int:
+    return sum(1 for _name, _loss, _pc, _ps, p in rows if p == "true")
+
+
+def passing_run_ids_in_rank_order(
+    ranked: list[tuple[Path, float | None, dict]],
+    rows: list[tuple[str, float | None, str, str, str]],
+) -> list[str]:
+    """Run ids with ``pass_stall_test=true``, best validation loss first."""
+    pmap = {name: p_all for name, _loss, _pc, _ps, p_all in rows}
+    return [rd.name for rd, _mv, _lm in ranked if pmap.get(rd.name) == "true"]
+
+
+def write_best_run_outputs(
+    id_path: Path,
+    runs_path: Path,
+    ranked: list[tuple[Path, float | None, dict]],
+    rows: list[tuple[str, float | None, str, str, str]],
+    n_passing: int,
+) -> list[str]:
+    """
+    ``best_run.txt``: lowest-loss passing id (for run_mode=best).
+    ``best_runs.txt``: up to ``n_passing`` passing ids, loss order.
+    """
+    passed = passing_run_ids_in_rank_order(ranked, rows)
+    if not passed:
+        clear_best_run_id(id_path)
+        clear_best_runs_ids(runs_path)
+        return []
+    write_best_run_id(id_path, passed[0])
+    runs_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = runs_path.with_name(runs_path.name + ".tmp")
+    tmp.write_text("\n".join(passed[:n_passing]) + "\n", encoding="utf-8")
+    tmp.replace(runs_path)
+    return passed[:n_passing]
+
+
 def merge_rows_for_write(
     ranked: list[tuple[Path, float | None, dict]],
     saved: dict[str, dict[str, str]],
-) -> list[tuple[str, float | None, str]]:
-    """Fresh val losses; stall pass from file when already 'true' or 'false'."""
-    rows: list[tuple[str, float | None, str]] = []
+    *,
+    skip_shame: bool = False,
+) -> list[tuple[str, float | None, str, str, str]]:
+    """Fresh val losses; pass columns from file when fully scored."""
+    rows: list[tuple[str, float | None, str, str, str]] = []
     for rd, mv, _ls in ranked:
         rid = rd.name
         rec = saved.get(rid, {})
-        p = rec.get("pass_stall_test", "")
-        if p not in ("true", "false"):
-            p = ""
-        rows.append((rid, mv, p))
+        if log_row_fully_scored(rec, skip_shame=skip_shame):
+            rows.append(
+                (
+                    rid,
+                    mv,
+                    rec[LOG_COL_PASS_COVERAGE],
+                    rec[LOG_COL_PASS_SHAME],
+                    rec[LOG_COL_PASS_COMBINED],
+                )
+            )
+        else:
+            rows.append((rid, mv, "", "", ""))
     return rows
 
 
@@ -336,18 +437,46 @@ def _eval_batch_worker(
         root.setLevel(prev_level)
 
 
+def _build_y_batch(
+    y_per_stat: list[np.ndarray],
+    *,
+    start: int,
+    batch_size: int,
+) -> tuple[list[np.ndarray], int, str]:
+    """Return (y_batch for evaluate, n_obs, timeout label fragment)."""
+    out = []
+    n_obs = 1
+    for block in y_per_stat:
+        block = np.asarray(block, dtype=np.float64)
+        if block.ndim == 1:
+            out.append(block)
+        elif block.ndim == 2:
+            end = min(start + batch_size, block.shape[0])
+            n_obs = end - start
+            out.append(block[start:end])
+        else:
+            raise ValueError("Unexpected y block shape %s" % (block.shape,))
+    if out[0].ndim == 1:
+        label = "SHAMe OOD mock (1 obs)"
+    else:
+        label = "batch of %d coverage obs" % n_obs
+    return out, n_obs, label
+
+
 def run_smoke_eval(
     sweep_root: Path,
     run_dir: Path,
     statistics: list[str],
-    y_cov_nb: list[np.ndarray],
-    stall_batch_size: int,
+    y_per_stat: list[np.ndarray],
     batch_timeout_seconds: float,
     n_samples: int,
+    *,
+    start: int = 0,
+    batch_size: int = 1,
 ) -> dict[str, Any]:
-    n_rows = int(y_cov_nb[0].shape[0])
-    bs = min(stall_batch_size, n_rows)
-    y_batch = _coverage_batch_unscaled(y_cov_nb, 0, bs)
+    y_batch, _n_obs, obs_label = _build_y_batch(
+        y_per_stat, start=start, batch_size=batch_size
+    )
     tag_sbi = _tag_sbi_for_run_dir(sweep_root, run_dir)
     param_names = list(np.loadtxt(run_dir / "param_names.txt", dtype=str))
 
@@ -365,7 +494,7 @@ def run_smoke_eval(
             proc.join(timeout=10.0)
             return {
                 "status": "timeout",
-                "reason": "batch of %d obs exceeded %.0fs" % (bs, batch_timeout_seconds),
+                "reason": "%s exceeded %.0fs" % (obs_label, batch_timeout_seconds),
             }
         if proc.exitcode not in (0, None):
             return {"status": "error", "reason": "worker exit %s" % proc.exitcode}
@@ -386,13 +515,68 @@ def run_smoke_eval(
             return {"status": "ok", **pl}
         return {"status": "error", "reason": "unknown %r" % (kind,)}
     finally:
-        # Avoid resource_tracker "leaked semaphore" warnings when the worker is
-        # terminated or when the queue is not fully torn down by the child.
         try:
             q.close()
             q.join_thread()
         except Exception:
             pass
+
+
+def _pass_cell_from_status(status: str) -> str:
+    return "true" if status == "ok" else "false"
+
+
+def run_dual_smoke_eval(
+    sweep_root: Path,
+    run_dir: Path,
+    statistics: list[str],
+    y_cov_nb: list[np.ndarray],
+    y_shame_ood: list[np.ndarray],
+    stall_batch_size: int,
+    batch_timeout_seconds: float,
+    n_samples_coverage: int,
+    n_samples_shame: int,
+) -> dict[str, Any]:
+    """Coverage batch smoke test, then SHAMe OOD mock; same timeout, sample counts may differ."""
+    res_cov = run_smoke_eval(
+        sweep_root,
+        run_dir,
+        statistics,
+        y_cov_nb,
+        batch_timeout_seconds,
+        n_samples_coverage,
+        start=0,
+        batch_size=stall_batch_size,
+    )
+    ok_cov = res_cov.get("status") == "ok"
+    if n_samples_shame <= 0:
+        combined = "ok" if ok_cov else "fail"
+        return {
+            "status": combined,
+            "coverage": res_cov,
+            "shame": {"status": "skipped"},
+            "pass_coverage": _pass_cell_from_status(res_cov.get("status", "")),
+            "pass_shame": "",
+        }
+    res_shame = run_smoke_eval(
+        sweep_root,
+        run_dir,
+        statistics,
+        y_shame_ood,
+        batch_timeout_seconds,
+        n_samples_shame,
+        start=0,
+        batch_size=1,
+    )
+    ok_shame = res_shame.get("status") == "ok"
+    combined = "ok" if ok_cov and ok_shame else "fail"
+    return {
+        "status": combined,
+        "coverage": res_cov,
+        "shame": res_shame,
+        "pass_coverage": _pass_cell_from_status(res_cov.get("status", "")),
+        "pass_shame": _pass_cell_from_status(res_shame.get("status", "")),
+    }
 
 
 def parse_args() -> argparse.Namespace:
@@ -408,10 +592,32 @@ def parse_args() -> argparse.Namespace:
     )
     # if stall_batch_size is only 10, won't fail when we know it does later
     p.add_argument("--stall-batch-size", type=int, default=100)
+    
+    # updated these settings - wasn't getting consistent results with the first setting unfortunately
+    #p.add_argument("--batch-timeout-seconds", type=float, default=300.0)
     p.add_argument("--batch-timeout-seconds", type=float, default=300.0)
     # fiducial is 10000. for 1000 with stall_batch_size=100, takes more an 300 seconds for working ones to work
     # aiming for 100 samples seems to be enough
-    p.add_argument("--n-samples", type=int, default=100)
+    #p.add_argument("--n-samples", type=int, default=100)
+    p.add_argument(
+        "--n-samples",
+        type=int,
+        default=30,
+        help="Posterior samples per obs in the coverage stall batch (default 30)",
+    )
+    p.add_argument(
+        "--n-samples-shame",
+        type=int,
+        default=0,
+        help="Posterior samples for the SHAMe OOD stall test (default 1000; 0 = skip SHAMe)",
+    )
+    p.add_argument(
+        "--n-passing",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Stop after N runs pass enabled stall tests (default 1)",
+    )
     p.add_argument("--n-cosmo-max", type=int, default=1000)
     p.add_argument("--n-cov-rows", type=int, default=None)
     p.add_argument(
@@ -431,6 +637,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         default=False,
         help="Ignore best_run_log.csv resume state and re-run stall tests from scratch",
+    )
+    p.add_argument(
+        "--shame-tag-mock",
+        default="_nbar0.00022",
+        metavar="TAG",
+        help="SHAMe OOD mock tag for the second smoke test (default _nbar0.00022)",
     )
     return p.parse_args()
 
@@ -453,9 +665,18 @@ def process_one_combo(
         reparameterize=args.reparameterize,
         tag_sweep=args.tag_sweep,
     )
+    if args.n_passing < 1:
+        raise ValueError("--n-passing must be >= 1, got %r" % (args.n_passing,))
+    if args.n_samples_shame < 0:
+        raise ValueError(
+            "--n-samples-shame must be >= 0, got %r" % (args.n_samples_shame,)
+        )
+    skip_shame = args.n_samples_shame == 0
+
     sweep_root = sweep_root_for_tag_inf(tag_inf)
     log_path = sweep_root / BEST_RUN_LOG_CSV
     id_path = sweep_root / BEST_RUN_ID_TXT
+    runs_path = sweep_root / BEST_RUNS_TXT
     run_dirs = list_run_dirs(sweep_root)
     ranked = _rank_run_dirs(run_dirs)
 
@@ -469,13 +690,18 @@ def process_one_combo(
     if args.overwrite:
         saved = {}
         clear_best_run_id(id_path)
-        print("  overwrite: ignoring resume; cleared %s" % id_path, flush=True)
+        clear_best_runs_ids(runs_path)
+        print(
+            "  overwrite: ignoring resume; cleared %s and %s"
+            % (id_path, runs_path),
+            flush=True,
+        )
     else:
         saved = read_best_run_log(log_path)
         cur_ids = {rd.name for rd, _, _ in ranked}
         saved = {k: v for k, v in saved.items() if k in cur_ids}
 
-    rows = merge_rows_for_write(ranked, saved)
+    rows = merge_rows_for_write(ranked, saved, skip_shame=skip_shame)
     write_best_run_log(log_path, rows)
     print("  Wrote baseline %s (%d runs)" % (log_path, len(rows)), flush=True)
 
@@ -488,50 +714,114 @@ def process_one_combo(
         n_cosmo_max=args.n_cosmo_max,
         n_cov_rows=args.n_cov_rows,
     )
+    y_shame_ood: list[np.ndarray] = []
+    if skip_shame:
+        print(
+            "  Smoke tests: coverage only (batch %d, n_samples=%d); SHAMe disabled"
+            % (args.stall_batch_size, args.n_samples),
+            flush=True,
+        )
+    else:
+        y_shame_ood = load_shame_ood_y_obs(
+            statistics, tags_mask, args.shame_tag_mock
+        )
+        print(
+            "  Smoke tests: coverage (batch %d, n_samples=%d) + SHAMe OOD %s (n_samples=%d)"
+            % (
+                args.stall_batch_size,
+                args.n_samples,
+                args.shame_tag_mock,
+                args.n_samples_shame,
+            ),
+            flush=True,
+        )
+
+    n_target = args.n_passing
+    n_pass = count_passing_rows(rows)
+    if n_pass >= n_target:
+        chosen = write_best_run_outputs(id_path, runs_path, ranked, rows, n_target)
+        print(
+            "  Already have %d passing run(s) (target %d); wrote %s and %s: %s"
+            % (n_pass, n_target, id_path.name, runs_path.name, ", ".join(chosen)),
+            flush=True,
+        )
+        return
+
+    print("  Target: %d passing runs (have %d so far)" % (n_target, n_pass), flush=True)
 
     for i, (rd, mv, _lm) in enumerate(ranked):
         rid = rd.name
         idx = next(j for j, x in enumerate(rows) if x[0] == rid)
-        _, _, pcur = rows[idx]
-        if pcur in ("true", "false"):
+        _, _, p_cov, p_shame, pcur = rows[idx]
+        scored = (
+            p_cov in ("true", "false")
+            and (skip_shame or p_shame in ("true", "false"))
+            and pcur in ("true", "false")
+        )
+        if scored:
             print(
-                "  [%d] %s  loss=%s  pass_stall_test=%s (resume, skip)"
-                % (i + 1, rid, mv, pcur),
+                "  [%d] %s  loss=%s  coverage=%s shame=%s pass=%s (resume, skip)"
+                % (i + 1, rid, mv, p_cov, p_shame, pcur),
                 flush=True,
             )
-            if pcur == "true":
-                write_best_run_id(id_path, rid)
-                print("  CHOSEN (from file): %s  wrote %s" % (rid, id_path), flush=True)
-                return
-            continue
-
-        print("  [%d] smoke test %s ..." % (i + 1, rid), flush=True)
-        res = run_smoke_eval(
-            sweep_root,
-            rd,
-            statistics,
-            y_cov_nb,
-            args.stall_batch_size,
-            args.batch_timeout_seconds,
-            args.n_samples,
-        )
-        passed = res.get("status") == "ok"
-        pnew = "true" if passed else "false"
-        rows[idx] = (rid, mv, pnew)
-        write_best_run_log(log_path, rows)
-        print("    -> %s  wrote %s" % (res, log_path), flush=True)
-
-        if passed:
-            write_best_run_id(id_path, rid)
+            if pcur == "false":
+                continue
+        else:
+            print("  [%d] smoke test %s ..." % (i + 1, rid), flush=True)
+            res = run_dual_smoke_eval(
+                sweep_root,
+                rd,
+                statistics,
+                y_cov_nb,
+                y_shame_ood,
+                args.stall_batch_size,
+                args.batch_timeout_seconds,
+                args.n_samples,
+                args.n_samples_shame,
+            )
+            p_cov = res["pass_coverage"]
+            p_shame = res["pass_shame"]
+            pnew = "true" if res.get("status") == "ok" else "false"
+            rows[idx] = (rid, mv, p_cov, p_shame, pnew)
+            write_best_run_log(log_path, rows)
             print(
-                "  CHOSEN: %s  min_val_loss=%s  wrote %s"
-                % (rid, mv, id_path),
+                "    -> coverage=%s  shame=%s  pass=%s  wrote %s"
+                % (res["coverage"], res["shame"], pnew, log_path),
+                flush=True,
+            )
+            pcur = pnew
+
+        n_pass = count_passing_rows(rows)
+        if pcur == "true":
+            chosen = write_best_run_outputs(id_path, runs_path, ranked, rows, n_target)
+            print(
+                "  passing %d/%d  best_run=%s  best_runs=%s"
+                % (n_pass, n_target, chosen[0] if chosen else "?", ", ".join(chosen)),
+                flush=True,
+            )
+        if n_pass >= n_target:
+            print(
+                "  Done: %d passing runs (target %d)." % (n_pass, n_target),
                 flush=True,
             )
             return
 
-    clear_best_run_id(id_path)
-    print("  No run passed stall test. (cleared %s if present)" % id_path, flush=True)
+    n_pass = count_passing_rows(rows)
+    if n_pass:
+        chosen = write_best_run_outputs(id_path, runs_path, ranked, rows, n_target)
+        print(
+            "  Exhausted ranked list with %d passing run(s) (target %d): %s"
+            % (n_pass, n_target, ", ".join(chosen)),
+            flush=True,
+        )
+    else:
+        clear_best_run_id(id_path)
+        clear_best_runs_ids(runs_path)
+        print(
+            "  No run passed stall test (cleared %s and %s)."
+            % (id_path.name, runs_path.name),
+            flush=True,
+        )
 
 
 def main() -> int:

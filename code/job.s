@@ -1,4 +1,5 @@
 #!/bin/bash
+# Submit: cd "$(dirname "$0")" && mkdir -p logs && sbatch "$0"
 #SBATCH --qos=regular
 #SBATCH --job-name=xx
 #SBATCH --time=4:00:00
