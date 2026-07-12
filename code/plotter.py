@@ -1054,25 +1054,39 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       figsize=(7,7), fontsize_legend=18,
                       extents={}, title=None, unreparameterize=False,
                       shades=None, loc_legend=(1.05, 1.0), add_truth=True,
-                      truth_locations=None, truth_colors=None, truth_marker="o"):
-    if title is None:
-        title = f'test model {idx_obs}'
+                      truth_locations=None, truth_colors=None, truth_marker="o",
+                      samples_list=None, show_label_in_legend=None, linewidths=None,
+                      linestyles=None):
+    """
+    Plot posterior contours for one or more inference runs.
+
+    samples_list: optional, parallel to inf_methods. Each entry is None (load from
+    disk via tags) or a (samples_2d, param_names) tuple to use in-memory samples.
+    show_label_in_legend: optional bool list parallel to inf_methods.
+    linewidths: optional float list parallel to inf_methods.
+    linestyles: optional str list parallel to inf_methods (e.g. '-', '--').
+    """
     
     # Get all chains and their available parameters
     all_chains_data = []
     all_param_names_per_chain = []
     
     for i, inf_method in enumerate(inf_methods):
-        if tags_test is None:
-            tag_test = ''
+        if samples_list is not None and samples_list[i] is not None:
+            samples, param_names_samples = samples_list[i]
+            samples = np.asarray(samples)
+            param_names_samples = np.asarray(param_names_samples)
         else:
-            tag_test = tags_test[i]
-        samples, param_names_samples = utils_inference.get_samples(
-            idx_obs,
-            inf_method,
-            tags_inf[i],
-            tag_test=tag_test,
-        )
+            if tags_test is None:
+                tag_test = ''
+            else:
+                tag_test = tags_test[i]
+            samples, param_names_samples = utils_inference.get_samples(
+                idx_obs,
+                inf_method,
+                tags_inf[i],
+                tag_test=tag_test,
+            )
         
         # Check which requested parameters are available in this chain
         available_params = [pn for pn in param_names if pn in param_names_samples]
@@ -1202,10 +1216,16 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             #plot_cloud=True,
             plot_cloud=False,
         )
-        if shades is not None:
-            orig_idx = chain_data['orig_idx']
-            if orig_idx < len(shades):
-                chain_kwargs['shade'] = shades[orig_idx]
+        orig_idx = chain_data['orig_idx']
+        if shades is not None and orig_idx < len(shades):
+            chain_kwargs['shade'] = shades[orig_idx]
+            chain_kwargs['bar_shade'] = shades[orig_idx]
+        if show_label_in_legend is not None and orig_idx < len(show_label_in_legend):
+            chain_kwargs['show_label_in_legend'] = show_label_in_legend[orig_idx]
+        if linewidths is not None and orig_idx < len(linewidths):
+            chain_kwargs['linewidth'] = linewidths[orig_idx]
+        if linestyles is not None and orig_idx < len(linestyles):
+            chain_kwargs['linestyle'] = linestyles[orig_idx]
         c.add_chain(chainconsumer.Chain(**chain_kwargs))
 
     # ChainConsumer only flips 1D histograms when n_params==2; flip=True with n>2 still

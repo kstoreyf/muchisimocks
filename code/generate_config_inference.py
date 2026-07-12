@@ -696,18 +696,18 @@ def main():
     #nth_best_run = 4  # index in best_runs.txt; loop range(5) for top-5 configs
 
     stat_arr = [
-        ["pk"],
-        ["pk", "pgm"],
-        ["pk", "bispec"],
+        #["pk"],
+        #["pk", "pgm"],
+        #["pk", "bispec"],
         # ["pk", "bispec", "pgm"],
-        #["pk", "bispec", "pgm"],
+        ["pk", "bispec", "pgm"],
     ]
     tags_mask_arr = [
-        [""],
-        ["", "_kpgm0.25"],    
-        ["", "_kb0.25"],
+        # [""],
+        # ["", "_kpgm0.25"],    
+        # ["", "_kb0.25"],
         #["", "_kb0.25", ""],
-        #["", "_kb0.25", "_kpgm0.25"],
+        ["", "_kb0.25", "_kpgm0.25"],
     ]
     #tags_mask_arr = [["", "_kpgm0.25"]]
     #tags_mask_arr = [["", ""]]
@@ -719,11 +719,15 @@ def main():
     #tag_mask_bispec_arr = ["_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
     #tag_mask_pgm_arr = ["_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
     #tags_mask_arr = [["", tag_mask_bispec, tag_mask_pgm] for tag_mask_bispec in tag_mask_bispec_arr for tag_mask_pgm in tag_mask_pgm_arr]
+    #tag_mask_bispec_arr = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
+    #tag_mask_pgm_arr = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
+    #tags_mask_arr = [["", tag_mask_bispec, tag_mask_pgm] for tag_mask_bispec in tag_mask_bispec_arr for tag_mask_pgm in tag_mask_pgm_arr]
     
-    #n_train_arr = [10000]
-    #bx_arr = [32]
-    n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
-    bx_arr = [1, 2, 4, 8, 16, 32]
+
+    n_train_arr = [10000]
+    bx_arr = [32]
+    #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
+    #bx_arr = [1, 2, 4, 8, 16, 32]
 
     # assert len(tags_mask_arr) == len(stat_arr), (
     #     "tags_mask_arr must have one entry per stat_arr row (aligned lengths and statistics)"
@@ -733,8 +737,8 @@ def main():
             for bx in bx_arr:
                 for j,tags_mask in enumerate(tags_mask_arr):
                     # uncomment if you want to run a single tags_mask aligned with the statistics
-                    if i!=j:
-                        continue
+                    #if i!=j:
+                    #    continue
                     print(statistics)
                     print(tags_mask)
                     #tags_mask = [tag_mask_pgm if s == "pgm" else "" for s in statistics]
@@ -753,9 +757,10 @@ def main():
                     elif mode == "test":
                         #for test_name in PARAM_SETS_TEST:
                         #for test_name in ["ood"]:
-                        for test_name in ["ood", "coverage", "fixed_cosmo_shame_mean"]:
+                        #for test_name in ["ood", "coverage", "fixed_cosmo_shame_mean"]:
                         #for test_name in ["coverage", "ood"]:
                         #for test_name in ["coverage", "fixed_cosmo_shame_mean"]:
+                        for test_name in ["fixed_cosmo_shame_sample"]:
                             generate_test_config_from_preset(
                                 test_name,
                                 tag_params=tag_params_train,

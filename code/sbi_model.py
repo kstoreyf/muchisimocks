@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import os
+import queue
 import re
 import shutil
 from types import SimpleNamespace
@@ -834,11 +835,93 @@ class SBIModel():
         )
 
     @staticmethod
+    def _obs_is_usable(samples_arr, obs_idx=0):
+        """True if this observation has any finite posterior draw (failed batches are all-NaN)."""
+        if samples_arr is None:
+            return False
+        if samples_arr.ndim == 2:
+            return bool(np.any(np.isfinite(samples_arr)))
+        if samples_arr.ndim == 3:
+            if obs_idx < 0 or obs_idx >= samples_arr.shape[1]:
+                return False
+            return bool(np.any(np.isfinite(samples_arr[:, obs_idx, :])))
+        raise ValueError(
+            f"Unexpected samples array shape {samples_arr.shape}; expected 2D or 3D"
+        )
+
+    @staticmethod
+    def samples_array_fully_usable(samples_arr, samples_total=None):
+        """
+        True if ``samples_arr`` covers ``samples_total`` obs (or all stored obs when
+        ``samples_total`` is None) with no all-NaN placeholders.
+        """
+        if samples_arr is None:
+            return False
+        n_stored = SBIModel._n_test_obs_in_samples(samples_arr)
+        n_need = n_stored if samples_total is None else int(samples_total)
+        if n_stored < n_need:
+            return False
+        if samples_arr.ndim == 2:
+            return SBIModel._obs_is_usable(samples_arr)
+        return all(SBIModel._obs_is_usable(samples_arr, i) for i in range(n_need))
+
+    @staticmethod
+    def pending_obs_indices(samples_arr, samples_total):
+        """Obs indices that are missing from the array or currently all-NaN."""
+        pending = []
+        n_stored = 0 if samples_arr is None else SBIModel._n_test_obs_in_samples(samples_arr)
+        for i in range(int(samples_total)):
+            if samples_arr is None or i >= n_stored or not SBIModel._obs_is_usable(samples_arr, i):
+                pending.append(i)
+        return pending
+
+    @staticmethod
     def _nan_batch_samples(n_samples, batch_size, n_params):
         """Placeholder block for a timed-out coverage batch (axis-1 slots stay aligned)."""
         if batch_size == 1:
             return np.full((n_samples, n_params), np.nan, dtype=np.float64)
         return np.full((n_samples, batch_size, n_params), np.nan, dtype=np.float64)
+
+    @staticmethod
+    def _ensure_samples_canvas(existing_samples, samples_total, n_draws, n_params):
+        """
+        Full (n_draws, samples_total, n_params) canvas; copy any existing obs slots.
+        Single-obs 2D arrays are expanded to 3D for uniform slot writes.
+        """
+        canvas = np.full(
+            (int(n_draws), int(samples_total), int(n_params)),
+            np.nan,
+            dtype=np.float64,
+        )
+        if existing_samples is None:
+            return canvas
+        if existing_samples.ndim == 2:
+            canvas[:, 0, :] = np.asarray(existing_samples, dtype=np.float64)
+            return canvas
+        n_copy = min(existing_samples.shape[1], int(samples_total))
+        canvas[:, :n_copy, :] = np.asarray(existing_samples[:, :n_copy, :], dtype=np.float64)
+        return canvas
+
+    @staticmethod
+    def _write_batch_into_canvas(canvas, obs_indices, batch_samples):
+        """Write a batch result into canvas columns ``obs_indices``."""
+        batch_samples = np.asarray(batch_samples)
+        if batch_samples.ndim == 2:
+            if len(obs_indices) != 1:
+                raise ValueError(
+                    f"2D batch samples for {len(obs_indices)} obs indices; expected 1"
+                )
+            canvas[:, obs_indices[0], :] = batch_samples
+            return canvas
+        if batch_samples.ndim != 3:
+            raise ValueError(f"Unexpected batch samples shape {batch_samples.shape}")
+        if batch_samples.shape[1] != len(obs_indices):
+            raise ValueError(
+                f"Batch width {batch_samples.shape[1]} != len(obs_indices)={len(obs_indices)}"
+            )
+        for j, obs_idx in enumerate(obs_indices):
+            canvas[:, obs_idx, :] = batch_samples[:, j, :]
+        return canvas
 
     def _evaluate_batch_with_timeout(
         self,
@@ -871,8 +954,11 @@ class SBIModel():
         )
         proc.start()
         try:
-            proc.join(timeout=float(batch_timeout_seconds))
-            if proc.is_alive():
+            # Get before join: a large q.put() blocks until the parent reads, so
+            # join-then-get deadlocks once the payload exceeds the pipe buffer.
+            try:
+                status, payload = q.get(timeout=float(batch_timeout_seconds))
+            except queue.Empty:
                 proc.terminate()
                 proc.join(timeout=10.0)
                 print(
@@ -885,11 +971,14 @@ class SBIModel():
                     ),
                     True,
                 )
+            proc.join(timeout=10.0)
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(timeout=5.0)
             if proc.exitcode not in (0, None):
                 raise RuntimeError(
                     f"Batch worker exited with code {proc.exitcode}"
                 )
-            status, payload = q.get(timeout=5.0)
             if status != "ok":
                 raise RuntimeError(f"Batch worker failed: {payload}")
             return payload, False
@@ -927,69 +1016,82 @@ class SBIModel():
             samples_total = 1
         else:
             samples_total = len(y_test_unscaled[0])
-        samples_completed = 0
         existing_samples = None
         
         print(f"Checkpoint file: {checkpoint_file}")
         
-        if resume and not self.overwrite:
-                        
-            # Check if final file already exists (complete run)
-            if os.path.exists(fn_samples_test_pred):
-                existing_samples = np.load(fn_samples_test_pred)
-                n_obs_done = self._n_test_obs_in_samples(existing_samples)
-                if n_obs_done >= samples_total:
-                    print(
-                        f"Found complete samples file: {fn_samples_test_pred} "
-                        f"with {n_obs_done}/{samples_total} test observations "
-                        f"(array shape {existing_samples.shape})"
-                    )
-                    return
-            
-            # Check existing in-progress samples file
-            if os.path.exists(fn_samples_test_pred_inprogress):
-                existing_samples = np.load(fn_samples_test_pred_inprogress)
-                samples_completed = self._n_test_obs_in_samples(existing_samples)
-                print(
-                    f"Found existing in-progress samples file with "
-                    f"{samples_completed}/{samples_total} test observations "
-                    f"(array shape {existing_samples.shape})"
-                )
-                
-            # Check checkpoint file for consistency
-            if os.path.exists(checkpoint_file):
-                with open(checkpoint_file, 'r') as f:
-                    checkpoint_count = int(f.read().strip())
-                print(f"Checkpoint file indicates {checkpoint_count} completed test observations")
-                
-                # Use the checkpoint count if consistent, otherwise trust the samples file
-                if existing_samples is not None:
-                    n_obs_in_file = self._n_test_obs_in_samples(existing_samples)
-                    if checkpoint_count == n_obs_in_file:
-                        samples_completed = checkpoint_count
-                    else:
-                        print(
-                            f"Checkpoint mismatch (checkpoint={checkpoint_count}, "
-                            f"file axis-1={n_obs_in_file}) - using file count"
-                        )
-                        samples_completed = n_obs_in_file
-                else:
-                    samples_completed = checkpoint_count
-            
-            if samples_completed >= samples_total:
-                print(f"All {samples_total} test observations already completed!")
-                return
-                
-            if samples_completed > 0:
-                print(f"Resuming from {samples_completed}/{samples_total} completed test observations")
-        
         if self.overwrite:
             print("Overwrite is True - starting fresh")
-            samples_completed = 0
             existing_samples = None
-            if os.path.exists(fn_failed_indices):
-                os.remove(fn_failed_indices)
-        
+            for fn in (
+                fn_samples_test_pred,
+                fn_samples_test_pred_inprogress,
+                checkpoint_file,
+                fn_failed_indices,
+            ):
+                if os.path.exists(fn):
+                    os.remove(fn)
+        elif resume:
+            # Prefer in-progress (active run); else final pred (may have NaN holes to retry).
+            if os.path.exists(fn_samples_test_pred_inprogress):
+                existing_samples = np.load(fn_samples_test_pred_inprogress)
+                print(
+                    f"Found existing in-progress samples file with "
+                    f"{self._n_test_obs_in_samples(existing_samples)}/{samples_total} "
+                    f"stored obs (array shape {existing_samples.shape})"
+                )
+            elif os.path.exists(fn_samples_test_pred):
+                existing_samples = np.load(fn_samples_test_pred)
+                print(
+                    f"Found existing samples file: {fn_samples_test_pred} "
+                    f"(array shape {existing_samples.shape})"
+                )
+
+            if existing_samples is not None and self.samples_array_fully_usable(
+                existing_samples, samples_total=samples_total,
+            ):
+                print(
+                    f"All {samples_total} test observations already complete "
+                    f"(no NaN placeholders) — nothing to do."
+                )
+                # Ensure final filename exists for callers that only look for _pred.npy.
+                if not os.path.exists(fn_samples_test_pred):
+                    np.save(fn_samples_test_pred, existing_samples)
+                    if os.path.exists(fn_samples_test_pred_inprogress):
+                        os.remove(fn_samples_test_pred_inprogress)
+                return
+
+        # Build a full-width canvas so we can fill arbitrary NaN / missing slots.
+        n_params = len(self.param_names)
+        if existing_samples is not None:
+            n_draws = existing_samples.shape[0]
+        else:
+            n_draws = int(n_samples)
+        canvas = self._ensure_samples_canvas(
+            existing_samples, samples_total, n_draws, n_params,
+        )
+        pending = self.pending_obs_indices(canvas, samples_total)
+        if not pending:
+            print(f"All {samples_total} test observations already completed!")
+            np.save(fn_samples_test_pred, canvas)
+            if os.path.exists(fn_samples_test_pred_inprogress):
+                os.remove(fn_samples_test_pred_inprogress)
+            return
+
+        n_usable = samples_total - len(pending)
+        print(
+            f"Pending {len(pending)}/{samples_total} obs "
+            f"({n_usable} usable already; will retry NaN/missing slots)"
+        )
+        # Demote final pred while working so overwrite=False re-entry resumes holes.
+        if os.path.exists(fn_samples_test_pred) and not os.path.exists(
+            fn_samples_test_pred_inprogress
+        ):
+            os.rename(fn_samples_test_pred, fn_samples_test_pred_inprogress)
+        np.save(fn_samples_test_pred_inprogress, canvas)
+        with open(checkpoint_file, "w", encoding="utf-8") as f:
+            f.write(str(n_usable))
+
         print(
             f"Batching: checkpoint_every={checkpoint_every}, "
             f"batch_timeout_seconds={batch_timeout_seconds}"
@@ -997,28 +1099,25 @@ class SBIModel():
         
         start_time = time.time()
         
-        # Sample in batches
-        remaining_samples = samples_total - samples_completed
-        
         try:
-            while remaining_samples > 0:
-                batch_size = min(checkpoint_every, remaining_samples)
-                print(f"Sampling batch of {batch_size} samples ({samples_completed}/{samples_total} completed)")
-                
-                # Extract the chunk of observations we need to process
-                start_idx = samples_completed
-                end_idx = samples_completed + batch_size
-                
-                # Get the batch of y_test_unscaled data for this chunk
+            while pending:
+                batch_indices = pending[:checkpoint_every]
+                batch_size = len(batch_indices)
+                print(
+                    f"Sampling batch of {batch_size} obs "
+                    f"(pending {len(pending)}/{samples_total}; "
+                    f"indices {batch_indices[0]}..{batch_indices[-1]})"
+                )
+
                 if y_test_unscaled[0].ndim == 1:
-                    # Single observation case - just use the same observation for all samples
                     y_test_unscaled_batch = y_test_unscaled
                 else:
-                    # Multiple observations case - extract the chunk from each statistic's array
-                    y_test_unscaled_batch = [y_stat[start_idx:end_idx] for y_stat in y_test_unscaled]
-                
+                    y_test_unscaled_batch = [
+                        y_stat[batch_indices] for y_stat in y_test_unscaled
+                    ]
+
                 batch_start = time.time()
-                print(f"Evaluating batch {start_idx} to {end_idx}")
+                print(f"Evaluating obs indices {batch_indices}")
                 batch_samples, timed_out = self._evaluate_batch_with_timeout(
                     y_test_unscaled_batch,
                     n_samples=n_samples,
@@ -1026,50 +1125,103 @@ class SBIModel():
                     batch_timeout_seconds=batch_timeout_seconds,
                 )
                 batch_end = time.time()
-                
+
+                # Worker may return a different n_draws; resize canvas if needed.
+                batch_samples = np.asarray(batch_samples)
+                n_draws_batch = batch_samples.shape[0]
+                if n_draws_batch != canvas.shape[0]:
+                    new_canvas = np.full(
+                        (n_draws_batch, samples_total, n_params),
+                        np.nan,
+                        dtype=np.float64,
+                    )
+                    n_copy = min(canvas.shape[0], n_draws_batch)
+                    new_canvas[:n_copy] = canvas[:n_copy]
+                    canvas = new_canvas
+
+                self._write_batch_into_canvas(canvas, batch_indices, batch_samples)
+
                 if timed_out:
                     with open(fn_failed_indices, "a", encoding="utf-8") as f:
-                        for obs_idx in range(start_idx, end_idx):
+                        for obs_idx in batch_indices:
                             f.write(f"{obs_idx}\n")
-                
-                print(f"Batch samples shape: {batch_samples.shape}")
-                
-                # Combine with existing samples if any (concatenate along axis=1 for test observations)
-                if existing_samples is not None:
-                    current_samples = np.concatenate([existing_samples, batch_samples], axis=1)
                 else:
-                    current_samples = batch_samples
-                print(f"Current samples shape: {current_samples.shape}")
-                
-                # Save updated samples to in-progress file
-                np.save(fn_samples_test_pred_inprogress, current_samples)
-                
-                # Update counts
-                samples_completed += batch_size
-                remaining_samples -= batch_size
-                existing_samples = current_samples
-                
-                # Save simple text checkpoint
-                with open(checkpoint_file, 'w') as f:
-                    f.write(str(samples_completed))
-                
-                print(f"Batch completed in {batch_end - batch_start:.2f}s ({(batch_end - batch_start) / 60:.2f} min) ({(batch_end - batch_start) / 3600:.2f} hrs){' [TIMED OUT — NaN placeholder]' if timed_out else ''}")
-                print(f"Saved {samples_completed}/{samples_total} samples")
+                    # Drop these indices from the failed list if a prior run marked them.
+                    if os.path.exists(fn_failed_indices):
+                        prev = [
+                            int(line.strip())
+                            for line in open(fn_failed_indices, encoding="utf-8")
+                            if line.strip()
+                        ]
+                        batch_set = set(batch_indices)
+                        kept = [i for i in prev if i not in batch_set]
+                        with open(fn_failed_indices, "w", encoding="utf-8") as f:
+                            for i in kept:
+                                f.write(f"{i}\n")
+
+                print(f"Batch samples shape: {batch_samples.shape}")
+                print(f"Canvas shape: {canvas.shape}")
+                np.save(fn_samples_test_pred_inprogress, canvas)
+
+                pending = self.pending_obs_indices(canvas, samples_total)
+                n_usable = samples_total - len(pending)
+                with open(checkpoint_file, "w", encoding="utf-8") as f:
+                    f.write(str(n_usable))
+
+                print(
+                    f"Batch completed in {batch_end - batch_start:.2f}s "
+                    f"({(batch_end - batch_start) / 60:.2f} min) "
+                    f"({(batch_end - batch_start) / 3600:.2f} hrs)"
+                    f"{' [TIMED OUT — NaN placeholder]' if timed_out else ''}"
+                )
+                print(f"Usable {n_usable}/{samples_total} samples "
+                      f"({len(pending)} still pending)")
+
+                # If this batch timed out, its slots are still NaN and would loop forever.
+                # Leave them pending for a later job and continue with later indices.
+                if timed_out:
+                    pending = [i for i in pending if i not in batch_indices]
+                    if pending:
+                        print(
+                            f"Skipping {batch_size} timed-out obs for this run; "
+                            f"{len(pending)} other pending remain"
+                        )
+                    else:
+                        print(
+                            "No non-timed-out pending obs left in this run; "
+                            "re-submit later to retry NaN slots"
+                        )
+                        break
                 
         except Exception as e:
+            n_usable = samples_total - len(self.pending_obs_indices(canvas, samples_total))
             print(f"Error during sampling: {e}")
-            print(f"Partial results saved: {samples_completed}/{samples_total} samples")
-            print(f"Resume by running again - will continue from {samples_completed} samples")
+            print(f"Partial results saved: {n_usable}/{samples_total} usable samples")
+            print("Resume by running again — will retry remaining NaN/missing obs")
             print(f"In-progress file: {fn_samples_test_pred_inprogress}")
             raise
         
         end_time = time.time()
-        print(f"Total sampling time (n_samples={n_samples} per obs): {end_time - start_time:.2f}s = {(end_time - start_time) / 60:.2f} min")
-        
-        # Move in-progress file to final file when complete
-        if os.path.exists(fn_samples_test_pred_inprogress):
-            os.rename(fn_samples_test_pred_inprogress, fn_samples_test_pred)
-            print(f"Sampling complete! Moved to final file: {fn_samples_test_pred}")
+        print(
+            f"Total sampling time (n_samples={n_samples} per obs): "
+            f"{end_time - start_time:.2f}s = {(end_time - start_time) / 60:.2f} min"
+        )
+
+        pending = self.pending_obs_indices(canvas, samples_total)
+        if not pending:
+            if os.path.exists(fn_samples_test_pred_inprogress):
+                os.replace(fn_samples_test_pred_inprogress, fn_samples_test_pred)
+            else:
+                np.save(fn_samples_test_pred, canvas)
+            if os.path.exists(fn_failed_indices):
+                os.remove(fn_failed_indices)
+            print(f"Sampling complete! Final file: {fn_samples_test_pred}")
+        else:
+            np.save(fn_samples_test_pred_inprogress, canvas)
+            print(
+                f"Still pending {len(pending)}/{samples_total} obs "
+                f"(left as NaN placeholders). Re-run to retry."
+            )
 
 
 def _evaluate_test_batch_worker(
@@ -1093,6 +1245,13 @@ def _evaluate_test_batch_worker(
         )
         model.run()
         samples = model.evaluate(y_batch, n_samples=n_samples)
+        # Convert to numpy before queueing: torch tensors use FD-based
+        # resource sharing, which fails with ConnectionRefusedError if the
+        # worker exits before the parent finishes unpickling (join-then-get).
+        if hasattr(samples, "detach"):
+            samples = samples.detach().cpu().numpy()
+        else:
+            samples = np.asarray(samples)
         q.put(("ok", samples))
     except Exception as ex:
         q.put(("error", repr(ex)))

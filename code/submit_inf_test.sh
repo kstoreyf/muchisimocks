@@ -6,12 +6,13 @@
 #
 # Pick one or more presets (keys of PARAM_SETS_TEST):
 #   coverage                 — PARAM_SETS_TEST["coverage"]
-#                              Batched inference (defaults in run_inference.py): 20 mocks/batch;
-#                              batches >1 h get NaN placeholders (index-aligned) and continue.
+#                              Batched inference: 20 mocks/batch; batch timeout 3600s
+#                              (NaN placeholders for stalled batches, index-aligned).
 #   fixed_cosmo_shame_mean   — shame + evaluate_mean (tag_mean=_mean in filename)
-#   fixed_cosmo_shame_sample — shame, per-realization
+#   fixed_cosmo_shame_sample — shame, per-realization (batch timeout 3600s)
 #   ood                      — shame OOD (tag_mock from preset); train noise_mode still
-#                              selects which checkpoint; test tag string is unchanged
+#                              selects which checkpoint; test tag string is unchanged.
+#                              Batch timeout 4x coverage (14400s).
 #
 # Pick noise_mode (matches training + in-dist test bias/noise tags):
 #   noiseless | noisy
@@ -21,6 +22,7 @@
 test_preset_arr=(coverage)
 #test_preset_arr=(ood)
 #test_preset_arr=(fixed_cosmo_shame_mean)
+#test_preset_arr=(fixed_cosmo_shame_sample)
 #test_preset_arr=(ood fixed_cosmo_shame_mean)
 #test_preset_arr=(coverage fixed_cosmo_shame_mean ood)
 #test_preset_arr=(coverage ood)
@@ -31,15 +33,21 @@ noise_mode_arr=(noisy)
 #noise_mode_arr=(noiseless)
 # noise_mode_arr=(noiseless noisy)
 
+# Pass --overwrite-test to run_inference.py when true.
+#overwrite_test=false
+overwrite_test=false
+
 # --- training / stats grid (same as before) ---
 #n_train_arr=(10000)
-#bx_arr=(16)
-n_train_arr=(500 1000 2000 4000 6000 8000 10000)
-bx_arr=(1 2 4 8 16 32)
+#bx_arr=(32)
+# n_train_arr=(500 1000 2000 4000 6000 8000 10000)
+# bx_arr=(1 2 4 8 16 32)
+n_train_arr=(500 10000)
+bx_arr=(1 2 8 16)
 
-#tag_stats_arr=("_pk")
-#tag_masks_arr=("")
-#tag_stats_arr=("_pk_pgm")
+tag_stats_arr=("_pk")
+tag_masks_arr=("")
+#ag_stats_arr=("_pk_pgm")
 #tag_masks_arr=("_kpgm0.25")
 #tag_stats_arr=("_pk_bispec")
 #tag_masks_arr=("_kb0.25")
@@ -47,8 +55,8 @@ bx_arr=(1 2 4 8 16 32)
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_masks_arr=("_kb0.25_kpgm0.25")
 #tag_stats_arr=("_pk_bispec")
-tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
-tag_masks_arr=("" "_kpgm0.25" "_kb0.25" "_kb0.25_kpgm0.25")
+#tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
+#tag_masks_arr=("" "_kpgm0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_stats_arr=("_pk_pgm" "_pk_bispec")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
@@ -58,8 +66,8 @@ tag_masks_arr=("" "_kpgm0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 #tag_masks_arr=("_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 
 # true: pair tag_stats / tag_masks by list index; false: nested loops (full grid).
-zip_stats_masks=true
-#zip_stats_masks=false
+#zip_stats_masks=true
+zip_stats_masks=false
 #tag_masks_arr=("_kb0.25_kpgm0.3")
 #tag_masks_arr=("_kpgm0.3")
 #tag_masks_arr=("_kpgm0.1" "_kpgm0.15")
@@ -68,17 +76,19 @@ zip_stats_masks=true
 #tag_masks_arr=("_kb0.1" "_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_masks_arr=("" "_kb0.1")
-# tag_mask_bispec_arr=("_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
-# tag_mask_pgm_arr=("_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
+#tag_mask_bispec_arr=("_kb0.1" "_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
+#tag_mask_bispec_arr=("_kb0.1" "_kb0.15")
+#tag_mask_pgm_arr=("_kpgm0.1" "_kpgm0.15" "_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
+# tag_mask_bispec_arr=("_kb0.1" "_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
+# tag_mask_pgm_arr=("_kpgm0.1" "_kpgm0.15")
+# #tag_mask_bispec_arr=("_kb0.1")
+# #tag_mask_pgm_arr=("_kpgm0.1")
 # tag_masks_arr=()
 # for kb in "${tag_mask_bispec_arr[@]}"; do
 #    for kpgm in "${tag_mask_pgm_arr[@]}"; do
 #        tag_masks_arr+=("${kb}${kpgm}")
 #    done
 # done
-#tag_masks_arr=("" "_kpgm0.25")
-#tag_masks_arr=("")
-#tag_masks_arr=("_kb0.25")
 
 # Train cosmo LH tag (must match generated configs)
 tag_params_train="_p5_n10000"
@@ -208,6 +218,7 @@ set_test_tags_from_preset() {
 submit_one_test_job() {
     local test_preset="$1"
     local noise_mode="$2"
+    local batch_timeout_seconds
 
     if ! set_train_tags_from_noise_mode "${noise_mode}"; then
         exit 1
@@ -219,6 +230,17 @@ submit_one_test_job() {
     #fi
     if ! set_test_tags_from_preset "${test_preset}" "${noise_mode}"; then
         exit 1
+    fi
+
+    # Match run_inference.py default (3600); OOD gets 4x for slow single-mock sampling.
+    case "${test_preset}" in
+        ood) batch_timeout_seconds=1800 ;;
+        *)   batch_timeout_seconds=3600 ;;
+    esac
+
+    overwrite_test_flag=""
+    if [[ "${overwrite_test}" == true ]]; then
+        overwrite_test_flag="--overwrite-test"
     fi
 
     tag_data_train="_muchisimocks${tag_stats}${tag_masks}${tag_params}${tag_biasparams}${tag_noise}"
@@ -278,6 +300,7 @@ submit_one_test_job() {
 #SBATCH --job-name=${job_name}
 #SBATCH --output=${code_dir}/logs/inf_test_%j.out
 ##SBATCH --time=0:30:00
+##SBATCH --time=2:00:00
 #SBATCH --time=24:00:00
 ##SBATCH --time=48:00:00
 #SBATCH --nodes=1
@@ -294,14 +317,16 @@ echo "Working directory: \$(pwd)"
     echo "test_preset=${test_preset} noise_mode=${noise_mode} nth_best_run=${nth_best_run:-unset}"
     echo "tag_stats=${tag_stats} tag_masks=${tag_masks}"
     echo "tag_test=${tag_test}"
+    echo "batch_timeout_seconds=${batch_timeout_seconds}"
+    echo "overwrite_test=${overwrite_test}"
 echo "config_test_file: ${config_test_file}"
 
 . ~/load_modules.sh
 source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile.d/conda.sh
 conda activate benv
 
-echo "python run_inference.py --config-test=${config_test_file}"
-python run_inference.py --config-test="${config_test_file}"
+echo "python run_inference.py --config-test=${config_test_file} --batch-timeout-seconds=${batch_timeout_seconds} ${overwrite_test_flag}"
+python run_inference.py --config-test="${config_test_file}" --batch-timeout-seconds=${batch_timeout_seconds} ${overwrite_test_flag}
 EOF
 )
     if [[ $? -ne 0 || -z "${submit_out}" ]]; then

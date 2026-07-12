@@ -308,9 +308,8 @@ def run_single(param_dict, seed, idx_mock, dir_mocks,
             return 
 
         print("Reloading map2map result", flush=True)
-        ## Read displacement, velocities and linear density
+        ## Read displacement
         pred_disp = np.load(fn_disp)
-        dens_lin = np.load(f'{dir_LH}/lin_field.npy')
 
         ## Create regular grid and displace particles
         print("Generating grid", flush=True)
@@ -333,7 +332,7 @@ def run_single(param_dict, seed, idx_mock, dir_mocks,
         # Choose 0.75 as damping scale to match emulator
         damping_scale = 0.75
         predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim, 
-                                            dens_lin, pred_pos, damping_scale,
+                                            pred_pos, damping_scale,
                                             save_hr_field, deconvolve_lr_field, save_intermeds,
                                             dir_LH, idx_mock, tag_bfields='')
 
@@ -343,7 +342,7 @@ def run_single(param_dict, seed, idx_mock, dir_mocks,
             pred_pos_zspace = bacco.statistics.compute_zsd(pred_pos, velocities, 
                                                             cosmo, box_size, zspace_axis=2)
             predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim, 
-                                            dens_lin, pred_pos_zspace, damping_scale,
+                                            pred_pos_zspace, damping_scale,
                                             save_hr_field, deconvolve_lr_field, save_intermeds,
                                             dir_LH, idx_mock, tag_bfields=tag_zspace)
         
@@ -360,7 +359,7 @@ def run_single(param_dict, seed, idx_mock, dir_mocks,
     
 
 def predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim, 
-                                        dens_lin, pred_pos, damping_scale,
+                                        pred_pos, damping_scale,
                                         save_hr_field, deconvolve_lr_field, save_intermeds,
                                         dir_LH, idx_mock, tag_bfields=''):
 
@@ -369,7 +368,7 @@ def predicted_positions_to_bias_fields(n_grid, n_grid_target, box_size, sim,
     ## Start bias model class
     interlacing = False
     print("Setting up bias model", flush=True)
-    bmodel = bacco.BiasModel(sim=sim, #linear_delta=dens_lin, 
+    bmodel = bacco.BiasModel(sim=sim,
                             ngrid=n_grid, ngrid1=None, 
                             sdm=False, mode="dm",
                             npart_for_fake_sim=n_grid, damping_scale=damping_scale, 

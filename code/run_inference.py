@@ -31,14 +31,16 @@ from generate_config_inference import (
 
 # Coverage test-set batching (evaluate_test_set); not written to YAML configs.
 TEST_CHECKPOINT_EVERY = 20
-TEST_BATCH_TIMEOUT_SECONDS = 3600.0  # 1 h; timed-out batches get NaN placeholders
+TEST_BATCH_TIMEOUT_SECONDS_DEFAULT = 3600.0  # 1 h; timed-out batches get NaN placeholders
 
 
-def _evaluate_test_set_batch_kwargs(evaluate_mean: bool) -> dict:
-    """Batch size / timeout for evaluate_test_set (timeout only for multi-mock coverage runs)."""
+def _evaluate_test_set_batch_kwargs(evaluate_mean: bool, batch_timeout_seconds=None) -> dict:
+    """Batch size / timeout for evaluate_test_set (no timeout when evaluate_mean)."""
+    if batch_timeout_seconds is None:
+        batch_timeout_seconds = TEST_BATCH_TIMEOUT_SECONDS_DEFAULT
     return {
         "checkpoint_every": TEST_CHECKPOINT_EVERY,
-        "batch_timeout_seconds": None if evaluate_mean else TEST_BATCH_TIMEOUT_SECONDS,
+        "batch_timeout_seconds": None if evaluate_mean else float(batch_timeout_seconds),
     }
 
 
@@ -80,6 +82,16 @@ def main():
         action="store_true",
         help="Re-run testing even if samples_test*_pred.npy already exists.",
     )
+    parser.add_argument(
+        "--batch-timeout-seconds",
+        type=float,
+        default=TEST_BATCH_TIMEOUT_SECONDS_DEFAULT,
+        help=(
+            "Kill a stalled evaluate_test_set batch after this many seconds and "
+            f"fill NaN placeholders (default: {TEST_BATCH_TIMEOUT_SECONDS_DEFAULT:.0f}). "
+            "Ignored when evaluate_mean is true."
+        ),
+    )
     args = parser.parse_args()
 
     
@@ -100,9 +112,17 @@ def main():
             test_config = yaml.safe_load(file)
         data_mode_test_default = "muchisimocks"
         if test_config.get("data_mode_test", data_mode_test_default) == "muchisimocks":
-            test_likefree_inference(test_config, overwrite=args.overwrite_test)
+            test_likefree_inference(
+                test_config,
+                overwrite=args.overwrite_test,
+                batch_timeout_seconds=args.batch_timeout_seconds,
+            )
         else:
-            test_likefree_inference_ood(test_config, overwrite=args.overwrite_test)
+            test_likefree_inference_ood(
+                test_config,
+                overwrite=args.overwrite_test,
+                batch_timeout_seconds=args.batch_timeout_seconds,
+            )
 
     # WARNING not implemented yet !
     if args.config_runlike:
@@ -310,7 +330,7 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
     #sbi_network.run(max_epochs=10)
 
 
-def test_likefree_inference(config, overwrite=False):
+def test_likefree_inference(config, overwrite=False, batch_timeout_seconds=None):
     """
     Test function using parameters from the config file."""
 
@@ -336,7 +356,9 @@ def test_likefree_inference(config, overwrite=False):
     tag_inf_train = config["tag_inf_train"]
     n_test_eval = config.get("n_test_eval", None)
     tags_mask = _build_tags_mask(statistics, config)
-    batch_kwargs = _evaluate_test_set_batch_kwargs(evaluate_mean)
+    batch_kwargs = _evaluate_test_set_batch_kwargs(
+        evaluate_mean, batch_timeout_seconds=batch_timeout_seconds,
+    )
     #print("BEWARNED: manually setting n_test_eval to 100")
     #n_test_eval = 100
     
@@ -354,11 +376,32 @@ def test_likefree_inference(config, overwrite=False):
     
     dir_sbi = f'{dir_results}/results_sbi/sbi{tag_inf_train}'
     
-    # Check if file already exists (using tag_test_eval if provided, otherwise tag_test)
+    # Skip only when the FINAL samples file exists, is fully usable (no NaN
+    # placeholders), and there is no in-progress file. NaN holes / short
+    # in-progress arrays are retried by evaluate_test_set.
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test_eval}_pred.npy'
-    if not overwrite and os.path.exists(fn_samples_test_pred):
-        print(f"Oh look, samples {fn_samples_test_pred} already exists, and overwrite={overwrite}! Skipping testing.")
-        return
+    fn_samples_test_pred_inprogress = f'{dir_sbi}/samples_test{tag_test_eval}_pred_inprogress.npy'
+    if (
+        not overwrite
+        and os.path.exists(fn_samples_test_pred)
+        and not os.path.exists(fn_samples_test_pred_inprogress)
+    ):
+        existing_arr = np.load(fn_samples_test_pred, mmap_mode="r")
+        if sbi_model.SBIModel.samples_array_fully_usable(existing_arr):
+            print(
+                f"Oh look, samples {fn_samples_test_pred} already exist and are fully "
+                f"usable (shape {existing_arr.shape}), and overwrite={overwrite}! "
+                f"Skipping testing."
+            )
+            return
+        n_stored = sbi_model.SBIModel._n_test_obs_in_samples(existing_arr)
+        n_pending = len(
+            sbi_model.SBIModel.pending_obs_indices(existing_arr, n_stored)
+        )
+        print(
+            f"Found existing samples {fn_samples_test_pred} with {n_pending}/{n_stored} "
+            f"NaN/unusable obs slot(s) (shape {existing_arr.shape}) — will retry those."
+        )
     
     print(statistics, tag_params, tag_biasparams)
     print(tag_params_test, tag_biasparams_test)
@@ -415,7 +458,7 @@ def test_likefree_inference(config, overwrite=False):
         )
 
 
-def test_likefree_inference_ood(config, overwrite=False):
+def test_likefree_inference_ood(config, overwrite=False, batch_timeout_seconds=None):
     """
     Test function using parameters from the config file."""
 
@@ -442,7 +485,9 @@ def test_likefree_inference_ood(config, overwrite=False):
     tag_data_test = config["tag_data_test"]
     n_test_eval = config.get("n_test_eval", None)
     tags_mask = _build_tags_mask(statistics, config)
-    batch_kwargs = _evaluate_test_set_batch_kwargs(evaluate_mean)
+    batch_kwargs = _evaluate_test_set_batch_kwargs(
+        evaluate_mean, batch_timeout_seconds=batch_timeout_seconds,
+    )
     
     if evaluate_mean:
         tag_test = f'{tag_data_test}_mean'
@@ -458,11 +503,32 @@ def test_likefree_inference_ood(config, overwrite=False):
     
     dir_sbi = f'{dir_results}/results_sbi/sbi{tag_inf_train}'
     
-    # Check if file already exists (using tag_test_eval)
+    # Skip only when the FINAL samples file exists, is fully usable (no NaN
+    # placeholders), and there is no in-progress file. NaN holes are retried
+    # by evaluate_test_set.
     fn_samples_test_pred = f'{dir_sbi}/samples_test{tag_test_eval}_pred.npy'
-    if not overwrite and os.path.exists(fn_samples_test_pred):
-        print(f"Oh look, samples {fn_samples_test_pred} already exists, and overwrite={overwrite}! Skipping testing.")
-        return
+    fn_samples_test_pred_inprogress = f'{dir_sbi}/samples_test{tag_test_eval}_pred_inprogress.npy'
+    if (
+        not overwrite
+        and os.path.exists(fn_samples_test_pred)
+        and not os.path.exists(fn_samples_test_pred_inprogress)
+    ):
+        existing_arr = np.load(fn_samples_test_pred, mmap_mode="r")
+        if sbi_model.SBIModel.samples_array_fully_usable(existing_arr):
+            print(
+                f"Oh look, samples {fn_samples_test_pred} already exist and are fully "
+                f"usable (shape {existing_arr.shape}), and overwrite={overwrite}! "
+                f"Skipping testing."
+            )
+            return
+        n_stored = sbi_model.SBIModel._n_test_obs_in_samples(existing_arr)
+        n_pending = len(
+            sbi_model.SBIModel.pending_obs_indices(existing_arr, n_stored)
+        )
+        print(
+            f"Found existing samples {fn_samples_test_pred} with {n_pending}/{n_stored} "
+            f"NaN/unusable obs slot(s) (shape {existing_arr.shape}) — will retry those."
+        )
     
     print(statistics, tag_params, tag_biasparams)
                 
