@@ -1098,7 +1098,10 @@ class SBIModel():
         )
         
         start_time = time.time()
-        
+        # Timed-out slots stay NaN on disk (retryable next job), but must not re-enter
+        # ``pending`` after we recompute it from the canvas each iteration.
+        skipped_this_run = set()
+
         try:
             while pending:
                 batch_indices = pending[:checkpoint_every]
@@ -1163,8 +1166,8 @@ class SBIModel():
                 print(f"Canvas shape: {canvas.shape}")
                 np.save(fn_samples_test_pred_inprogress, canvas)
 
-                pending = self.pending_obs_indices(canvas, samples_total)
-                n_usable = samples_total - len(pending)
+                pending_all = self.pending_obs_indices(canvas, samples_total)
+                n_usable = samples_total - len(pending_all)
                 with open(checkpoint_file, "w", encoding="utf-8") as f:
                     f.write(str(n_usable))
 
@@ -1175,15 +1178,20 @@ class SBIModel():
                     f"{' [TIMED OUT — NaN placeholder]' if timed_out else ''}"
                 )
                 print(f"Usable {n_usable}/{samples_total} samples "
-                      f"({len(pending)} still pending)")
+                      f"({len(pending_all)} still pending on disk)")
 
-                # If this batch timed out, its slots are still NaN and would loop forever.
-                # Leave them pending for a later job and continue with later indices.
+                # If this batch timed out, its slots are still NaN and would loop forever
+                # if we only dropped the current batch — previously skipped NaNs are
+                # reintroduced by pending_obs_indices. Accumulate skips for this run.
                 if timed_out:
-                    pending = [i for i in pending if i not in batch_indices]
+                    skipped_this_run.update(batch_indices)
+
+                pending = [i for i in pending_all if i not in skipped_this_run]
+                if timed_out:
                     if pending:
                         print(
-                            f"Skipping {batch_size} timed-out obs for this run; "
+                            f"Skipping {batch_size} timed-out obs for this run "
+                            f"({len(skipped_this_run)} skipped total); "
                             f"{len(pending)} other pending remain"
                         )
                     else:
@@ -1192,7 +1200,7 @@ class SBIModel():
                             "re-submit later to retry NaN slots"
                         )
                         break
-                
+
         except Exception as e:
             n_usable = samples_total - len(self.pending_obs_indices(canvas, samples_total))
             print(f"Error during sampling: {e}")

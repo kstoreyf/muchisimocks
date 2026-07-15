@@ -30,8 +30,8 @@ from generate_config_inference import (
 )
 
 # Coverage test-set batching (evaluate_test_set); not written to YAML configs.
-TEST_CHECKPOINT_EVERY = 20
-TEST_BATCH_TIMEOUT_SECONDS_DEFAULT = 3600.0  # 1 h; timed-out batches get NaN placeholders
+TEST_CHECKPOINT_EVERY = 5
+TEST_BATCH_TIMEOUT_SECONDS_DEFAULT = 7200.0  # 2 h; timed-out batches get NaN placeholders
 
 
 def _evaluate_test_set_batch_kwargs(evaluate_mean: bool, batch_timeout_seconds=None) -> dict:

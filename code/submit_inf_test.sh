@@ -6,10 +6,10 @@
 #
 # Pick one or more presets (keys of PARAM_SETS_TEST):
 #   coverage                 — PARAM_SETS_TEST["coverage"]
-#                              Batched inference: 20 mocks/batch; batch timeout 3600s
+#                              Batched inference: 5 mocks/batch; batch timeout 7200s
 #                              (NaN placeholders for stalled batches, index-aligned).
 #   fixed_cosmo_shame_mean   — shame + evaluate_mean (tag_mean=_mean in filename)
-#   fixed_cosmo_shame_sample — shame, per-realization (batch timeout 3600s)
+#   fixed_cosmo_shame_sample — shame, per-realization (batch timeout 7200s)
 #   ood                      — shame OOD (tag_mock from preset); train noise_mode still
 #                              selects which checkpoint; test tag string is unchanged.
 #                              Batch timeout 4x coverage (14400s).
@@ -34,19 +34,19 @@ noise_mode_arr=(noisy)
 # noise_mode_arr=(noiseless noisy)
 
 # Pass --overwrite-test to run_inference.py when true.
-#overwrite_test=false
+#overwrite_test=true
 overwrite_test=false
 
 # --- training / stats grid (same as before) ---
 #n_train_arr=(10000)
 #bx_arr=(32)
-# n_train_arr=(500 1000 2000 4000 6000 8000 10000)
-# bx_arr=(1 2 4 8 16 32)
-n_train_arr=(500 10000)
-bx_arr=(1 2 8 16)
+n_train_arr=(500 1000 2000 4000 6000 8000 10000)
+bx_arr=(1 2 4 8 16 32)
+#n_train_arr=(500 10000)
+#bx_arr=(1 2 8 16)
 
-tag_stats_arr=("_pk")
-tag_masks_arr=("")
+#tag_stats_arr=("_pk")
+#tag_masks_arr=("")
 #ag_stats_arr=("_pk_pgm")
 #tag_masks_arr=("_kpgm0.25")
 #tag_stats_arr=("_pk_bispec")
@@ -55,8 +55,10 @@ tag_masks_arr=("")
 #tag_stats_arr=("_pk_bispec_pgm")
 #tag_masks_arr=("_kb0.25_kpgm0.25")
 #tag_stats_arr=("_pk_bispec")
-#tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
-#tag_masks_arr=("" "_kpgm0.25" "_kb0.25" "_kb0.25_kpgm0.25")
+#tag_stats_arr=("_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
+#tag_masks_arr=("_kpgm0.25" "_kb0.25" "_kb0.25_kpgm0.25")
+tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
+tag_masks_arr=("" "_kpgm0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_stats_arr=("_pk_pgm" "_pk_bispec")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
@@ -66,8 +68,8 @@ tag_masks_arr=("")
 #tag_masks_arr=("_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 
 # true: pair tag_stats / tag_masks by list index; false: nested loops (full grid).
-#zip_stats_masks=true
-zip_stats_masks=false
+zip_stats_masks=true
+#zip_stats_masks=false
 #tag_masks_arr=("_kb0.25_kpgm0.3")
 #tag_masks_arr=("_kpgm0.3")
 #tag_masks_arr=("_kpgm0.1" "_kpgm0.15")
@@ -232,10 +234,10 @@ submit_one_test_job() {
         exit 1
     fi
 
-    # Match run_inference.py default (3600); OOD gets 4x for slow single-mock sampling.
+    # Match run_inference.py default (7200); OOD keeps a shorter timeout.
     case "${test_preset}" in
         ood) batch_timeout_seconds=1800 ;;
-        *)   batch_timeout_seconds=3600 ;;
+        *)   batch_timeout_seconds=7200 ;;
     esac
 
     overwrite_test_flag=""
