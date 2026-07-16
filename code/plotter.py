@@ -1056,7 +1056,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       shades=None, loc_legend=(1.05, 1.0), add_truth=True,
                       truth_locations=None, truth_colors=None, truth_marker="o",
                       samples_list=None, show_label_in_legend=None, linewidths=None,
-                      linestyles=None):
+                      linestyles=None, show=True):
     """
     Plot posterior contours for one or more inference runs.
 
@@ -1065,6 +1065,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     show_label_in_legend: optional bool list parallel to inf_methods.
     linewidths: optional float list parallel to inf_methods.
     linestyles: optional str list parallel to inf_methods (e.g. '-', '--').
+    show: if True (default), call plt.show() before returning. Pass False when
+    you need to savefig the returned figure first (Jupyter clears gcf on show).
     """
     
     # Get all chains and their available parameters
@@ -1241,8 +1243,9 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             labels=utils_plot.param_label_dict,
             summary_font_size=8 if small_fig else 10,
             extents=extents,
-            legend_kwargs={'bbox_to_anchor': loc_legend, 
-                           'fontsize':fontsize_legend}
+            legend_kwargs={'bbox_to_anchor': loc_legend,
+                           'fontsize': fontsize_legend,
+                           'labelcolor': 'black'}
         )
     )
 
@@ -1315,10 +1318,12 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     # and leave subplots blank for parameter combinations where data is missing
     fig = c.plotter.plot(figsize=figsize)
     _adjust_corner_figure_margins(fig, title=title, figsize=figsize)
-    
-    # Don't return the figure to avoid duplicate display in notebooks
-    plt.show()
-    return None
+
+    # Callers that need to savefig should pass show=False and show after saving
+    # (Jupyter's plt.show() clears gcf, so save_current_figure after show is blank).
+    if show:
+        plt.show()
+    return fig
 
 
 def plot_contours_inf_reparam(param_names, idx_obs, theta_obs_true,
@@ -1326,7 +1331,7 @@ def plot_contours_inf_reparam(param_names, idx_obs, theta_obs_true,
                       colors=None, labels=None,
                       figsize=(7,7),
                       extents={}, title=None, reparameterize=False,
-                      params_show_reparameterize=None):
+                      params_show_reparameterize=None, show=True):
     if title is None:
         title = f'test model {idx_obs}'
     
@@ -1491,8 +1496,9 @@ def plot_contours_inf_reparam(param_names, idx_obs, theta_obs_true,
             labels=utils_plot.param_label_dict,
             summary_font_size=8 if small_fig else 10,
             extents=extents,
-            legend_kwargs={'bbox_to_anchor': (1.05, 1.0), 
-                           'fontsize':18}
+            legend_kwargs={'bbox_to_anchor': (1.05, 1.0),
+                           'fontsize': 18,
+                           'labelcolor': 'black'}
         )
     )
 
@@ -1527,10 +1533,10 @@ def plot_contours_inf_reparam(param_names, idx_obs, theta_obs_true,
     # and leave subplots blank for parameter combinations where data is missing
     fig = c.plotter.plot(figsize=figsize)
     _adjust_corner_figure_margins(fig, title=title, figsize=figsize)
-    
-    # Don't return the figure to avoid duplicate display in notebooks
-    plt.show()
-    return None
+
+    if show:
+        plt.show()
+    return fig
      
     
     
