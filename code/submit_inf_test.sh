@@ -19,8 +19,8 @@
 #
 
 # --- test matrix (edit these) ---
-test_preset_arr=(coverage)
-#test_preset_arr=(ood)
+#test_preset_arr=(coverage)
+test_preset_arr=(ood)
 #test_preset_arr=(fixed_cosmo_shame_mean)
 #test_preset_arr=(fixed_cosmo_shame_sample)
 #test_preset_arr=(ood fixed_cosmo_shame_mean)
@@ -38,10 +38,10 @@ noise_mode_arr=(noisy)
 overwrite_test=false
 
 # --- training / stats grid (same as before) ---
-#n_train_arr=(10000)
-#bx_arr=(32)
-n_train_arr=(500 1000 2000 4000 6000 8000 10000)
-bx_arr=(1 2 4 8 16 32)
+n_train_arr=(10000)
+bx_arr=(32)
+#n_train_arr=(500 1000 2000 4000 6000 8000 10000)
+#bx_arr=(1 2 4 8 16 32)
 #n_train_arr=(500 10000)
 #bx_arr=(1 2 8 16)
 
@@ -52,13 +52,13 @@ bx_arr=(1 2 4 8 16 32)
 #tag_stats_arr=("_pk_bispec")
 #tag_masks_arr=("_kb0.25")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
-#tag_stats_arr=("_pk_bispec_pgm")
+tag_stats_arr=("_pk_bispec_pgm")
 #tag_masks_arr=("_kb0.25_kpgm0.25")
 #tag_stats_arr=("_pk_bispec")
 #tag_stats_arr=("_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
 #tag_masks_arr=("_kpgm0.25" "_kb0.25" "_kb0.25_kpgm0.25")
-tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
-tag_masks_arr=("" "_kpgm0.25" "_kb0.25" "_kb0.25_kpgm0.25")
+#tag_stats_arr=("_pk" "_pk_pgm" "_pk_bispec" "_pk_bispec_pgm")
+#tag_masks_arr=("" "_kpgm0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 #tag_stats_arr=("_pk" "_pk_pgm")
 #tag_stats_arr=("_pk_pgm" "_pk_bispec")
 #tag_stats_arr=("_pk_bispec" "_pk_bispec_pgm")
@@ -68,8 +68,8 @@ tag_masks_arr=("" "_kpgm0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 #tag_masks_arr=("_kb0.25" "_kb0.25" "_kb0.25_kpgm0.25")
 
 # true: pair tag_stats / tag_masks by list index; false: nested loops (full grid).
-zip_stats_masks=true
-#zip_stats_masks=false
+#zip_stats_masks=true
+zip_stats_masks=false
 #tag_masks_arr=("_kb0.25_kpgm0.3")
 #tag_masks_arr=("_kpgm0.3")
 #tag_masks_arr=("_kpgm0.1" "_kpgm0.15")
@@ -80,17 +80,17 @@ zip_stats_masks=true
 #tag_masks_arr=("" "_kb0.1")
 #tag_mask_bispec_arr=("_kb0.1" "_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
 #tag_mask_bispec_arr=("_kb0.1" "_kb0.15")
-#tag_mask_pgm_arr=("_kpgm0.1" "_kpgm0.15" "_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
-# tag_mask_bispec_arr=("_kb0.1" "_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
+tag_mask_pgm_arr=("_kpgm0.1" "_kpgm0.15" "_kpgm0.2" "_kpgm0.25" "_kpgm0.3" "_kpgm0.35" "")
+tag_mask_bispec_arr=("_kb0.1" "_kb0.15" "_kb0.2" "_kb0.25" "_kb0.3" "_kb0.35" "")
 # tag_mask_pgm_arr=("_kpgm0.1" "_kpgm0.15")
 # #tag_mask_bispec_arr=("_kb0.1")
 # #tag_mask_pgm_arr=("_kpgm0.1")
-# tag_masks_arr=()
-# for kb in "${tag_mask_bispec_arr[@]}"; do
-#    for kpgm in "${tag_mask_pgm_arr[@]}"; do
-#        tag_masks_arr+=("${kb}${kpgm}")
-#    done
-# done
+tag_masks_arr=()
+for kb in "${tag_mask_bispec_arr[@]}"; do
+   for kpgm in "${tag_mask_pgm_arr[@]}"; do
+       tag_masks_arr+=("${kb}${kpgm}")
+   done
+done
 
 # Train cosmo LH tag (must match generated configs)
 tag_params_train="_p5_n10000"
@@ -203,8 +203,8 @@ set_test_tags_from_preset() {
             ;;
         ood)
             # PARAM_SETS_TEST["ood"]; generate_test_config_ood — no test noise/bias LH tags
-            #local tag_mock="_nbar0.00011"
-            local tag_mock="_nbar0.00022"
+            local tag_mock="_nbar0.00011"
+            #local tag_mock="_nbar0.00022"
             #local tag_mock="_nbar0.00022_phase0"
             #local tag_mock="_nbar0.00022_phasepi"
             #local tag_mock="_nbar0.00054"
@@ -302,8 +302,8 @@ submit_one_test_job() {
 #SBATCH --job-name=${job_name}
 #SBATCH --output=${code_dir}/logs/inf_test_%j.out
 ##SBATCH --time=0:30:00
-##SBATCH --time=2:00:00
-#SBATCH --time=24:00:00
+#SBATCH --time=4:00:00
+##SBATCH --time=24:00:00
 ##SBATCH --time=48:00:00
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1

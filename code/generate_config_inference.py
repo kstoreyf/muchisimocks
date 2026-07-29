@@ -187,10 +187,10 @@ PARAM_SETS_TEST = {
         evaluate_mean=False,
         data_mode_test="shame",
         #tag_mock="_nbar0.00011",
-        tag_mock="_nbar0.00022",
+        #tag_mock="_nbar0.00022",
         #tag_mock="_nbar0.00022_phase0",
         #tag_mock="_nbar0.00022_phasepi",
-        #tag_mock="_nbar0.00054",
+        tag_mock="_nbar0.00054",
         idxs_obs=None,
     ),
 }
@@ -702,13 +702,13 @@ def main():
         # ["pk", "bispec", "pgm"],
         ["pk", "bispec", "pgm"],
     ]
-    tags_mask_arr = [
-        # [""],
-        # ["", "_kpgm0.25"],    
-        # ["", "_kb0.25"],
-        #["", "_kb0.25", ""],
-        ["", "_kb0.25", "_kpgm0.25"],
-    ]
+    # tags_mask_arr = [
+    #     # [""],
+    #     # ["", "_kpgm0.25"],    
+    #     # ["", "_kb0.25"],
+    #     #["", "_kb0.25", ""],
+    #     ["", "_kb0.25", "_kpgm0.25"],
+    # ]
     #tags_mask_arr = [["", "_kpgm0.25"]]
     #tags_mask_arr = [["", ""]]
     #tags_mask_arr = [[""]]
@@ -719,9 +719,9 @@ def main():
     #tag_mask_bispec_arr = ["_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
     #tag_mask_pgm_arr = ["_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
     #tags_mask_arr = [["", tag_mask_bispec, tag_mask_pgm] for tag_mask_bispec in tag_mask_bispec_arr for tag_mask_pgm in tag_mask_pgm_arr]
-    #tag_mask_bispec_arr = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
-    #tag_mask_pgm_arr = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
-    #tags_mask_arr = [["", tag_mask_bispec, tag_mask_pgm] for tag_mask_bispec in tag_mask_bispec_arr for tag_mask_pgm in tag_mask_pgm_arr]
+    tag_mask_bispec_arr = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
+    tag_mask_pgm_arr = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
+    tags_mask_arr = [["", tag_mask_bispec, tag_mask_pgm] for tag_mask_bispec in tag_mask_bispec_arr for tag_mask_pgm in tag_mask_pgm_arr]
     
 
     n_train_arr = [10000]
@@ -756,11 +756,11 @@ def main():
                         )
                     elif mode == "test":
                         #for test_name in PARAM_SETS_TEST:
-                        #for test_name in ["ood"]:
+                        for test_name in ["ood"]:
                         #for test_name in ["ood", "coverage", "fixed_cosmo_shame_mean"]:
                         #for test_name in ["coverage", "ood"]:
                         #for test_name in ["coverage", "fixed_cosmo_shame_mean"]:
-                        for test_name in ["fixed_cosmo_shame_sample"]:
+                        #for test_name in ["fixed_cosmo_shame_sample"]:
                             generate_test_config_from_preset(
                                 test_name,
                                 tag_params=tag_params_train,

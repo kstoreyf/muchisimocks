@@ -1011,7 +1011,9 @@ def plot_contours(samples_arr, labels, colors, param_names, param_label_dict,
             labels=param_label_dict,
             contour_label_font_size=12,
             extents=extents,
-            legend_kwargs={'bbox_to_anchor': (1.05, 1.0)}
+            legend_color_text=False,
+            legend_kwargs={'bbox_to_anchor': (1.05, 1.0),
+                           'labelcolor': 'black'}
         )
     )
 
@@ -1243,6 +1245,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             labels=utils_plot.param_label_dict,
             summary_font_size=8 if small_fig else 10,
             extents=extents,
+            legend_color_text=False,
             legend_kwargs={'bbox_to_anchor': loc_legend,
                            'fontsize': fontsize_legend,
                            'labelcolor': 'black'}
@@ -1496,6 +1499,7 @@ def plot_contours_inf_reparam(param_names, idx_obs, theta_obs_true,
             labels=utils_plot.param_label_dict,
             summary_font_size=8 if small_fig else 10,
             extents=extents,
+            legend_color_text=False,
             legend_kwargs={'bbox_to_anchor': (1.05, 1.0),
                            'fontsize': 18,
                            'labelcolor': 'black'}
