@@ -1058,7 +1058,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       shades=None, loc_legend=(1.05, 1.0), add_truth=True,
                       truth_locations=None, truth_colors=None, truth_marker="o",
                       samples_list=None, show_label_in_legend=None, linewidths=None,
-                      linestyles=None, show=True):
+                      linestyles=None, smooths=None, bins_list=None, kdes=None,
+                      show=True, legend_location=None, legend_loc=None):
     """
     Plot posterior contours for one or more inference runs.
 
@@ -1067,6 +1068,14 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     show_label_in_legend: optional bool list parallel to inf_methods.
     linewidths: optional float list parallel to inf_methods.
     linestyles: optional str list parallel to inf_methods (e.g. '-', '--').
+    smooths: optional int list parallel to inf_methods (ChainConsumer histogram smooth).
+    bins_list: optional int list parallel to inf_methods (histogram bins; default 8).
+    kdes: optional bool/float list parallel to inf_methods (ChainConsumer KDE; False = histogram).
+    Legend placement (tweak by hand):
+      legend_location: (row, col) of the subplot that owns the legend
+        (ChainConsumer; e.g. (0, 1) = empty cell right of the first 1D hist).
+      legend_loc: matplotlib loc in that axes ('upper left', 'center left', ...).
+      loc_legend: bbox_to_anchor (x, y) in that axes; None = no offset.
     show: if True (default), call plt.show() before returning. Pass False when
     you need to savefig the returned figure first (Jupyter clears gcf on show).
     """
@@ -1208,8 +1217,13 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         
         # smooth = smooth_dict[chain_data['inf_method']]
         # bins = bins_dict[chain_data['inf_method']]
+        orig_idx = chain_data['orig_idx']
         smooth = 4
+        if smooths is not None and orig_idx < len(smooths) and smooths[orig_idx] is not None:
+            smooth = smooths[orig_idx]
         bins = 8
+        if bins_list is not None and orig_idx < len(bins_list) and bins_list[orig_idx] is not None:
+            bins = bins_list[orig_idx]
         
         chain_kwargs = dict(
             samples=samples_df,
@@ -1220,7 +1234,6 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             #plot_cloud=True,
             plot_cloud=False,
         )
-        orig_idx = chain_data['orig_idx']
         if shades is not None and orig_idx < len(shades):
             chain_kwargs['shade'] = shades[orig_idx]
             chain_kwargs['bar_shade'] = shades[orig_idx]
@@ -1230,6 +1243,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
             chain_kwargs['linewidth'] = linewidths[orig_idx]
         if linestyles is not None and orig_idx < len(linestyles):
             chain_kwargs['linestyle'] = linestyles[orig_idx]
+        if kdes is not None and orig_idx < len(kdes) and kdes[orig_idx] is not None:
+            chain_kwargs['kde'] = kdes[orig_idx]
         c.add_chain(chainconsumer.Chain(**chain_kwargs))
 
     # ChainConsumer only flips 1D histograms when n_params==2; flip=True with n>2 still
@@ -1239,18 +1254,28 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         small_fig = float(figsize) <= 5.5
     else:
         small_fig = min(figsize) <= 5.5
-    c.set_plot_config(
-        chainconsumer.PlotConfig(
-            flip=flip_corner,
-            labels=utils_plot.param_label_dict,
-            summary_font_size=8 if small_fig else 10,
-            extents=extents,
-            legend_color_text=False,
-            legend_kwargs={'bbox_to_anchor': loc_legend,
-                           'fontsize': fontsize_legend,
-                           'labelcolor': 'black'}
-        )
+    legend_kwargs = {
+        'fontsize': fontsize_legend,
+        'labelcolor': 'black',
+    }
+    if loc_legend is not None:
+        legend_kwargs['bbox_to_anchor'] = loc_legend
+    if legend_loc is not None:
+        legend_kwargs['loc'] = legend_loc
+    plot_config_kwargs = dict(
+        flip=flip_corner,
+        labels=utils_plot.param_label_dict,
+        summary_font_size=8 if small_fig else 10,
+        extents=extents,
+        legend_color_text=False,
+        legend_kwargs=legend_kwargs,
     )
+    if legend_location is not None:
+        plot_config_kwargs['legend_location'] = legend_location
+        # Default: left of that subplot (near the triangle peak when
+        # legend_location is (0, 1) for a 3-param corner). Override with legend_loc.
+        legend_kwargs.setdefault('loc', 'upper left')
+    c.set_plot_config(chainconsumer.PlotConfig(**plot_config_kwargs))
 
     # c.set_override(
     #     chainconsumer.ChainConfig(

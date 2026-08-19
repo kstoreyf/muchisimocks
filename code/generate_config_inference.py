@@ -111,6 +111,7 @@ def _tag_inf_train_for_test(
     tag_sweep: str | None,
     nth_best_run: int | None,
     sweep_name_override: str | None,
+    use_retrained_nbest: bool = False,
 ) -> tuple[str, str | None]:
     if tag_sweep is None:
         return base_inf_train, None
@@ -120,6 +121,8 @@ def _tag_inf_train_for_test(
         sweep_name = sweep_name_override
     if nth_best_run is None:
         return base_inf_train + f"_best{ts}", sweep_name
+    if use_retrained_nbest:
+        return base_inf_train + f"_best{ts}_nbest{nth_best_run}", sweep_name
     d = paths.DIR_RESULTS / "results_sbi" / ("sbi" + sweep_name)
     return f"{sweep_name}/{nth_passing_run_id(d, nth_best_run)}", sweep_name
 
@@ -246,7 +249,8 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
                           reparameterize=True,
                           run_mode="single",
                           tag_sweep=None,
-                          sweep_name_override: str | None = None):
+                          sweep_name_override: str | None = None,
+                          nth_best_run: int | None = None):
     """
     Generates a YAML configuration file for training.
 
@@ -260,6 +264,9 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
 
     ``sweep_name_override``: if set, use this as ``sweep_name`` instead of the
     default (e.g. point at an existing noisy sweep while training on noisym2).
+
+    ``nth_best_run``: if set, ``tag_inf`` is ``_best{tag_sweep}_nbest{n}`` and
+    training uses line ``n`` of the sweep's ``best_runs.txt`` (not ``best_run.txt``).
     """
     # bx is bias parameters per cosmo (1x, 2x, 4x, 8x, 16x, 32x)
     tags_mask = [""] * len(statistics) if tags_mask is None else list(tags_mask)
@@ -291,6 +298,8 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
     elif run_mode == 'best':
         # Output dir tag includes this bx/n_train; sweep_name is the completed sweep.
         tag_inf = base_inf + f'_best{tag_sweep}'
+        if nth_best_run is not None:
+            tag_inf = f'{tag_inf}_nbest{int(nth_best_run)}'
         sweep_name = base_inf_sweep + f'_sweep{tag_sweep}'
         if sweep_name_override is not None:
             sweep_name = sweep_name_override
@@ -314,6 +323,8 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
         "tag_inf": tag_inf,
         "reparameterize": reparameterize,
     }
+    if nth_best_run is not None:
+        config["nth_best_run"] = int(nth_best_run)
     if run_mode == "sweep":
         config["wandb_sweep_id"] = None
         config["sweep_num_runs"] = SWEEP_NUM_RUNS
@@ -351,7 +362,8 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                          tag_params_test="_shame_p0_n1000",
                          tag_biasparams_test="_biasshame_p0_n1",
                          tag_noise_test=None,
-                         sweep_name_override: str | None = None):
+                         sweep_name_override: str | None = None,
+                         use_retrained_nbest: bool = False):
     """
     Generates a YAML configuration file for testing.
 
@@ -361,6 +373,8 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
 
     If ``tag_sweep`` is set, ``nth_best_run`` (default 0) picks a line from
     ``best_runs.txt`` under the sweep dir; ``None`` uses legacy ``_best<tag_sweep>``.
+    ``use_retrained_nbest=True`` points ``tag_inf_train`` at
+    ``_best<tag_sweep>_nbest<n>`` (retrained at this config's ``tags_mask``).
     """
     tag_stats = f'_{"_".join(statistics)}'
 
@@ -390,7 +404,8 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         + f"_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}"
     )
     tag_inf_train, sweep_name = _tag_inf_train_for_test(
-        base_inf_train, base_inf_sweep, tag_sweep, nth_best_run, sweep_name_override
+        base_inf_train, base_inf_sweep, tag_sweep, nth_best_run, sweep_name_override,
+        use_retrained_nbest=use_retrained_nbest,
     )
 
     tag_test = build_config_tag_test(
@@ -419,6 +434,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         "bx": bx,
         "tag_sweep": tag_sweep,
         "nth_best_run": nth_best_run,
+        "use_retrained_nbest": use_retrained_nbest,
         "evaluate_mean": evaluate_mean,
         "idxs_obs": idxs_obs,
         "tag_data_train": tag_data_train,
@@ -460,7 +476,8 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                              evaluate_mean=False,
                              data_mode_test="shame",
                              tag_mock="_nbar0.00022",
-                             sweep_name_override: str | None = None):
+                             sweep_name_override: str | None = None,
+                             use_retrained_nbest: bool = False):
     """
     Generates a YAML configuration file for OOD testing.
     """
@@ -486,7 +503,8 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         + f"_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}"
     )
     tag_inf_train, sweep_name = _tag_inf_train_for_test(
-        base_inf_train, base_inf_sweep, tag_sweep, nth_best_run, sweep_name_override
+        base_inf_train, base_inf_sweep, tag_sweep, nth_best_run, sweep_name_override,
+        use_retrained_nbest=use_retrained_nbest,
     )
 
     ### test tags
@@ -515,6 +533,7 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         "bx": bx,
         "tag_sweep": tag_sweep,
         "nth_best_run": nth_best_run,
+        "use_retrained_nbest": use_retrained_nbest,
         "evaluate_mean": evaluate_mean,
         "idxs_obs": idxs_obs,
         "tag_data_train": tag_data_train,
@@ -580,20 +599,20 @@ def generate_test_config_from_preset(
     train_fields = resolve_train_tag_bundle(tag_params, noise_mode)
     tag_params_test = preset.get("tag_params_test")
     scenario_tags = resolve_test_scenario_tags(preset_name, noise_mode, tag_params_test)
-    common = dict(
-        dir_config=dir_config,
-        overwrite=overwrite,
-        statistics=statistics,
-        n_train=n_train,
-        bx=bx,
-        tags_mask=tags_mask,
-        tag_sweep=tag_sweep,
-        sweep_name_override=sweep_name_override,
+    common = {
+        "dir_config": dir_config,
+        "overwrite": overwrite,
+        "statistics": statistics,
+        "n_train": n_train,
+        "bx": bx,
+        "tags_mask": tags_mask,
+        "tag_sweep": tag_sweep,
+        "sweep_name_override": sweep_name_override,
         **train_fields,
         **test_fields,
         **scenario_tags,
         **kwargs,
-    )
+    }
     if ood:
         return generate_test_config_ood(**common)
     return generate_test_config(**common)

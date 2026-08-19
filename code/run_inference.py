@@ -34,12 +34,16 @@ TEST_CHECKPOINT_EVERY = 5
 TEST_BATCH_TIMEOUT_SECONDS_DEFAULT = 7200.0  # 2 h; timed-out batches get NaN placeholders
 
 
-def _evaluate_test_set_batch_kwargs(evaluate_mean: bool, batch_timeout_seconds=None) -> dict:
+def _evaluate_test_set_batch_kwargs(
+    evaluate_mean: bool, batch_timeout_seconds=None, checkpoint_every=None,
+) -> dict:
     """Batch size / timeout for evaluate_test_set (no timeout when evaluate_mean)."""
     if batch_timeout_seconds is None:
         batch_timeout_seconds = TEST_BATCH_TIMEOUT_SECONDS_DEFAULT
+    if checkpoint_every is None:
+        checkpoint_every = TEST_CHECKPOINT_EVERY
     return {
-        "checkpoint_every": TEST_CHECKPOINT_EVERY,
+        "checkpoint_every": int(checkpoint_every),
         "batch_timeout_seconds": None if evaluate_mean else float(batch_timeout_seconds),
     }
 
@@ -92,6 +96,15 @@ def main():
             "Ignored when evaluate_mean is true."
         ),
     )
+    parser.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=TEST_CHECKPOINT_EVERY,
+        help=(
+            "Number of test observations per evaluate_test_set batch "
+            f"(default: {TEST_CHECKPOINT_EVERY})."
+        ),
+    )
     args = parser.parse_args()
 
     
@@ -116,12 +129,14 @@ def main():
                 test_config,
                 overwrite=args.overwrite_test,
                 batch_timeout_seconds=args.batch_timeout_seconds,
+                checkpoint_every=args.checkpoint_every,
             )
         else:
             test_likefree_inference_ood(
                 test_config,
                 overwrite=args.overwrite_test,
                 batch_timeout_seconds=args.batch_timeout_seconds,
+                checkpoint_every=args.checkpoint_every,
             )
 
     # WARNING not implemented yet !
@@ -325,12 +340,15 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
                 wandb_sweep_id=config.get("wandb_sweep_id"),
                 sweep_num_runs=sweep_num_runs,
                 wandb_config_yaml_path=config_yaml_path,
+                nth_best_run=config.get("nth_best_run"),
                 )
     sbi_network.run(max_epochs=2000)
     #sbi_network.run(max_epochs=10)
 
 
-def test_likefree_inference(config, overwrite=False, batch_timeout_seconds=None):
+def test_likefree_inference(
+    config, overwrite=False, batch_timeout_seconds=None, checkpoint_every=None,
+):
     """
     Test function using parameters from the config file."""
 
@@ -357,7 +375,9 @@ def test_likefree_inference(config, overwrite=False, batch_timeout_seconds=None)
     n_test_eval = config.get("n_test_eval", None)
     tags_mask = _build_tags_mask(statistics, config)
     batch_kwargs = _evaluate_test_set_batch_kwargs(
-        evaluate_mean, batch_timeout_seconds=batch_timeout_seconds,
+        evaluate_mean,
+        batch_timeout_seconds=batch_timeout_seconds,
+        checkpoint_every=checkpoint_every,
     )
     #print("BEWARNED: manually setting n_test_eval to 100")
     #n_test_eval = 100
@@ -458,7 +478,9 @@ def test_likefree_inference(config, overwrite=False, batch_timeout_seconds=None)
         )
 
 
-def test_likefree_inference_ood(config, overwrite=False, batch_timeout_seconds=None):
+def test_likefree_inference_ood(
+    config, overwrite=False, batch_timeout_seconds=None, checkpoint_every=None,
+):
     """
     Test function using parameters from the config file."""
 
@@ -486,7 +508,9 @@ def test_likefree_inference_ood(config, overwrite=False, batch_timeout_seconds=N
     n_test_eval = config.get("n_test_eval", None)
     tags_mask = _build_tags_mask(statistics, config)
     batch_kwargs = _evaluate_test_set_batch_kwargs(
-        evaluate_mean, batch_timeout_seconds=batch_timeout_seconds,
+        evaluate_mean,
+        batch_timeout_seconds=batch_timeout_seconds,
+        checkpoint_every=checkpoint_every,
     )
     
     if evaluate_mean:

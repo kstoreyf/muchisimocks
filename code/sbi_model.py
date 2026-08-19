@@ -309,6 +309,7 @@ class SBIModel():
                      wandb_sweep_id=None,
                      sweep_num_runs=None,
                      wandb_config_yaml_path=None,
+                     nth_best_run=None,
                      ):
 
         self.dir_sbi = str(paths.DIR_RESULTS / "results_sbi" / f"sbi{tag_sbi}")
@@ -359,6 +360,7 @@ class SBIModel():
             if wandb_config_yaml_path
             else None
         )
+        self.nth_best_run = None if nth_best_run is None else int(nth_best_run)
 
     def _sweep_results_dir_for_best_run_txt(self):
         """
@@ -485,21 +487,35 @@ class SBIModel():
             except ValueError as e:
                 raise SystemExit(str(e)) from e
             print(
-                "run_mode=best: looking for best_run.txt in sweep dir %s "
-                "(output dir_sbi=%s, sweep_name=%r)"
-                % (sweep_dir, self.dir_sbi, self.sweep_name),
+                "run_mode=best: looking for best run id in sweep dir %s "
+                "(output dir_sbi=%s, sweep_name=%r, nth_best_run=%s)"
+                % (sweep_dir, self.dir_sbi, self.sweep_name, self.nth_best_run),
                 flush=True,
             )
-            try:
-                best_run_id = _read_best_run_id_from_dir_sbi(sweep_dir)
-            except (FileNotFoundError, ValueError) as e:
-                raise SystemExit(str(e)) from e
-            best_run_txt = os.path.join(sweep_dir, "best_run.txt")
-            print(
-                "run_mode=best: read chosen W&B run id %r from %s"
-                % (best_run_id, best_run_txt),
-                flush=True,
-            )
+            if self.nth_best_run is not None:
+                from generate_config_inference import nth_passing_run_id
+                try:
+                    best_run_id = nth_passing_run_id(
+                        pathlib.Path(sweep_dir), int(self.nth_best_run)
+                    )
+                except (FileNotFoundError, IndexError, ValueError) as e:
+                    raise SystemExit(str(e)) from e
+                print(
+                    "run_mode=best: nth_best_run=%s → W&B run id %r from %s/best_runs.txt"
+                    % (self.nth_best_run, best_run_id, sweep_dir),
+                    flush=True,
+                )
+            else:
+                try:
+                    best_run_id = _read_best_run_id_from_dir_sbi(sweep_dir)
+                except (FileNotFoundError, ValueError) as e:
+                    raise SystemExit(str(e)) from e
+                best_run_txt = os.path.join(sweep_dir, "best_run.txt")
+                print(
+                    "run_mode=best: read chosen W&B run id %r from %s"
+                    % (best_run_id, best_run_txt),
+                    flush=True,
+                )
 
             local_run_dir = os.path.join(sweep_dir, best_run_id)
             local_posterior = os.path.join(local_run_dir, "posterior.p")
