@@ -32,6 +32,11 @@ tag_masks_arr=("_kb0.25_kpgm0.25")
 #tag_stats_arr=("_pk_pgm" "_pk_bispec_pgm")
 #tag_stats_arr=("_pk_pgm")
 
+# Parallel W&B sweep agents (ignored unless tag_sweep is _sweep-*). Each array
+# task trains one trial; they share one sweep via wandb_sweep_id in the yaml.
+# For a 30-trial sweep, set n_sweep_agents=30 and tag_sweep="_sweep-rand30".
+n_sweep_agents=1
+
 for n_train in "${n_train_arr[@]}"; do
     for bx in "${bx_arr[@]}"; do
         for tag_stats in "${tag_stats_arr[@]}"; do
@@ -57,14 +62,28 @@ for n_train in "${n_train_arr[@]}"; do
 
                 job_name="inf_train${tag_inf}"
 
-                code_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-                mkdir -p "${code_dir}/logs" || { echo "ERROR: Failed to create logs directory" >&2; exit 1; }
+                submit_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+                code_dir=$(cd "${submit_dir}/.." && pwd)
+                mkdir -p "${submit_dir}/logs" || { echo "ERROR: Failed to create logs directory" >&2; exit 1; }
+                config_train_file="${code_dir}/../configs/configs_train/config${tag_inf}.yaml"
+                if [[ ! -f "${config_train_file}" ]]; then
+                    echo "ERROR: missing train config ${config_train_file}" >&2
+                    exit 1
+                fi
+
+                array_line=""
+                log_file="${submit_dir}/logs/${job_name}.out"
+                if [[ "${n_sweep_agents}" -gt 1 ]]; then
+                    array_line="#SBATCH --array=0-$((n_sweep_agents - 1))"
+                    log_file="${submit_dir}/logs/${job_name}_%A_%a.out"
+                fi
 
                 sbatch <<EOF
 #!/bin/bash
 #SBATCH --qos=regular
 #SBATCH --job-name=${job_name}
-#SBATCH --output=${code_dir}/logs/${job_name}.out
+#SBATCH --output=${log_file}
+${array_line}
 ##SBATCH --time=0:20:00
 #SBATCH --time=24:00:00 
 ##SBATCH --time=48:00:00
@@ -74,10 +93,11 @@ for n_train in "${n_train_arr[@]}"; do
 #SBATCH --mem=40G
 
 cd "${code_dir}" || { echo "ERROR: Failed to change to code directory ${code_dir}" >&2; exit 1; }
-mkdir -p logs || { echo "ERROR: Failed to create logs directory" >&2; exit 1; }
+mkdir -p "${submit_dir}/logs" || { echo "ERROR: Failed to create logs directory" >&2; exit 1; }
 
 echo "Current date and time: \$(date)"
 echo "Slurm job id is \${SLURM_JOB_ID}"
+echo "Array task id is \${SLURM_ARRAY_TASK_ID:-none}"
 echo "Running on node \${SLURMD_NODENAME}"
 echo "Working directory: \$(pwd)"
 echo "config_train_file: ${config_train_file}"
@@ -85,6 +105,12 @@ echo "config_train_file: ${config_train_file}"
 . ~/load_modules.sh
 source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile.d/conda.sh
 conda activate benv
+
+if [[ "${n_sweep_agents}" -gt 1 ]]; then
+    export MUCHISIMOCKS_SWEEP_PARALLEL=1
+    export MUCHISIMOCKS_SWEEP_RUNS_PER_AGENT=1
+    sleep \$(( \${SLURM_ARRAY_TASK_ID:-0} * 2 ))
+fi
 
 echo "python run_inference.py --config-train=${config_train_file}"
 python run_inference.py --config-train="${config_train_file}"

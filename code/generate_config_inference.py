@@ -254,13 +254,15 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
     """
     Generates a YAML configuration file for training.
 
-    For ``run_mode`` ``sweep``, ``wandb_sweep_id`` (initially ``None``) and
-    ``sweep_num_runs`` are written so re-running this same config can resume
-    without environment variables.
+    For ``run_mode`` ``sweep``, ``tag_inf`` / ``sweep_name`` use the training
+    ``tags_mask`` (and this config's bx / n_train) so two k-cuts do not share a
+    sweep directory. ``wandb_sweep_id`` (initially ``None``) and ``sweep_num_runs``
+    are written so re-running this same config can resume without env vars.
 
     For ``run_mode`` ``best``, ``tag_sweep`` must match the sweep you optimized;
     ``sweep_name`` uses BX_SWEEP/N_TRAIN_SWEEP and ``tags_mask_for_sweep(statistics)``
     (``TAG_MASK_BISPEC_SWEEP`` on bispec), not the training ``tags_mask``.
+    Point ``sweep_name_override`` at a non-canonical sweep (e.g. kb0.25+kpgm0.25).
 
     ``sweep_name_override``: if set, use this as ``sweep_name`` instead of the
     default (e.g. point at an existing noisy sweep while training on noisym2).
@@ -293,8 +295,10 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
     base_inf_sweep = tag_data_sweep + ('_rp' if reparameterize else '') + tag_inf_num_sweep
 
     if run_mode == 'sweep':
-        tag_inf = base_inf_sweep + f'_sweep{tag_sweep}'
-        sweep_name = base_inf_sweep + f'_sweep{tag_sweep}'
+        # Name after the data actually trained on so kb0.25 vs kb0.25+kpgm0.25
+        # do not collide with the older canonical ``tags_mask_for_sweep`` dir.
+        tag_inf = base_inf + f'_sweep{tag_sweep}'
+        sweep_name = tag_inf
     elif run_mode == 'best':
         # Output dir tag includes this bx/n_train; sweep_name is the completed sweep.
         tag_inf = base_inf + f'_best{tag_sweep}'
@@ -334,13 +338,14 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
     if not overwrite and os.path.exists(fn_config):
         print(f"Config file already exists: {fn_config}")
         print("Set overwrite=True to overwrite the existing file.")
-        return
+        return fn_config
     else:
         if os.path.exists(fn_config):
             print("Config file already exists but overwrite=True, overwriting. Hope you meant to do that!")
         with open(fn_config, "w") as file:
             yaml.dump(config, file, default_flow_style=False)
         print(f"Training config file written: {fn_config}")
+        return fn_config
 
 
 def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
@@ -450,15 +455,16 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     if not overwrite and os.path.exists(fn_config):
         print(f"Config file already exists: {fn_config}")
         print("Set overwrite=True to overwrite the existing file.")
-        return
+        return fn_config
     else:
         if os.path.exists(fn_config):
             print("Config file already exists but overwrite=True, overwriting. Hope you meant to do that!")
         with open(fn_config, "w") as file:
             yaml.dump(config, file, default_flow_style=False)
         print(f"Testing config file written: {fn_config}")
-        
-        
+        return fn_config
+
+
 def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                              overwrite=False,
                              statistics=['pk'],
@@ -550,13 +556,14 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     if not overwrite and os.path.exists(fn_config):
         print(f"Config file already exists: {fn_config}")
         print("Set overwrite=True to overwrite the existing file.")
-        return
+        return fn_config
     else:
         if os.path.exists(fn_config):
             print("Config file already exists but overwrite=True, overwriting. Hope you meant to do that!")
         with open(fn_config, "w") as file:
             yaml.dump(config, file, default_flow_style=False)
         print(f"Testing config file written: {fn_config}")
+        return fn_config
 
 
 def generate_test_config_from_preset(

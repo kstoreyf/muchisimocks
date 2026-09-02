@@ -144,6 +144,73 @@ def _write_wandb_sweep_id_to_yaml(yaml_path, sweep_api_path):
         print("wandb: saved wandb_sweep_id to %s" % p)
 
 
+_SWEEP_LOCK_STALE_S = 300.0
+_SWEEP_LOCK_WAIT_S = 180.0
+
+
+def _env_flag(name):
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "y"}
+
+
+def _env_int(name, default=None):
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    return int(raw)
+
+
+def _read_wandb_sweep_id_from_yaml(yaml_path):
+    p = pathlib.Path(yaml_path)
+    if not p.is_file():
+        return ""
+    with open(p, "r") as f:
+        data = yaml.safe_load(f)
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("wandb_sweep_id") or "").strip()
+
+
+def _sweep_lock_dir(yaml_path):
+    p = pathlib.Path(yaml_path)
+    return p.with_name(p.name + ".sweep.lock")
+
+
+def _acquire_sweep_lock(lock_dir):
+    """Cross-node lock via atomic mkdir (configs live on a shared filesystem)."""
+    lock_dir = pathlib.Path(lock_dir)
+    t0 = time.time()
+    while True:
+        try:
+            lock_dir.mkdir()
+            return
+        except FileExistsError:
+            try:
+                age = time.time() - lock_dir.stat().st_mtime
+            except OSError:
+                continue
+            if age > _SWEEP_LOCK_STALE_S:
+                print(
+                    "wandb: stealing stale sweep lock %s (age=%.0fs)"
+                    % (lock_dir, age),
+                    flush=True,
+                )
+                try:
+                    lock_dir.rmdir()
+                except OSError:
+                    pass
+                continue
+            if time.time() - t0 > _SWEEP_LOCK_WAIT_S:
+                raise TimeoutError("Timed out waiting for sweep lock %s" % lock_dir)
+            time.sleep(0.5)
+
+
+def _release_sweep_lock(lock_dir):
+    try:
+        pathlib.Path(lock_dir).rmdir()
+    except OSError as e:
+        print("wandb: could not remove sweep lock %s: %s" % (lock_dir, e), flush=True)
+
+
 def _delete_crashed_runs_in_sweep(sweep_api_path, dir_sbi=None):
     """
     Delete non-running failed runs in an existing sweep before resuming.
@@ -162,7 +229,11 @@ def _delete_crashed_runs_in_sweep(sweep_api_path, dir_sbi=None):
     root = pathlib.Path(dir_sbi) if dir_sbi else None
     for run in to_remove:
         rid = run.id
-        run.delete()
+        try:
+            run.delete()
+        except Exception as e:
+            print("wandb: could not delete crashed run %s: %s" % (rid, e), flush=True)
+            continue
         n_deleted += 1
         if root is not None and _WANDB_RUN_ID_DIR_RE.match(str(rid)):
             p = root / rid
@@ -391,6 +462,7 @@ class SBIModel():
                 raise ValueError("run_mode='sweep' requires sweep_num_runs in the config")
             wandb.login()
             resume_id = (self.wandb_sweep_id or "").strip()
+            sweep_parallel = _env_flag("MUCHISIMOCKS_SWEEP_PARALLEL")
             sweep_config = {
                 'name': self.sweep_name,
                 'method': 'random',
@@ -407,43 +479,77 @@ class SBIModel():
                     'num_transforms': {'values': [4, 6, 8, 10]},
                 }
             }
-            if resume_id:
-                sweep_api_path = _wandb_sweep_api_path(resume_id, project_name)
-                agent_entity, agent_project, sweep_id = _parse_wandb_sweep_api_path(
-                    sweep_api_path
-                )
-                _delete_crashed_runs_in_sweep(sweep_api_path, self.dir_sbi)
+            lock_dir = (
+                _sweep_lock_dir(self.wandb_config_yaml_path)
+                if self.wandb_config_yaml_path
+                else None
+            )
+            if lock_dir is not None:
+                _acquire_sweep_lock(lock_dir)
+            try:
+                if self.wandb_config_yaml_path:
+                    yaml_id = _read_wandb_sweep_id_from_yaml(self.wandb_config_yaml_path)
+                    if yaml_id:
+                        resume_id = yaml_id
+                        self.wandb_sweep_id = yaml_id
+                if resume_id:
+                    sweep_api_path = _wandb_sweep_api_path(resume_id, project_name)
+                    agent_entity, agent_project, sweep_id = _parse_wandb_sweep_api_path(
+                        sweep_api_path
+                    )
+                    _delete_crashed_runs_in_sweep(sweep_api_path, self.dir_sbi)
+                    print(
+                        "wandb sweep resume: path=%s target_total_finished_runs=%s"
+                        % (sweep_api_path, self.sweep_num_runs),
+                        flush=True,
+                    )
+                else:
+                    sweep_id = wandb.sweep(sweep_config, project=project_name)
+                    api = wandb.Api()
+                    agent_entity = api.default_entity
+                    agent_project = project_name
+                    sweep_api_path = f"{agent_entity}/{agent_project}/{sweep_id}"
+                    if self.wandb_config_yaml_path:
+                        _write_wandb_sweep_id_to_yaml(
+                            self.wandb_config_yaml_path, sweep_api_path
+                        )
+                    print(
+                        (
+                            "Started wandb sweep %s. Re-run the same training command to resume "
+                            "(wandb_sweep_id is in the config if it was saved)."
+                        )
+                        % sweep_api_path,
+                        flush=True,
+                    )
+            finally:
+                if lock_dir is not None:
+                    _release_sweep_lock(lock_dir)
+
+            if sweep_parallel:
                 print(
-                    "wandb sweep resume: path=%s target_total_finished_runs=%s"
-                    % (sweep_api_path, self.sweep_num_runs),
+                    "wandb: skipping orphaned local dir cleanup (parallel sweep agents)",
                     flush=True,
                 )
             else:
-                sweep_id = wandb.sweep(sweep_config, project=project_name)
-                api = wandb.Api()
-                agent_entity = api.default_entity
-                agent_project = project_name
-                sweep_api_path = f"{agent_entity}/{agent_project}/{sweep_id}"
-                if self.wandb_config_yaml_path:
-                    _write_wandb_sweep_id_to_yaml(
-                        self.wandb_config_yaml_path, sweep_api_path
-                    )
-                print(
-                    (
-                        "Started wandb sweep %s. Re-run the same training command to resume "
-                        "(wandb_sweep_id is in the config if it was saved)."
-                    )
-                    % sweep_api_path,
-                    flush=True,
-                )
-
-            _delete_orphaned_local_sweep_run_dirs(self.dir_sbi, sweep_api_path)
+                _delete_orphaned_local_sweep_run_dirs(self.dir_sbi, sweep_api_path)
 
             n_finished = _wandb_count_finished_success_runs(sweep_api_path)
-            count = max(0, int(self.sweep_num_runs) - n_finished)
+            remaining = max(0, int(self.sweep_num_runs) - n_finished)
+            per_agent = _env_int("MUCHISIMOCKS_SWEEP_RUNS_PER_AGENT")
+            if per_agent is not None:
+                count = min(remaining, max(0, per_agent))
+            else:
+                count = remaining
             print(
-                "wandb: agent count=%s (target finished runs=%s, already finished=%s)"
-                % (count, self.sweep_num_runs, n_finished),
+                "wandb: agent count=%s (target finished runs=%s, already finished=%s, "
+                "runs_per_agent=%s, parallel=%s)"
+                % (
+                    count,
+                    self.sweep_num_runs,
+                    n_finished,
+                    per_agent if per_agent is not None else "all remaining",
+                    sweep_parallel,
+                ),
                 flush=True,
             )
             if count == 0:

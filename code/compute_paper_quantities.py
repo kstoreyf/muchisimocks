@@ -17,8 +17,11 @@ Macros:
   * ``PrecPct*`` — percent precision increase, ``100*(err_ref/err_new - 1)``
   * ``RelErr*`` — relative error as a percent, ``100 * err / theta_true``
   * ``MeanErr*`` — mean posterior err over a mock set (MeanOfCVs / coverage)
+  * ``FoBSigma*`` — marginal FoB on SHAMe OOD: ``|mean-truth|/sigma`` using the
+    posterior covariance (same as paper-figures ``compute_fob``); ``Bo``/``Bt`` =
+    :math:`b_o` (:math:`b_1`) and :math:`b_t` (:math:`b_{s2}`).
 
-Comparisons (both CV-mean and SHAMe OOD):
+Comparisons (CV-mean and SHAMe OOD at three number densities):
   * vs :math:`P_{gg}` for :math:`P_{gg}+P_{gm}`, :math:`P_{gg}+B_{ggg}`,
     and :math:`P_{gg}+P_{gm}+B_{ggg}`
   * :math:`P_{gg}+P_{gm}+B_{ggg}` vs :math:`P_{gg}+P_{gm}`
@@ -100,7 +103,25 @@ TAG_NOISE_TEST_FIXED = "_noise_unit_shame_p0_n1000"
 TAG_DATAGEN_TEST_MEAN = "_mean"
 
 DATA_MODE_TEST_SHAME = "shame"
-TAG_MOCK_SHAME = "_nbar0.00022"
+# SHAMe OOD mocks at three number densities (small → large n̄).
+TAG_MOCKS_SHAME: Tuple[Tuple[str, str, str], ...] = (
+    ("_nbar0.00011", "shame_ood_nbar11", "ShameOodNbar11"),
+    ("_nbar0.00022", "shame_ood_nbar22", "ShameOodNbar22"),
+    ("_nbar0.00054", "shame_ood_nbar54", "ShameOodNbar54"),
+)
+SHAME_NBAR_PLAIN = {
+    "_nbar0.00011": "SHAMe OOD mock (n̄=1.1×10⁻⁴)",
+    "_nbar0.00022": "SHAMe OOD mock (n̄=2.2×10⁻⁴)",
+    "_nbar0.00054": "SHAMe OOD mock (n̄=5.4×10⁻⁴)",
+}
+
+# Marginal FoB on SHAMe for the full stats combo (Pgg+Pgm+Bggg): b_o=b1, b_t=bs2.
+SHAME_FOB_COMBO = "pk_pgm_b"
+SHAME_FOB_PARAMS: Tuple[Tuple[str, str, str], ...] = (
+    ("b1", "Bo", "b_o (linear bias b1)"),
+    ("bs2", "Bt", "b_t (tidal shear bias bs2)"),
+)
+FOB_RIDGE = 1e-8
 
 TAG_PARAMS_TEST_COV = "_coverage_p5_n1000"
 TAG_BIASPARAMS_TEST_COV = "_biasnoisecoverage_p9_n1000"
@@ -124,20 +145,20 @@ PARAM_PLAIN = {
 
 DATASET_LATEX = {
     "cv_mean": "CVMean",
-    "shame_ood": "ShameOod",
     "mean_of_cvs": "MeanOfCVs",
     "mean_of_coverage": "MeanOfCoverage",
     "mean_of_coverage_center": "MeanOfCoverageCenter",
+    **{key: tex for _tag, key, tex in TAG_MOCKS_SHAME},
 }
 DATASET_PLAIN = {
     "cv_mean": "CV mean (fixed-cosmo mean of 1000 mocks)",
-    "shame_ood": "SHAMe OOD mock",
     "mean_of_cvs": "mean over 1000 individual CV mocks",
     "mean_of_coverage": "mean over 1000 coverage-test mocks",
     "mean_of_coverage_center": (
         f"mean over {N_COVERAGE_CENTER} coverage mocks farthest from prior edges "
         "in (Omega_c, sigma_8, b1)"
     ),
+    **{key: SHAME_NBAR_PLAIN[tag] for tag, key, _tex in TAG_MOCKS_SHAME},
 }
 
 # Per-mock CV mean: only this comparison for now.
@@ -212,7 +233,7 @@ def _setup_coverage_test_tags(tag_stats_arr: Sequence[str]) -> List[str]:
     )
 
 
-def _setup_shame_ood_test_tags() -> List[str]:
+def _setup_shame_ood_test_tags(tag_mock: str) -> List[str]:
     tag_stats_arr = [
         f"_{'_'.join(stats)}{mask}"
         for stats, mask in zip(STATISTICS_ARR_FID, TAGS_MASK_FID)
@@ -220,7 +241,7 @@ def _setup_shame_ood_test_tags() -> List[str]:
     return utils_plot.setup_shame_mock_test_tags(
         tag_stats_arr=tag_stats_arr,
         data_mode_test=DATA_MODE_TEST_SHAME,
-        tag_mock=TAG_MOCK_SHAME,
+        tag_mock=tag_mock,
     )
 
 
@@ -251,12 +272,18 @@ def _true_values_cv_mean(idx_obs: int = IDX_OBS) -> Dict[str, float]:
     return {pn: float(theta_obs[param_vary.index(pn)]) for pn in PARAM_NAMES_KEY}
 
 
-def _true_values_shame_ood() -> Dict[str, float]:
+def _true_values_shame_ood(tag_mock: str) -> Dict[str, float]:
     # Read SHAMe truth from the stored dicts (avoids constructing a bacco cosmology).
-    tag_bias = data_loader._tag_mock_shame_for_bias(TAG_MOCK_SHAME)
+    tag_bias = data_loader._tag_mock_shame_for_bias(tag_mock)
     theta_dict = dict(utils_model.cosmo_dict_shame)
     theta_dict.update(utils_model.bias_dict_shame[tag_bias])
     return {pn: float(theta_dict[pn]) for pn in PARAM_NAMES_KEY}
+
+
+def _true_values_shame_bias(tag_mock: str, param_names: Sequence[str]) -> Dict[str, float]:
+    tag_bias = data_loader._tag_mock_shame_for_bias(tag_mock)
+    bias_dict = utils_model.bias_dict_shame[tag_bias]
+    return {pn: float(bias_dict[pn]) for pn in param_names}
 
 
 def _symmetrized_68(samples: np.ndarray, axis: int = 0) -> np.ndarray:
@@ -490,6 +517,69 @@ def _format_err(x: float) -> str:
     return f"{x:.4g}"
 
 
+def _format_sigma_level(x: float) -> str:
+    """One decimal FoB level (e.g. 0.6 or 1.6)."""
+    s = f"{x:.1f}"
+    return s.rstrip("0").rstrip(".") if "." in s else s
+
+
+def _posterior_marginal_fob(
+    tag_inf: str,
+    tag_test: str,
+    param_names: Sequence[str],
+    theta_true: Mapping[str, float],
+    idx_obs: int = IDX_OBS,
+) -> Dict[str, float]:
+    """Marginal FoB = |mean - truth| / sqrt(cov_ii) after unreparameterizing."""
+    samples, names = utils_inference.get_samples(
+        idx_obs, INF_METHOD, tag_inf, tag_test=tag_test
+    )
+    if samples.size == 0 or len(names) == 0:
+        raise RuntimeError(f"Empty samples for tag_inf={tag_inf!r}, tag_test={tag_test!r}")
+    samples, names = utils_inference.unreparameterize_theta(samples, names)
+    names_list = [str(n) for n in names]
+    mu = np.mean(samples, axis=0)
+    cov = np.cov(samples.T)
+    fob: Dict[str, float] = {}
+    for pn in param_names:
+        if pn not in names_list:
+            raise KeyError(
+                f"Parameter {pn!r} not in unreparameterized chain {names_list} "
+                f"(tag_inf={tag_inf!r}, tag_test={tag_test!r})"
+            )
+        if pn not in theta_true:
+            raise KeyError(f"Missing truth for {pn!r}")
+        i = names_list.index(pn)
+        sig = float(np.sqrt(cov[i, i] + FOB_RIDGE))
+        if not np.isfinite(sig) or sig <= 0:
+            raise ValueError(f"Bad posterior sigma for {pn}: {sig}")
+        fob[pn] = abs(float(mu[i]) - float(theta_true[pn])) / sig
+    return fob
+
+
+def _fob_sigma_macros(
+    dataset: str,
+    combo: str,
+    fob_by_param: Mapping[str, float],
+) -> List[LatexQuantity]:
+    out: List[LatexQuantity] = []
+    ds_tex = DATASET_LATEX[dataset]
+    ds_plain = DATASET_PLAIN[dataset]
+    combo_tex = COMBO_LATEX[combo]
+    combo_plain = COMBO_PLAIN[combo]
+    for pn, tex_suffix, plain_label in SHAME_FOB_PARAMS:
+        val = fob_by_param[pn]
+        if not np.isfinite(val):
+            raise ValueError(f"Bad FoB for {dataset} {combo} {pn}: {val}")
+        name = f"FoBSigma{ds_tex}{combo_tex}{tex_suffix}"
+        comment = (
+            f"{ds_plain}: marginal FoB (|mean-truth|/sigma) on {plain_label} for "
+            f"{combo_plain} (posterior covariance diagonal)"
+        )
+        out.append(LatexQuantity(name, val, _format_sigma_level(val), comment))
+    return out
+
+
 def _prec_pct_macros(
     dataset: str,
     errs_by_combo: Mapping[str, Mapping[str, float]],
@@ -561,6 +651,8 @@ def _write_dat(path: Path, quantities: Sequence[LatexQuantity]) -> None:
         "% MeanOfCVs / MeanOfCoverage / MeanOfCoverageCenter PrecPct* =",
         "%   mean of that percent increase over the corresponding mock set.",
         "% MeanErr* = mean posterior 16-84% err over that mock set.",
+        "% FoBSigma* = marginal FoB |mean-truth|/sigma (posterior cov. diagonal);",
+        "%   Bo/Bt = b_o (b1) and b_t (bs2) on SHAMe OOD, full stats combo only.",
         "% err = 0.5*(p84-p16) of unreparameterized posterior samples.",
         "%",
         "",
@@ -608,14 +700,17 @@ def compute_all(idx_obs: int = IDX_OBS) -> List[LatexQuantity]:
     tags_inf, tag_stats_arr = _setup_fiducial_inference_tags()
     tags_by_combo = dict(zip(COMBO_KEYS, tags_inf))
 
-    tests = {
+    tests: Dict[str, Dict[str, str]] = {
         "cv_mean": dict(zip(COMBO_KEYS, _setup_cv_mean_test_tags(tag_stats_arr))),
-        "shame_ood": dict(zip(COMBO_KEYS, _setup_shame_ood_test_tags())),
     }
-    truths = {
+    truths: Dict[str, Dict[str, float]] = {
         "cv_mean": _true_values_cv_mean(idx_obs=idx_obs),
-        "shame_ood": _true_values_shame_ood(),
     }
+    for tag_mock, dataset_key, _tex in TAG_MOCKS_SHAME:
+        tests[dataset_key] = dict(
+            zip(COMBO_KEYS, _setup_shame_ood_test_tags(tag_mock))
+        )
+        truths[dataset_key] = _true_values_shame_ood(tag_mock)
 
     quantities: List[LatexQuantity] = []
     for dataset, tags_test in tests.items():
@@ -630,6 +725,23 @@ def compute_all(idx_obs: int = IDX_OBS) -> List[LatexQuantity]:
         _print_summary(dataset, errs_by_combo, truths[dataset])
         quantities.extend(_prec_pct_macros(dataset, errs_by_combo))
         quantities.extend(_rel_err_macros(dataset, errs_by_combo, truths[dataset]))
+
+    shame_fob_params = [pn for pn, _tex, _plain in SHAME_FOB_PARAMS]
+    for tag_mock, dataset_key, _tex in TAG_MOCKS_SHAME:
+        tag_inf = tags_by_combo[SHAME_FOB_COMBO]
+        tag_test = tests[dataset_key][SHAME_FOB_COMBO]
+        truth_bias = _true_values_shame_bias(tag_mock, shame_fob_params)
+        print(
+            f"[{dataset_key} | {SHAME_FOB_COMBO} FoB] loading {tag_inf}  x  {tag_test}"
+        )
+        fob_bias = _posterior_marginal_fob(
+            tag_inf, tag_test, shame_fob_params, truth_bias, idx_obs=idx_obs
+        )
+        for pn, _tex, plain in SHAME_FOB_PARAMS:
+            print(f"  FoB {plain}: {fob_bias[pn]:.3g} sigma")
+        quantities.extend(
+            _fob_sigma_macros(dataset_key, SHAME_FOB_COMBO, fob_bias)
+        )
 
     combos_needed = sorted({c for pair in MEAN_OF_CVS_COMPARISONS for c in pair})
 
@@ -649,6 +761,9 @@ def compute_all(idx_obs: int = IDX_OBS) -> List[LatexQuantity]:
     n_obs_cov = int(np.asarray(errs_cov[combos_needed[0]][PARAM_NAMES_KEY[0]]).shape[0])
     mask_center = _coverage_center_mask(n_obs_cov, N_COVERAGE_CENTER)
     print(f"\n=== mean over {N_COVERAGE_CENTER} coverage mocks farthest from prior edges ===")
+    quantities.extend(
+        _mean_err_macros("mean_of_coverage_center", errs_cov, obs_mask=mask_center)
+    )
     quantities.extend(
         _mean_prec_pct_macros("mean_of_coverage_center", errs_cov, obs_mask=mask_center)
     )

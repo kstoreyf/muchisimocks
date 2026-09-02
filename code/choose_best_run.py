@@ -633,6 +633,17 @@ def parse_args() -> argparse.Namespace:
         help="Statistics tag, e.g. _pk_bispec or _pk (masks set automatically; bispec → _kb0.25)",
     )
     p.add_argument(
+        "--tags-mask",
+        nargs="*",
+        default=None,
+        metavar="MASK",
+        help=(
+            "Per-statistic mask suffixes (one per statistic in --tags_stat). "
+            "Default: tags_mask_for_sweep (bispec → _kb0.25, else empty). "
+            "Fiducial pk+bispec+pgm: --tags-mask '' _kb0.25 _kpgm0.25"
+        ),
+    )
+    p.add_argument(
         "--overwrite",
         action="store_true",
         default=False,
@@ -832,6 +843,14 @@ def main() -> int:
         sys.stderr.write("tags_stat: %s\n" % e)
         return 1
     tags_stat_display = "_" + "_".join(statistics)
+    if args.tags_mask is not None:
+        tags_mask = list(args.tags_mask)
+        if len(tags_mask) != len(statistics):
+            sys.stderr.write(
+                "--tags-mask has %d value(s) but --tags_stat has %d statistic(s)\n"
+                % (len(tags_mask), len(statistics))
+            )
+            return 1
 
     for noise_mode in args.noise_modes:
         process_one_combo(

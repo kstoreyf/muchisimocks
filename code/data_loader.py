@@ -35,7 +35,7 @@ def _get_bias_param_cols(biasparams_df):
 def load_data(data_mode, statistics, tag_params, tag_biasparams,
               tag_noise=None,
               tags_mask=None,
-              kwargs={}, bx=None, n_cosmo_max=None):
+              kwargs={}, bx=None, n_cosmo_max=None, cosmo_indices=None):
     
     k, y, y_err = [], [], []
     if tags_mask is None:
@@ -50,6 +50,7 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
                                             tag_params, tag_biasparams, 
                                             tag_noise=tag_noise,
                                             bx=bx, n_cosmo_max=n_cosmo_max,
+                                            cosmo_indices=cosmo_indices,
                                             **kwargs)
         else:
             raise ValueError(f"Data mode {data_mode} not recognized!")
@@ -256,31 +257,50 @@ def mask_data(statistic, tag_mask, k, y, y_err):
 
 # TODO make mask saving more robust
 # used to both remove nonpositive data, and to select certain k_bins
+def _build_pk_mask(tag_mask, k_arr):
+    mask = np.ones(k_arr.shape[-1], dtype=bool)
+    if 'kmaxpk' in tag_mask or 'kp' in tag_mask:
+        match = re.search(r'(?:kmaxpk|kp)([\d.]+)', tag_mask)
+        if match:
+            kmax = float(match.group(1))
+            if k_arr.ndim == 1:
+                mask = mask & (k_arr < kmax)
+            elif k_arr.ndim == 2:
+                mask = mask & np.all(k_arr < kmax, axis=0)
+            else:
+                raise ValueError(f"Unexpected k shape for pk masking: {k_arr.shape}")
+        else:
+            raise ValueError(f"Could not extract kmax value from tag_mask: {tag_mask}")
+    return mask
+
+
 def get_Pk_mask(tag_mask='', k=None):
-    dir_masks = '../data/masks'
+    dir_masks = _default_masks_dir()
     # Mask depends only on the intended bin selection (tag_mask), not on data values.
     fn_mask = f'{dir_masks}/mask_pk{tag_mask}.txt'
+    n_bins = None if k is None else np.asarray(k).shape[-1]
     if os.path.exists(fn_mask):
-        return np.loadtxt(fn_mask, dtype=bool)
-    else:
-        assert k is not None, "must pass k, if mask doesn't yet exist!"
-        k_arr = np.asarray(k)
-        mask = np.ones(k_arr.shape[-1], dtype=bool)
-        # Apply kmax cutoff if specified
-        if 'kmaxpk' in tag_mask or 'kp' in tag_mask:
-            match = re.search(r'(?:kmaxpk|kp)([\d.]+)', tag_mask)
-            if match:
-                kmax = float(match.group(1))
-                if k_arr.ndim == 1:
-                    mask = mask & (k_arr < kmax)
-                elif k_arr.ndim == 2:
-                    mask = mask & np.all(k_arr < kmax, axis=0)
-                else:
-                    raise ValueError(f"Unexpected k shape for pk masking: {k_arr.shape}")
-            else:
-                raise ValueError(f"Could not extract kmax value from tag_mask: {tag_mask}")
+        mask = np.loadtxt(fn_mask, dtype=bool)
+        # Stale/empty mask files (e.g. from concurrent first writes) must not zero out P(k).
+        if mask.size == 0 or (n_bins is not None and mask.size != n_bins):
+            if k is None:
+                raise ValueError(
+                    f"Invalid mask file {fn_mask} (size={mask.size}); pass k to regenerate."
+                )
+            print(
+                f"Regenerating pk mask {fn_mask} "
+                f"(loaded size={mask.size}, expected {n_bins})"
+            )
+            mask = _build_pk_mask(tag_mask, np.asarray(k))
+            os.makedirs(dir_masks, exist_ok=True)
+            np.savetxt(fn_mask, mask.astype(int), fmt='%i')
+        return mask
 
-        np.savetxt(fn_mask, mask.astype(int), fmt='%i')
+    assert k is not None, "must pass k, if mask doesn't yet exist!"
+    k_arr = np.asarray(k)
+    mask = _build_pk_mask(tag_mask, k_arr)
+    os.makedirs(dir_masks, exist_ok=True)
+    np.savetxt(fn_mask, mask.astype(int), fmt='%i')
     return mask
 
 
@@ -617,7 +637,7 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
                            tag_noise=None, tag_Anoise=None,
                            tag_datagen='',
                            mode_precomputed=None, return_pk_objs=False,
-                           bx=None, n_cosmo_max=None):
+                           bx=None, n_cosmo_max=None, cosmo_indices=None):
     
     # Determine directories and file structure
     dir_statistics = get_dir_statistics(statistic, tag_params, tag_biasparams,
@@ -674,7 +694,11 @@ def load_data_muchisimocks(statistic, tag_params, tag_biasparams,
     print(f"Found {len(idxs_LH)} diff cosmo {stat_name}s in {dir_statistics}")
     assert len(idxs_LH) > 0, f"No {stat_name}s found in {dir_statistics}!"
 
-    if n_cosmo_max is not None and len(idxs_LH) > n_cosmo_max:
+    if cosmo_indices is not None:
+        want = set(int(i) for i in np.asarray(cosmo_indices).ravel())
+        idxs_LH = [i for i in idxs_LH if int(i) in want]
+        print(f"Filtered to {len(idxs_LH)} cosmologies (cosmo_indices)")
+    elif n_cosmo_max is not None and len(idxs_LH) > n_cosmo_max:
         rng = np.random.default_rng(seed=42)
         idxs_LH = np.sort(rng.choice(idxs_LH, size=n_cosmo_max, replace=False))
         print(f"Subsampled to {len(idxs_LH)} cosmologies (n_cosmo_max={n_cosmo_max})")
