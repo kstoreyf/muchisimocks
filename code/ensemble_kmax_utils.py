@@ -35,20 +35,51 @@ DATA_MODE = "muchisimocks"
 TAG_REPARAM = "_rp"
 KMAX_PK_LOOSE = 0.4
 
-TAGS_KMAX_KB = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
+TAGS_KMAX_KB = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.27", "_kb0.32", "_kb0.37", ""]
 TAGS_KMAX_KPGM = [
     "_kpgm0.1",
     "_kpgm0.15",
     "_kpgm0.2",
     "_kpgm0.25",
-    "_kpgm0.3",
-    "_kpgm0.35",
+    "_kpgm0.27",
+    "_kpgm0.32",
+    "_kpgm0.37",
     "",
 ]
-K_OVERALL = [0.1, 0.15, 0.2, 0.25, 0.3, 0.32, 0.35, 0.37, 0.4]
+K_OVERALL = [0.1, 0.15, 0.2, 0.25, 0.27, 0.32, 0.37, 0.4]
+K_PK_FIXED_SCALE = [0.32, 0.35, 0.37]
 STAT_ROWS = [["pk"], ["pk", "pgm"], ["pk", "bispec"], ["pk", "bispec", "pgm"]]
+STAT_ROWS_SCALE = [["pk", "pgm"], ["pk", "bispec"], ["pk", "bispec", "pgm"]]
 NBAR_TAGS_SHAME = ["_nbar0.00011", "_nbar0.00022", "_nbar0.00054"]
 N_ENSEMBLE_K = 3
+
+# Canonical cut for dedicated HP sweep / ensemble at kp=0.35, kb=0.25, kpgm=0.25
+KP035_CONFIGS: list[tuple[list[str], str]] = [
+    (["pk"], "_kp0.35"),
+    (["pk", "pgm"], "_kp0.35_kpgm0.25"),
+    (["pk", "bispec"], "_kp0.35_kb0.25"),
+    (["pk", "bispec", "pgm"], "_kp0.35_kb0.25_kpgm0.25"),
+]
+
+
+def iter_kp035_configs() -> list[tuple[list[str], str]]:
+    """(statistics, joined mask) pairs for the kp0.35 / kb0.25 / kpgm0.25 ensemble."""
+    return [(list(stats), mask) for stats, mask in KP035_CONFIGS]
+
+
+def sweep_name_for_tags_mask(statistics: list[str], tags_mask: list[str]) -> str:
+    """Local sweep dir tag (with leading ``_``, no ``sbi`` prefix) for these masks."""
+    train = _train_bundle()
+    return build_sweep_tag_inf(
+        data_mode=DATA_MODE,
+        statistics=statistics,
+        tags_mask=tags_mask,
+        tag_params=train["tag_params"],
+        tag_biasparams=train["tag_biasparams"],
+        tag_noise=train["tag_noise"],
+        reparameterize=True,
+        tag_sweep=TAG_SWEEP,
+    )
 
 
 def _train_bundle():
@@ -144,6 +175,88 @@ def iter_kmax_figure_configs() -> list[tuple[list[str], str]]:
         for k in K_OVERALL:
             configs.add((tuple(statistics), overall_k_mask(statistics, k)))
     return [(list(stats), mask) for stats, mask in sorted(configs)]
+
+
+def tags_mask_fixed_kp_scale_sweep(
+    statistics: list[str],
+    kp: float,
+    *,
+    tag_kb: str | None = None,
+    tag_kpgm: str | None = None,
+    tag_kb_fixed: str = "_kb0.25",
+    tag_kpgm_fixed: str = "_kpgm0.25",
+) -> list[str]:
+    """Per-statistic masks for Fig-8-style sweeps with Pk fixed at ``kp``.
+
+    Set ``tag_kb`` (including ``""`` for a loose bispec cut) to sweep bispec;
+    set ``tag_kpgm`` to sweep PGM. Do not pass both.
+    """
+    if tag_kb is not None and tag_kpgm is not None:
+        raise ValueError("pass tag_kb or tag_kpgm, not both")
+    kp_tag = f"_kp{kp}"
+    out: list[str] = []
+    for stat in statistics:
+        if stat == "pk":
+            out.append(kp_tag)
+        elif stat == "bispec":
+            if tag_kb is not None:
+                out.append(tag_kb)
+            elif "pgm" in statistics:
+                out.append(tag_kb_fixed)
+            else:
+                out.append("")
+        elif stat == "pgm":
+            if tag_kpgm is not None:
+                out.append(tag_kpgm)
+            elif "bispec" in statistics:
+                out.append(tag_kpgm_fixed)
+            else:
+                out.append("")
+        else:
+            raise ValueError(stat)
+    return out
+
+
+def iter_scale_sweep_fixed_kp_configs(
+    kp_values: list[float] | None = None,
+) -> list[tuple[list[str], list[str]]]:
+    """(statistics, tags_mask) pairs for fixed-Pk scale sweeps (Fig 8 @ kp=0.32/0.35/0.37)."""
+    kp_values = list(kp_values or K_PK_FIXED_SCALE)
+    seen: set[tuple[tuple[str, ...], tuple[str, ...]]] = set()
+    configs: list[tuple[list[str], list[str]]] = []
+
+    def add(statistics: list[str], tags_mask: list[str]) -> None:
+        key = (tuple(statistics), tuple(tags_mask))
+        if key in seen:
+            return
+        seen.add(key)
+        configs.append((statistics, tags_mask))
+
+    for kp in kp_values:
+        for tag_kb in TAGS_KMAX_KB:
+            add(
+                ["pk", "bispec"],
+                tags_mask_fixed_kp_scale_sweep(["pk", "bispec"], kp, tag_kb=tag_kb),
+            )
+            add(
+                ["pk", "bispec", "pgm"],
+                tags_mask_fixed_kp_scale_sweep(
+                    ["pk", "bispec", "pgm"], kp, tag_kb=tag_kb,
+                ),
+            )
+        for tag_kpgm in TAGS_KMAX_KPGM:
+            add(
+                ["pk", "pgm"],
+                tags_mask_fixed_kp_scale_sweep(["pk", "pgm"], kp, tag_kpgm=tag_kpgm),
+            )
+            add(
+                ["pk", "bispec", "pgm"],
+                tags_mask_fixed_kp_scale_sweep(
+                    ["pk", "bispec", "pgm"], kp, tag_kpgm=tag_kpgm,
+                ),
+            )
+
+    return configs
 
 
 def tag_inf_train(statistics: list[str], tags_mask: list[str], nth: int) -> str:

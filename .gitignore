@@ -7,6 +7,7 @@ code/slurm-*.out
 code/*.out
 old/
 artifacts/
+submit_scripts/
 
 *nohup*
 

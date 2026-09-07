@@ -622,9 +622,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--n-cov-rows", type=int, default=None)
     p.add_argument(
         "--noise-modes",
-        nargs="*",
+        nargs="+",
         default=list(NOISE_MODES),
         choices=list(NOISE_MODES),
+        help="Noise training modes to rank (default: all). Prefer --noise-modes=noisy.",
     )
     p.add_argument(
         "--tags_stat",
