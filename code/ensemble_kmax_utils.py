@@ -357,6 +357,7 @@ def load_ensemble_member_samples(
     test_mode: str = "shame",
     tag_mock: str = "_nbar0.00022",
     k_members: int = N_ENSEMBLE_K,
+    n_total: int = 1000,
 ) -> tuple[np.ndarray | None, list[str]]:
     """Load and mix top-K member sample files. Returns (samples, missing_reasons)."""
     missing: list[str] = []
@@ -376,5 +377,5 @@ def load_ensemble_member_samples(
     if len(arrays) < k_members:
         return None, missing
     rng = np.random.default_rng(42)
-    mixed = mixture_sample_equal(rng, arrays, n_total=1000)
+    mixed = mixture_sample_equal(rng, arrays, n_total=n_total)
     return mixed, []
