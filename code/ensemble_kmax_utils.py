@@ -35,7 +35,18 @@ DATA_MODE = "muchisimocks"
 TAG_REPARAM = "_rp"
 KMAX_PK_LOOSE = 0.4
 
-TAGS_KMAX_KB = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.27", "_kb0.32", "_kb0.37", ""]
+TAGS_KMAX_KB = [
+    "_kb0.1",
+    "_kb0.15",
+    "_kb0.17",
+    "_kb0.2",
+    "_kb0.25",
+    "_kb0.27",
+    "_kb0.3",
+    "_kb0.32",
+    "_kb0.37",
+    "",
+]
 TAGS_KMAX_KPGM = [
     "_kpgm0.1",
     "_kpgm0.15",
@@ -46,6 +57,17 @@ TAGS_KMAX_KPGM = [
     "_kpgm0.37",
     "",
 ]
+# Bin edges for the kp=0.35 kpgm/kb scale grid (no loose/empty cut).
+TAGS_KMAX_BIN_EDGES = [
+    "_kpgm0.1",
+    "_kpgm0.15",
+    "_kpgm0.2",
+    "_kpgm0.25",
+    "_kpgm0.27",
+    "_kpgm0.32",
+    "_kpgm0.37",
+]
+TAGS_KMAX_KB_BIN_EDGES = [t.replace("_kpgm", "_kb") for t in TAGS_KMAX_BIN_EDGES]
 K_OVERALL = [0.1, 0.15, 0.2, 0.25, 0.27, 0.32, 0.37, 0.4]
 K_PK_FIXED_SCALE = [0.32, 0.35, 0.37]
 STAT_ROWS = [["pk"], ["pk", "pgm"], ["pk", "bispec"], ["pk", "bispec", "pgm"]]
@@ -65,6 +87,64 @@ KP035_CONFIGS: list[tuple[list[str], str]] = [
 def iter_kp035_configs() -> list[tuple[list[str], str]]:
     """(statistics, joined mask) pairs for the kp0.35 / kb0.25 / kpgm0.25 ensemble."""
     return [(list(stats), mask) for stats, mask in KP035_CONFIGS]
+
+
+def fiducial_kp035_mask_for_statistics(statistics: list[str]) -> str:
+    """Joined mask of the KP035 fiducial cut used as the HP-sweep source."""
+    key = tuple(statistics)
+    for stats, mask in KP035_CONFIGS:
+        if tuple(stats) == key:
+            return mask
+    raise ValueError(f"no KP035 fiducial mask for statistics={statistics!r}")
+
+
+def iter_kp035_scale_bin_configs(
+    kp: float = 0.35,
+    *,
+    tags_kb: list[str] | None = None,
+    tags_kpgm: list[str] | None = None,
+) -> list[tuple[list[str], str, list[str]]]:
+    """Scale grid at fixed ``kp``: sweep kb and kpgm over bin edges (no loose).
+
+    Returns ``(statistics, joined_mask, tags_mask)``. Deduplicates the shared
+    ``pk+bispec+pgm`` point at kb=0.25 / kpgm=0.25.
+    """
+    tags_kb = list(tags_kb if tags_kb is not None else TAGS_KMAX_KB_BIN_EDGES)
+    tags_kpgm = list(tags_kpgm if tags_kpgm is not None else TAGS_KMAX_BIN_EDGES)
+    seen: set[tuple[tuple[str, ...], str]] = set()
+    out: list[tuple[list[str], str, list[str]]] = []
+
+    def add(statistics: list[str], tags_mask: list[str]) -> None:
+        mask = "".join(tags_mask)
+        key = (tuple(statistics), mask)
+        if key in seen:
+            return
+        seen.add(key)
+        out.append((list(statistics), mask, list(tags_mask)))
+
+    for tag_kb in tags_kb:
+        add(
+            ["pk", "bispec"],
+            tags_mask_fixed_kp_scale_sweep(["pk", "bispec"], kp, tag_kb=tag_kb),
+        )
+        add(
+            ["pk", "bispec", "pgm"],
+            tags_mask_fixed_kp_scale_sweep(
+                ["pk", "bispec", "pgm"], kp, tag_kb=tag_kb,
+            ),
+        )
+    for tag_kpgm in tags_kpgm:
+        add(
+            ["pk", "pgm"],
+            tags_mask_fixed_kp_scale_sweep(["pk", "pgm"], kp, tag_kpgm=tag_kpgm),
+        )
+        add(
+            ["pk", "bispec", "pgm"],
+            tags_mask_fixed_kp_scale_sweep(
+                ["pk", "bispec", "pgm"], kp, tag_kpgm=tag_kpgm,
+            ),
+        )
+    return out
 
 
 def sweep_name_for_tags_mask(statistics: list[str], tags_mask: list[str]) -> str:
