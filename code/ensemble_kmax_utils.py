@@ -147,6 +147,47 @@ def iter_kp035_scale_bin_configs(
     return out
 
 
+def tags_mask_kp_kb_kpgm(
+    kp: float,
+    tag_kb: str,
+    tag_kpgm: str,
+) -> list[str]:
+    """Per-statistic masks for joint ``pk+bispec+pgm`` at fixed ``kp`` with both cuts."""
+    if not tag_kb or not tag_kpgm:
+        raise ValueError("tag_kb and tag_kpgm must be non-empty for the Cartesian grid")
+    return [f"_kp{kp}", tag_kb, tag_kpgm]
+
+
+def iter_kp035_cartesian_bipgm_configs(
+    kp: float = 0.35,
+    *,
+    tags_kb: list[str] | None = None,
+    tags_kpgm: list[str] | None = None,
+) -> list[tuple[list[str], str, list[str]]]:
+    """Full ``kb × kpgm`` Cartesian grid for ``pk+bispec+pgm`` at fixed ``kp``.
+
+    Default lists match the figure-variants heatmap (no loose/empty): 9 kb × 7 kpgm
+    = 63 cells. Returns ``(statistics, joined_mask, tags_mask)``.
+    """
+    tags_kb = list(
+        tags_kb
+        if tags_kb is not None
+        else [t for t in TAGS_KMAX_KB if t]
+    )
+    tags_kpgm = list(
+        tags_kpgm
+        if tags_kpgm is not None
+        else [t for t in TAGS_KMAX_KPGM if t]
+    )
+    statistics = ["pk", "bispec", "pgm"]
+    out: list[tuple[list[str], str, list[str]]] = []
+    for tag_kb in tags_kb:
+        for tag_kpgm in tags_kpgm:
+            tags_mask = tags_mask_kp_kb_kpgm(kp, tag_kb, tag_kpgm)
+            out.append((list(statistics), "".join(tags_mask), tags_mask))
+    return out
+
+
 def sweep_name_for_tags_mask(statistics: list[str], tags_mask: list[str]) -> str:
     """Local sweep dir tag (with leading ``_``, no ``sbi`` prefix) for these masks."""
     train = _train_bundle()
@@ -386,6 +427,35 @@ def cvmean_test_tag(statistics: list[str], mask: str) -> str:
     )[0]
 
 
+def cvindiv_test_tag(statistics: list[str], mask: str) -> str:
+    """Fixed-cosmo shame per-realization test tag (no ``_mean``)."""
+    train = _train_bundle()
+    cv = resolve_test_scenario_tags("fixed_cosmo_shame_mean", NOISE_MODE, "_shame_p0_n1000")
+    tag_stats = f"_{'_'.join(statistics)}"
+    return utils_plot.setup_test_tags(
+        data_mode=DATA_MODE,
+        tag_params_test="_shame_p0_n1000",
+        tags_biasparams_test=cv["tag_biasparams_test"],
+        tag_stats_arr=[tag_stats],
+        tag_noise_test=cv["tag_noise_test"],
+        tag_datagen_test="",
+        tags_mask_test=[mask],
+    )[0]
+
+
+def coverage_test_tag(statistics: list[str], mask: str) -> str:
+    tag_stats = f"_{'_'.join(statistics)}"
+    return utils_plot.setup_test_tags(
+        data_mode=DATA_MODE,
+        tag_params_test="_coverage_p5_n1000",
+        tags_biasparams_test="_biasnoisecoverage_p9_n1000",
+        tag_stats_arr=[tag_stats],
+        tag_noise_test="_noise_unit_coverage_p5_n1000",
+        tag_datagen_test="",
+        tags_mask_test=[mask],
+    )[0]
+
+
 def member_samples_path(
     statistics: list[str],
     mask: str,
@@ -400,6 +470,12 @@ def member_samples_path(
         return d / f"samples_test{tag_test}_pred.npy"
     if test_mode == "cvmean":
         tag_test = cvmean_test_tag(statistics, mask)
+        return d / f"samples_test{tag_test}_pred.npy"
+    if test_mode == "cvindiv":
+        tag_test = cvindiv_test_tag(statistics, mask)
+        return d / f"samples_test{tag_test}_pred.npy"
+    if test_mode == "coverage":
+        tag_test = coverage_test_tag(statistics, mask)
         return d / f"samples_test{tag_test}_pred.npy"
     raise ValueError(f"unknown test_mode={test_mode!r}")
 
@@ -430,6 +506,28 @@ def mixture_sample_equal(
     return out
 
 
+def mixture_samples_3d_concat(sample_arrays: list[np.ndarray]) -> np.ndarray:
+    """Stack K member chains along the draw axis → (K·n_draw, n_obs, n_par)."""
+    if not sample_arrays:
+        raise ValueError("sample_arrays is empty")
+    mats = []
+    for arr in sample_arrays:
+        a = np.asarray(arr)
+        if a.ndim == 2:
+            a = a[:, np.newaxis, :]
+        if a.ndim != 3:
+            raise ValueError(f"expected 2D/3D samples, got shape={a.shape}")
+        mats.append(a)
+    n_obs = mats[0].shape[1]
+    n_par = mats[0].shape[2]
+    for a in mats[1:]:
+        if a.shape[1] != n_obs or a.shape[2] != n_par:
+            raise ValueError(
+                f"member shape mismatch: {[m.shape for m in mats]}"
+            )
+    return np.concatenate(mats, axis=0)
+
+
 def load_ensemble_member_samples(
     statistics: list[str],
     mask: str,
@@ -439,7 +537,11 @@ def load_ensemble_member_samples(
     k_members: int = N_ENSEMBLE_K,
     n_total: int = 1000,
 ) -> tuple[np.ndarray | None, list[str]]:
-    """Load and mix top-K member sample files. Returns (samples, missing_reasons)."""
+    """Load and mix top-K member sample files. Returns (samples, missing_reasons).
+
+    For 2D / single-obs tests (shame, cvmean): equal-weight 2D mixture of size n_total.
+    For multi-obs 3D tests (coverage, cvindiv): concatenate along the draw axis.
+    """
     missing: list[str] = []
     arrays: list[np.ndarray] = []
     for nth in range(k_members):
@@ -456,6 +558,18 @@ def load_ensemble_member_samples(
         arrays.append(arr)
     if len(arrays) < k_members:
         return None, missing
+    # Multi-obs 3D: keep all obs; concat draws (coverage / cvindiv).
+    if any(np.asarray(a).ndim == 3 and np.asarray(a).shape[1] > 1 for a in arrays):
+        return mixture_samples_3d_concat(arrays), []
     rng = np.random.default_rng(42)
     mixed = mixture_sample_equal(rng, arrays, n_total=n_total)
     return mixed, []
+
+
+def ensemble_coverage_members_exist(
+    statistics: list[str], mask: str, *, k_members: int = N_ENSEMBLE_K,
+) -> bool:
+    return all(
+        member_samples_path(statistics, mask, nth, test_mode="coverage").is_file()
+        for nth in range(k_members)
+    )
