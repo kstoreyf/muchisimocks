@@ -116,9 +116,49 @@ n_cosmo_max_stats = 100  # subsample for statistics range plots
 
 FIG_DIR = REPO_ROOT / "figures" / "2026-09-10_paper_figures"
 FIG_DIR_LATEST = REPO_ROOT / "figures" / "paper_figures_latest"
-SAVE_FIGURES = False  # check run: plot only, do not write PNGs
+SAVE_FIGURES = False  # default off; override from the notebook via configure_figures()
 OVERWRITE_FIGURES = True
-FIG_EXT = "png"
+FIG_EXT = "pdf"  # vector; override from notebook via configure_figures(ext=...)
+
+
+def configure_figures(
+    *,
+    save=None,
+    fig_dir=None,
+    fig_dir_latest=None,
+    overwrite=None,
+    ext=None,
+):
+    """Set figure output options from the notebook (module-level globals).
+
+    Examples
+    --------
+    >>> import plotter_figs as pf
+    >>> pf.configure_figures(save=True, fig_dir=REPO_ROOT / "figures" / "my_run", ext="pdf")
+    """
+    global SAVE_FIGURES, FIG_DIR, FIG_DIR_LATEST, OVERWRITE_FIGURES, FIG_EXT
+    if save is not None:
+        SAVE_FIGURES = bool(save)
+    if fig_dir is not None:
+        FIG_DIR = Path(fig_dir)
+    if fig_dir_latest is not None:
+        FIG_DIR_LATEST = Path(fig_dir_latest)
+    if overwrite is not None:
+        OVERWRITE_FIGURES = bool(overwrite)
+    if ext is not None:
+        FIG_EXT = str(ext).lstrip(".")
+    print(f"SAVE_FIGURES: {SAVE_FIGURES}")
+    print(f"FIG_DIR: {FIG_DIR}")
+    print(f"FIG_DIR_LATEST: {FIG_DIR_LATEST}")
+    print(f"OVERWRITE_FIGURES: {OVERWRITE_FIGURES}")
+    print(f"FIG_EXT: {FIG_EXT}")
+    return {
+        "SAVE_FIGURES": SAVE_FIGURES,
+        "FIG_DIR": FIG_DIR,
+        "FIG_DIR_LATEST": FIG_DIR_LATEST,
+        "OVERWRITE_FIGURES": OVERWRITE_FIGURES,
+        "FIG_EXT": FIG_EXT,
+    }
 
 # Intermediate products for slow coverage / convergence loads (under figures/, gitignored).
 CACHE_DIR = REPO_ROOT / "figures" / "paper_figures_cache"
@@ -231,9 +271,10 @@ COLOR_RECENTERED = "#8B5A2B"      # brown: recentered pooled + mean-of-means mar
 COLOR_RAND = "#8C8C8C"            # grey: random individual posteriors
 LW_MEAN_A = 1.2
 LW_RECENTERED_A = 1.6
-LW_RAND_A = 0.35
+LW_RAND_A = 0.5
+LW_MEAN_MARK_A = 1.0              # vertical line for θ̄ / mean-of-means
 LW_CONTOUR_A = LW_MEAN_A  # alias
-N_RAND_A = 10
+N_RAND_A = 5
 SMOOTH_MEANS = 0
 BINS_MEANS = 12
 KDE_MEANS = True
@@ -245,9 +286,12 @@ EXTENTS_A = {
 }
 LABEL_MEAN_A = "inference on mean data vector"
 LABEL_INDIV_A = "distribution of means of indiv. posteriors"
-LABEL_MEAN_OF_MEANS_A = "mean of individual posteriors"
-LABEL_RECENTERED_A = "recentered, pooled indiv. posteriors"
+LABEL_MEAN_OF_MEANS_A = "mean of individual posterior means"
+LABEL_MEAN_INF_A = "mean of inference-on-mean"
+LABEL_RECENTERED_A = "recentered, pooled 1000 posteriors"
 LABEL_RAND_A = rf"{N_RAND_A} random indiv. posteriors"
+# Corner legend: left into mid-figure empty triangle, slightly high.
+LOC_LEGEND_A = (1.1, 1.02)
 
 
 # =============================================================================
@@ -281,10 +325,12 @@ def load_or_build(name, builder, *, overwrite=None):
     return obj
 
 
-def save_figure(fig, name, ext=FIG_EXT):
+def save_figure(fig, name, ext=None):
     """Save figure to FIG_DIR and FIG_DIR_LATEST; skip if exists and OVERWRITE_FIGURES is False."""
     if not SAVE_FIGURES:
         return
+    if ext is None:
+        ext = FIG_EXT
     filename = f"{name}.{ext}"
     paths_out = [FIG_DIR / filename, FIG_DIR_LATEST / filename]
     if any(p.exists() for p in paths_out) and not OVERWRITE_FIGURES:
@@ -298,7 +344,7 @@ def save_figure(fig, name, ext=FIG_EXT):
         print(f"Saved: {path}")
 
 
-def save_current_figure(name, ext=FIG_EXT):
+def save_current_figure(name, ext=None):
     """Deprecated: prefer save_figure(fig, name) before plt.show()."""
     save_figure(plt.gcf(), name, ext=ext)
 
@@ -1041,11 +1087,10 @@ def _coverage_samples_path(tag_inf, tag_test):
 
 
 def _load_ensemble_coverage_3d(statistics, tag_masks, *, bx_val=None, n_cosmo_val=None):
-    """Load K=3 coverage chains concatenated on the draw axis.
+    """Load coverage chains; prefer K-member mix, else whatever members exist.
 
-    For the fiducial (bx, n_train) grid point use ``member_samples_path``.
-    For arbitrary (bx, n_cosmo) try ``_best-rand30`` + ``_nbest1/2`` under the
-    same tag_test; fall back to top-1 only if not all K exist.
+    Uses ``*_pred.npy`` when present, else ``*_pred_inprogress.npy``. Metrics are
+    computed on finite (non-NaN) obs only, so partial in-progress runs can be plotted.
     Returns (samples_3d, param_names, info_kind) or (None, None, reason).
     """
     if bx_val is None:
@@ -1059,35 +1104,33 @@ def _load_ensemble_coverage_3d(statistics, tag_masks, *, bx_val=None, n_cosmo_va
         tag_inf = build_tag_inf_conv(bx_val, n_cosmo_val, statistics, tag_masks, nth=nth)
         fn, kind = _coverage_samples_path(tag_inf, tag_test)
         if fn is None:
-            break
+            continue
         arr = np.load(fn)
         if arr.ndim == 2:
             arr = arr[:, np.newaxis, :]
         if not np.isfinite(arr).any():
-            break
+            continue
         arrays.append(arr)
         kinds.append(kind)
-    if len(arrays) == N_ENSEMBLE_K:
-        # Align n_obs to the minimum across members (inprogress may differ).
-        n_obs = min(a.shape[1] for a in arrays)
-        arrays = [a[:, :n_obs, :] for a in arrays]
-        mixed = np.concatenate(arrays, axis=0)
+    if not arrays:
         tag_inf0 = build_tag_inf_conv(bx_val, n_cosmo_val, statistics, tag_masks, nth=0)
-        fn_pn = dir_sbi / f"sbi{tag_inf0}" / "param_names.txt"
-        names = list(np.loadtxt(fn_pn, dtype=str)) if fn_pn.is_file() else None
-        kind = "ensemble_inprogress" if "inprogress" in kinds else "ensemble_done"
-        return mixed, names, kind
-    # Fall back to top-1.
-    tag_inf = build_tag_inf_conv(bx_val, n_cosmo_val, statistics, tag_masks, nth=0)
-    fn, kind = _coverage_samples_path(tag_inf, tag_test)
-    if fn is None:
-        return None, None, f"no coverage samples for {tag_inf}"
-    arr = np.load(fn)
-    if arr.ndim == 2:
-        arr = arr[:, np.newaxis, :]
-    fn_pn = dir_sbi / f"sbi{tag_inf}" / "param_names.txt"
+        return None, None, f"no coverage samples for {tag_inf0}"
+
+    n_obs = min(a.shape[1] for a in arrays)
+    arrays = [a[:, :n_obs, :] for a in arrays]
+    mixed = np.concatenate(arrays, axis=0) if len(arrays) > 1 else arrays[0]
+    tag_inf0 = build_tag_inf_conv(bx_val, n_cosmo_val, statistics, tag_masks, nth=0)
+    fn_pn = dir_sbi / f"sbi{tag_inf0}" / "param_names.txt"
     names = list(np.loadtxt(fn_pn, dtype=str)) if fn_pn.is_file() else None
-    return arr, names, kind or "done"
+    n_mem = len(arrays)
+    ip = "inprogress" in kinds
+    if n_mem == N_ENSEMBLE_K:
+        kind = "ensemble_inprogress" if ip else "ensemble_done"
+    elif n_mem > 1:
+        kind = f"partial{n_mem}_inprogress" if ip else f"partial{n_mem}_done"
+    else:
+        kind = kinds[0] or "done"
+    return mixed, names, kind
 
 
 def _finite_sample_rows(samples_arr):
@@ -1803,9 +1846,10 @@ def _coverage_keep_lists():
 
 
 def _load_ensemble_coverage_for_combo(statistics, mask):
-    """K=3 concatenated coverage samples + param names for one fiducial combo."""
+    """K=3 concatenated coverage samples + param names (allows inprogress)."""
     samples, missing = load_ensemble_member_samples(
         statistics, mask, test_mode="coverage", k_members=N_ENSEMBLE_K,
+        allow_inprogress=True,
     )
     if samples is None:
         raise FileNotFoundError(
@@ -1814,6 +1858,13 @@ def _load_ensemble_coverage_for_combo(statistics, mask):
         )
     fn_pn = model_dir(statistics, mask, 0) / "param_names.txt"
     names = list(np.loadtxt(fn_pn, dtype=str))
+    n_use = int(np.any(np.isfinite(samples), axis=(0, 2)).sum()) if samples.ndim == 3 else 0
+    n_obs = int(samples.shape[1]) if samples.ndim == 3 else 0
+    if n_use < n_obs:
+        print(
+            f"  {get_stat_label_short(statistics)}: using {n_use}/{n_obs} finite "
+            f"coverage obs (inprogress / partial OK)"
+        )
     return samples, names
 
 
@@ -2050,7 +2101,7 @@ def plot_fig4_coverage_binned_diff(save_name="fig4_coverage_binned_diff"):
             "names_u": list(names_u),
         }
 
-    _fig4 = load_or_build("fig4_coverage_arrays_kp035_ensK3", _build_fig4_coverage_arrays)
+    _fig4 = load_or_build("fig4_coverage_arrays_kp035_ensK3_ip", _build_fig4_coverage_arrays)
     theta_pred_u = _fig4["theta_pred_u"]
     theta_true_u = _fig4["theta_true_u"]
     names_u = _fig4["names_u"]
@@ -2171,7 +2222,7 @@ def plot_fig5_coverage_pp(save_name="fig5_coverage_pp"):
                 pp[r, c] = _emp_coverage(ranks, cred_levels)
         return pp
 
-    pp_emp_arr = load_or_build("fig5_pp_emp_arr_kp035_ensK3", _build_fig5_pp_emp)
+    pp_emp_arr = load_or_build("fig5_pp_emp_arr_kp035_ensK3_ip", _build_fig5_pp_emp)
     _plot_pp_overlay(
         pp_emp_arr, save_name,
         param_names_plot=param_names_plot,
@@ -2241,7 +2292,7 @@ def plot_fig5_coverage_pp_center(save_name=None, n_center_pts=None):
         return pp
 
     pp_emp_center = load_or_build(
-        f"fig5_pp_emp_arr_kp035_ensK3_center{n_center_pts}", _build_fig5_pp_emp_center,
+        f"fig5_pp_emp_arr_kp035_ensK3_ip_center{n_center_pts}", _build_fig5_pp_emp_center,
     )
     _plot_pp_overlay(
         pp_emp_center, save_name,
@@ -2550,7 +2601,7 @@ def plot_fig9_scale_dependence_overall_kmax_fom3_nbars(
     *,
     test_mode="shame",
     nbar_tags=None,
-    save_name="fig9_scale_dependence_overall_kmax_fom_marg_nbars_ensemble_shame",
+    save_name="fig9_scale_dependence_fom_nbars",
     report_missing=False,
 ):
     """Ensemble overall k_max marginal FoM for Ωc, σ8, b1 — 3-panel (8-19 style)."""
@@ -2628,7 +2679,7 @@ plot_fig8b_scale_dependence_overall_kmax_fom3d_full_nbars = (
 def plot_fig10_convergence_pgg_b_pgm(save_name="fig10_convergence_pgg_b_pgm"):
     # Cache bumped: K=3 ensemble mix when all members exist.
     df_conv_full = load_or_build(
-        "df_conv_pk_bispec_pgm_kp0.35_kb0.25_kpgm0.25_b1phys_err_ensK3",
+        "df_conv_pk_bispec_pgm_kp0.35_kb0.25_kpgm0.25_b1phys_err_ensK3_ip",
         lambda: collect_coverage_grid(
             STATISTICS_FULL_CONV, TAG_MASKS_FULL_CONV, n_cosmo_arr, bx_arr,
         ),
@@ -2644,9 +2695,6 @@ def plot_fig10_convergence_pgg_b_pgm(save_name="fig10_convergence_pgg_b_pgm"):
     return df_conv_full
 
 
-plot_fig9_convergence_pgg_b_pgm = plot_fig10_convergence_pgg_b_pgm
-
-
 # =============================================================================
 # Fig 11 — Convergence all stat combos
 # =============================================================================
@@ -2659,7 +2707,7 @@ def plot_fig11_convergence_all_combos(save_name="fig11_convergence_all_combos"):
     ):
         cache_name = (
             "df_conv_" + "_".join(statistics) + (tag_masks or "_nomask")
-            + "_b1phys_err_ensK3"
+            + "_b1phys_err_ensK3_ip"
         )
         df = load_or_build(
             cache_name,
@@ -2678,18 +2726,16 @@ def plot_fig11_convergence_all_combos(save_name="fig11_convergence_all_combos"):
     return df_conv_all
 
 
-plot_fig10_convergence_all_combos = plot_fig11_convergence_all_combos
-
-
 # =============================================================================
 # Appendix A — mean vs indiv
 # =============================================================================
 
 def _overlay_mean_of_means(
-    fig, theta_bar, *, color=None, ls="-", lw=0.5, ms=3.5,
-    label=None, add_legend=True, legend_bbox_to_anchor=(1.5, 0.8),
+    fig, theta_bar, *, color=None, ls="-", lw=LW_MEAN_MARK_A, ms=3.5,
+    marker="o", zorder=100, label=None, add_legend=True,
+    legend_bbox_to_anchor=(1.5, 0.8),
 ):
-    """Mark θ̄: vertical line on 1D diagonal; circle on 2D panels (no Truth crosshairs)."""
+    """Mark a mean: vertical line on 1D diagonal; marker on 2D panels (no Truth crosshairs)."""
     if fig is None:
         return
     if color is None:
@@ -2716,12 +2762,12 @@ def _overlay_mean_of_means(
             if ax is None or j >= len(theta_bar) or i >= len(theta_bar):
                 continue
             if i == j:
-                ax.axvline(theta_bar[j], color=color, ls=ls, lw=lw, zorder=100)
+                ax.axvline(theta_bar[j], color=color, ls=ls, lw=lw, zorder=zorder)
             else:
                 ax.plot(
                     theta_bar[j], theta_bar[i],
-                    linestyle="none", marker="o", markersize=ms,
-                    color=color, markeredgecolor=color, zorder=100,
+                    linestyle="none", marker=marker, markersize=ms,
+                    color=color, markeredgecolor=color, zorder=zorder,
                 )
 
     if not add_legend:
@@ -2729,7 +2775,7 @@ def _overlay_mean_of_means(
     handle = Line2D(
         [0], [0],
         color=color, ls=ls, lw=lw,
-        marker="o", markersize=ms,
+        marker=marker, markersize=ms,
         markerfacecolor=color, markeredgecolor=color,
     )
     ax_leg = next((ax for ax in fig.axes if ax.get_legend() is not None), None)
@@ -2753,6 +2799,51 @@ def _overlay_mean_of_means(
     ax_leg.legend(handles, labels, **leg_kwargs)
 
 
+def _set_figA_legend(fig, *, color_mean, bbox_to_anchor, fontsize=10):
+    """Explicit fig-A legend: random indivs first; remaining entries in draw/add order."""
+    if fig is None:
+        return
+    # Remove any ChainConsumer / overlay legends.
+    for ax in fig.axes:
+        leg = ax.get_legend()
+        if leg is not None:
+            leg.remove()
+    handles = [
+        Line2D([0], [0], color=COLOR_RAND, ls="-", lw=LW_RAND_A),
+        Line2D([0], [0], color=color_mean, ls="-", lw=LW_MEAN_A),
+        Line2D([0], [0], color=COLOR_RECENTERED, ls="-", lw=LW_RECENTERED_A),
+        Line2D(
+            [0], [0], color=color_mean, ls="-", lw=LW_MEAN_MARK_A,
+            marker="x", markersize=5.5,
+            markerfacecolor=color_mean, markeredgecolor=color_mean,
+        ),
+        Line2D(
+            [0], [0], color=COLOR_RECENTERED, ls="-", lw=LW_MEAN_MARK_A,
+            marker="o", markersize=3.5,
+            markerfacecolor=COLOR_RECENTERED, markeredgecolor=COLOR_RECENTERED,
+        ),
+    ]
+    labels = [
+        LABEL_RAND_A,
+        LABEL_MEAN_A,
+        LABEL_RECENTERED_A,
+        LABEL_MEAN_INF_A,
+        LABEL_MEAN_OF_MEANS_A,
+    ]
+    # Place on the upper-left triangle axes (same host ChainConsumer uses).
+    ax_leg = fig.axes[0] if fig.axes else None
+    if ax_leg is None:
+        return
+    ax_leg.legend(
+        handles, labels,
+        loc="upper left",
+        bbox_to_anchor=bbox_to_anchor,
+        fontsize=fontsize,
+        frameon=False,
+        labelcolor="black",
+    )
+
+
 def plot_figA_mean_vs_indiv_means_contours(
     save_name="figA_mean_vs_indiv_means_contours",
 ):
@@ -2760,7 +2851,7 @@ def plot_figA_mean_vs_indiv_means_contours(
     statistics_row = list(STATISTICS_FULL_ROW)
     tag_masks_row = TAG_MASK_FULL
     color_mean = COLORS_FID[3]
-    loc_leg = (1.5, 0.8)
+    loc_leg = LOC_LEGEND_A
 
     # Ensemble CV-mean mixture (colored contour).
     mix_rp, missing_mean = load_ensemble_member_samples(
@@ -2777,6 +2868,7 @@ def plot_figA_mean_vs_indiv_means_contours(
     names_u = list(names_u)
     i_zoom = [names_u.index(pn) for pn in PARAM_NAMES_ZOOM]
     mean_samples = mix_u[:, i_zoom] if mix_u.ndim == 2 else mix_u[:, 0, i_zoom]
+    theta_mean_inf = np.nanmean(mean_samples, axis=0)
 
     def _build_a1_ensemble_recentered():
         """Stack K cvindiv chains → recenter pooled posterior."""
@@ -2802,7 +2894,7 @@ def plot_figA_mean_vs_indiv_means_contours(
         theta_bar = np.mean(theta_hat, axis=0)
         n_draw = samples_zoom_ok.shape[0]
         k = min(int(K_PER_OBS), n_draw)
-        draw_idx = np.random.default_rng(1).choice(n_draw, size=k, replace=False)
+        draw_idx = np.random.default_rng(42).choice(n_draw, size=k, replace=False)
         s_tilde = (
             samples_zoom_ok[draw_idx]
             - theta_hat[None, :, :]
@@ -2833,7 +2925,7 @@ def plot_figA_mean_vs_indiv_means_contours(
 
     # Thin grey random individual posteriors from stacked ensemble.
     n_obs_avail = samples_zoom.shape[1]
-    obs_idx = np.random.default_rng(42).choice(
+    obs_idx = np.random.default_rng(7).choice(
         n_obs_avail, size=min(N_RAND_A, n_obs_avail), replace=False,
     )
     rand_samples = [samples_zoom[:, j, :] for j in obs_idx]
@@ -2848,12 +2940,15 @@ def plot_figA_mean_vs_indiv_means_contours(
         + [f"_rand{i}" for i in range(1, n_extra)]
         + [LABEL_RECENTERED_A]
     )
-    shades = [True] + [False] * n_extra + [False]
+    shades = [True] + [False] * n_extra + [False]  # 2D fill: mean only
+    # 1D 1σ bar shade: mean + brown recentered (not the thin grey indivs)
+    bar_shades = [True] + [False] * n_extra + [True]
     linewidths = [LW_MEAN_A] + [LW_RAND_A] * n_extra + [LW_RECENTERED_A]
     smooths = [4] + [4] * n_extra + [4]
     bins_list = [8] + [8] * n_extra + [8]
     kdes = [False] + [False] * n_extra + [False]
-    show_label_in_legend = [True, True] + [False] * (n_extra - 1) + [True]
+    # Suppress ChainConsumer legend; we build it explicitly (rand first).
+    show_label_in_legend = [False] * (n_extra + 2)
     samples_list = (
         [(mean_samples, list(PARAM_NAMES_ZOOM))]
         + [(s, list(PARAM_NAMES_ZOOM)) for s in rand_samples]
@@ -2870,6 +2965,7 @@ def plot_figA_mean_vs_indiv_means_contours(
         colors=colors,
         labels=labels,
         shades=shades,
+        bar_shades=bar_shades,
         linewidths=linewidths,
         smooths=smooths,
         bins_list=bins_list,
@@ -2886,10 +2982,19 @@ def plot_figA_mean_vs_indiv_means_contours(
         samples_list=samples_list,
         show=False,
     )
+    # Magenta X / vline for inference-on-mean posterior mean (under brown).
     _overlay_mean_of_means(
-        fig, theta_bar, color=COLOR_RECENTERED, ls="-", lw=0.5,
-        legend_bbox_to_anchor=loc_leg,
+        fig, theta_mean_inf, color=color_mean, ls="-", lw=LW_MEAN_MARK_A,
+        marker="x", ms=5.5, zorder=90,
+        label=LABEL_MEAN_INF_A, add_legend=False,
     )
+    # Brown θ̄ (mean of individual posterior means) on top.
+    _overlay_mean_of_means(
+        fig, theta_bar, color=COLOR_RECENTERED, ls="-", lw=LW_MEAN_MARK_A,
+        marker="o", ms=3.5, zorder=100,
+        add_legend=False,
+    )
+    _set_figA_legend(fig, color_mean=color_mean, bbox_to_anchor=loc_leg, fontsize=10)
     if fig is not None:
         for ax in fig.axes:
             ax.xaxis.label.set_fontsize(14)

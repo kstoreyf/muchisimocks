@@ -480,6 +480,32 @@ def member_samples_path(
     raise ValueError(f"unknown test_mode={test_mode!r}")
 
 
+def resolve_member_samples_path(
+    statistics: list[str],
+    mask: str,
+    nth: int,
+    *,
+    test_mode: str = "shame",
+    tag_mock: str = "_nbar0.00022",
+    allow_inprogress: bool = True,
+) -> tuple[Path | None, str | None]:
+    """Return ``(path, kind)`` with kind in ``{'done', 'inprogress'}``, or ``(None, None)``.
+
+    For coverage (and when ``allow_inprogress``), fall back to ``*_pred_inprogress.npy``
+    if the final ``*_pred.npy`` is not written yet.
+    """
+    path = member_samples_path(
+        statistics, mask, nth, test_mode=test_mode, tag_mock=tag_mock,
+    )
+    if path.is_file():
+        return path, "done"
+    if allow_inprogress:
+        ip = path.with_name(path.name.replace("_pred.npy", "_pred_inprogress.npy"))
+        if ip != path and ip.is_file():
+            return ip, "inprogress"
+    return None, None
+
+
 def mixture_sample_equal(
     rng: np.random.Generator,
     sample_arrays: list[np.ndarray],
@@ -536,31 +562,57 @@ def load_ensemble_member_samples(
     tag_mock: str = "_nbar0.00022",
     k_members: int = N_ENSEMBLE_K,
     n_total: int = 1000,
+    allow_inprogress: bool | None = None,
 ) -> tuple[np.ndarray | None, list[str]]:
     """Load and mix top-K member sample files. Returns (samples, missing_reasons).
 
     For 2D / single-obs tests (shame, cvmean): equal-weight 2D mixture of size n_total.
     For multi-obs 3D tests (coverage, cvindiv): concatenate along the draw axis.
+
+    Coverage defaults to ``allow_inprogress=True`` so partial ``*_pred_inprogress.npy``
+    files can be plotted before the final ``*_pred.npy`` is written.
     """
+    if allow_inprogress is None:
+        allow_inprogress = test_mode == "coverage"
     missing: list[str] = []
     arrays: list[np.ndarray] = []
+    kinds: list[str] = []
     for nth in range(k_members):
-        path = member_samples_path(
-            statistics, mask, nth, test_mode=test_mode, tag_mock=tag_mock,
+        path, kind = resolve_member_samples_path(
+            statistics, mask, nth,
+            test_mode=test_mode, tag_mock=tag_mock,
+            allow_inprogress=allow_inprogress,
         )
-        if not path.is_file():
-            missing.append(f"nbest{nth}: missing {path}")
+        if path is None:
+            miss = member_samples_path(
+                statistics, mask, nth, test_mode=test_mode, tag_mock=tag_mock,
+            )
+            missing.append(f"nbest{nth}: missing {miss} (+ inprogress)" if allow_inprogress else f"nbest{nth}: missing {miss}")
             continue
         arr = np.load(path)
         if not np.isfinite(arr).any():
             missing.append(f"nbest{nth}: all-NaN at {path}")
             continue
         arrays.append(arr)
+        kinds.append(kind or "done")
     if len(arrays) < k_members:
         return None, missing
     # Multi-obs 3D: keep all obs; concat draws (coverage / cvindiv).
     if any(np.asarray(a).ndim == 3 and np.asarray(a).shape[1] > 1 for a in arrays):
-        return mixture_samples_3d_concat(arrays), []
+        # In-progress members can differ in stored n_obs; align to the shortest.
+        mats = []
+        for a in arrays:
+            a = np.asarray(a)
+            if a.ndim == 2:
+                a = a[:, np.newaxis, :]
+            mats.append(a)
+        n_obs = min(m.shape[1] for m in mats)
+        mats = [m[:, :n_obs, :] for m in mats]
+        mixed = mixture_samples_3d_concat(mats)
+        if any(k == "inprogress" for k in kinds):
+            # Caller can detect via finite-obs count; keep arrays usable either way.
+            pass
+        return mixed, []
     rng = np.random.default_rng(42)
     mixed = mixture_sample_equal(rng, arrays, n_total=n_total)
     return mixed, []
@@ -568,8 +620,13 @@ def load_ensemble_member_samples(
 
 def ensemble_coverage_members_exist(
     statistics: list[str], mask: str, *, k_members: int = N_ENSEMBLE_K,
+    allow_inprogress: bool = True,
 ) -> bool:
+    """True if all K members have coverage ``_pred.npy`` or (optionally) inprogress."""
     return all(
-        member_samples_path(statistics, mask, nth, test_mode="coverage").is_file()
+        resolve_member_samples_path(
+            statistics, mask, nth, test_mode="coverage",
+            allow_inprogress=allow_inprogress,
+        )[0] is not None
         for nth in range(k_members)
     )

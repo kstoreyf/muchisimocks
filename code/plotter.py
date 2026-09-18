@@ -1055,7 +1055,7 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
                       colors=None, labels=None,
                       figsize=(7,7), fontsize_legend=18,
                       extents={}, title=None, unreparameterize=False,
-                      shades=None, loc_legend=(1.05, 1.0), add_truth=True,
+                      shades=None, bar_shades=None, loc_legend=(1.05, 1.0), add_truth=True,
                       truth_locations=None, truth_colors=None, truth_marker="o",
                       samples_list=None, show_label_in_legend=None, linewidths=None,
                       linestyles=None, smooths=None, bins_list=None, kdes=None,
@@ -1071,6 +1071,8 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
     smooths: optional int list parallel to inf_methods (ChainConsumer histogram smooth).
     bins_list: optional int list parallel to inf_methods (histogram bins; default 8).
     kdes: optional bool/float list parallel to inf_methods (ChainConsumer KDE; False = histogram).
+    shades: optional bool list — 2D contour fill.
+    bar_shades: optional bool list — 1D marginal 1σ fill; defaults to ``shades`` if None.
     Legend placement (tweak by hand):
       legend_location: (row, col) of the subplot that owns the legend
         (ChainConsumer; e.g. (0, 1) = empty cell right of the first 1D hist).
@@ -1236,7 +1238,13 @@ def plot_contours_inf(param_names, idx_obs, theta_obs_true,
         )
         if shades is not None and orig_idx < len(shades):
             chain_kwargs['shade'] = shades[orig_idx]
-            chain_kwargs['bar_shade'] = shades[orig_idx]
+            # 1D marginal fill: bar_shades if given, else follow shades.
+            if bar_shades is not None and orig_idx < len(bar_shades):
+                chain_kwargs['bar_shade'] = bar_shades[orig_idx]
+            else:
+                chain_kwargs['bar_shade'] = shades[orig_idx]
+        elif bar_shades is not None and orig_idx < len(bar_shades):
+            chain_kwargs['bar_shade'] = bar_shades[orig_idx]
         if show_label_in_legend is not None and orig_idx < len(show_label_in_legend):
             chain_kwargs['show_label_in_legend'] = show_label_in_legend[orig_idx]
         if linewidths is not None and orig_idx < len(linewidths):
