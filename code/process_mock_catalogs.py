@@ -8,13 +8,10 @@ power spectra and bispectra for comparison with muchisimocks training/test data.
 import h5py
 import numpy as np
 from pathlib import Path
-import pyfftw
 
 import bacco
 import bacco.probabilistic_bias as pb
 
-import sys
-# sys.path.append('/dipc/kstoreyf/muchisimocks/code')  # Check that it works without this (e.g. PYTHONPATH or install)
 import utils_model
 import compute_statistics as cs
 
@@ -248,15 +245,17 @@ def process_catalog_to_mesh(fn_cat, box_size_mock, fn_cat_mesh=None,
     print(f"High-res mesh shape: {cat_mesh_ngorig.shape}")
     
     # Remove high-k modes to downsample
-    cat_field_kcut = ucos.remove_highk_modes(cat_mesh_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
+    cat_field_kcut = utils_model.remove_highk_modes(cat_mesh_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
     
     # tested in data_creation_pipeline that doing kcut then deconvolve is basically equivalent to deconvolve then kcut,
     # and much faster
     cat_field_kcut_deconvolved = pb.convolve_linear_interpolation_kernel(cat_field_kcut, 
                                                                         npix=n_grid_orig_mock, mode="deconvolve")
     
-    # Convert to tracer_field
+    # Convert to overdensity field
     cat_overdensity = (cat_field_kcut_deconvolved - np.mean(cat_field_kcut_deconvolved))/np.mean(cat_field_kcut_deconvolved)
+    # here we normalize by the lower-res grid size, even though for muchisimocks we use the higher-res; 
+    # this is because we do the overdensity conversion later on here, and this is the choice that makes them equivalent
     cat_overdensity /= n_grid_mock**3 
     
     if fn_cat_mesh is not None:
@@ -306,7 +305,7 @@ def process_sim_to_mesh(dir_sim, box_size_mock, fn_dens_mesh=None,
                                     )
     
     # Remove high-k modes to downsample
-    dens_field_kcut = ucos.remove_highk_modes(dens_field_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
+    dens_field_kcut = utils_model.remove_highk_modes(dens_field_ngorig[0], box_size_mock=box_size_mock, n_grid_target=n_grid_mock)
     
     # tested in data_creation_pipeline that doing kcut then deconvolve is basically equivalent to deconvolve then kcut,
     # and much faster

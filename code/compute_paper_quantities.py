@@ -19,14 +19,21 @@ interval of physical :math:`\\Omega_\\mathrm{c}`, :math:`\\sigma_8`,
 :math:`b_1`: ``0.5*(p_{84}-p_{16})``.
 
 Macros:
-  * ``PrecPct*`` — percent precision increase, ``100*(err_ref/err_new - 1)``
+  * ``PrecPct*`` / ``PrecFactor*`` — precision increase of one statistic combo
+    vs another (percent if ≤100, else multiplicative factor ``err_ref/err_new``;
+    100% → 2×, 200% → 3×); key params on all listed
+    comparisons, plus bias params :math:`b_2`, :math:`b_{s2}`, :math:`b_\\ell`
+    for :math:`P_{gg}+P_{gm}+B` vs :math:`P_{gg}+P_{gm}` on CV-mean and SHAMe
   * ``RelErr*`` — relative error as a percent, ``100 * err / theta_true``
   * ``MeanErr*`` — mean posterior err over a mock set (MeanOfCVs / coverage)
   * ``FoBSigma*`` — marginal FoB on SHAMe OOD: ``|mean-truth|/sigma`` using the
-    posterior covariance (same as paper-figures ``compute_fob``); ``Bo``/``Bt`` =
-    :math:`b_o` (:math:`b_1`) and :math:`b_t` (:math:`b_{s2}`).
+    posterior covariance (same as paper-figures ``compute_fob``); ``Bo``/``Bt``/``Bs`` =
+    :math:`b_o` (:math:`b_1`), :math:`b_t` (:math:`b_2`), :math:`b_s` (:math:`b_{s2}`).
+  * ``FoMIncrPct*`` — percent FoM increase on SHAMe OOD fid n̄ for
+    :math:`\\sigma_8` pushing overall :math:`k_\\mathrm{max}` from EFT to max
+    (Fig. 9; :math:`P_{gg}+P_{gm}` and full stats; macro suffix ``KmaxMaxVsKmaxEFT``).
 
-Comparisons (CV-mean and SHAMe OOD at three number densities):
+Comparisons (CV-mean and SHAMe OOD at lo / fid / hi number density):
   * vs :math:`P_{gg}` for :math:`P_{gg}+P_{gm}`, :math:`P_{gg}+B_{ggg}`,
     and :math:`P_{gg}+P_{gm}+B_{ggg}`
   * :math:`P_{gg}+P_{gm}+B_{ggg}` vs :math:`P_{gg}+P_{gm}`
@@ -128,25 +135,34 @@ TAG_NOISE_TEST_FIXED = "_noise_unit_shame_p0_n1000"
 TAG_DATAGEN_TEST_MEAN = "_mean"
 
 DATA_MODE_TEST_SHAME = "shame"
-# SHAMe OOD mocks at three number densities (small → large n̄).
+# SHAMe OOD mocks at three number densities (lo → fid → hi n̄).
 TAG_MOCKS_SHAME: Tuple[Tuple[str, str, str], ...] = (
-    ("_nbar0.00011", "shame_ood_nbar11", "ShameOodNbar11"),
-    ("_nbar0.00022", "shame_ood_nbar22", "ShameOodNbar22"),
-    ("_nbar0.00054", "shame_ood_nbar54", "ShameOodNbar54"),
+    ("_nbar0.00011", "shame_ood_lo", "ShameOodLo"),
+    ("_nbar0.00022", "shame_ood_fid", "ShameOodFid"),
+    ("_nbar0.00054", "shame_ood_hi", "ShameOodHi"),
 )
 SHAME_NBAR_PLAIN = {
-    "_nbar0.00011": "SHAMe OOD mock (n̄=1.1×10⁻⁴)",
-    "_nbar0.00022": "SHAMe OOD mock (n̄=2.2×10⁻⁴)",
-    "_nbar0.00054": "SHAMe OOD mock (n̄=5.4×10⁻⁴)",
+    "_nbar0.00011": "SHAMe OOD mock, lo n̄ (1.1×10⁻⁴)",
+    "_nbar0.00022": "SHAMe OOD mock, fid n̄ (2.2×10⁻⁴)",
+    "_nbar0.00054": "SHAMe OOD mock, hi n̄ (5.4×10⁻⁴)",
 }
 
 # Marginal FoB on SHAMe for the full stats combo (Pgg+Pgm+Bggg): b_o=b1, b_t=bs2.
 SHAME_FOB_COMBO = "pk_pgm_b"
 SHAME_FOB_PARAMS: Tuple[Tuple[str, str, str], ...] = (
     ("b1", "Bo", "b_o (linear bias b1)"),
-    ("bs2", "Bt", "b_t (tidal shear bias bs2)"),
+    ("b2", "Bt", "b_t (quadratic bias b2)"),
+    ("bs2", "Bs", "b_s (tidal shear bias bs2)"),
 )
 FOB_RIDGE = 1e-8
+
+# Fig. 9: FoM(σ8) increase when pushing overall k_max EFT→max (0.2 → 0.37; SHAMe fid n̄).
+SHAME_FOM_KMAX_REF = 0.2  # EFT-scale cut
+SHAME_FOM_KMAX_HIGH = 0.37  # max Pgg scale
+SHAME_FOM_KMAX_TEX = "KmaxMaxVsKmaxEFT"
+SHAME_FOM_PARAM_KEY = "sigma8"  # plotter_figs FOB_KEYS name
+SHAME_FOM_PARAM_PN = "sigma8_cold"
+SHAME_FOM_COMBOS: Tuple[str, ...] = ("pk_pgm", "pk_pgm_b")
 
 TAG_PARAMS_TEST_COV = "_coverage_p5_n1000"
 TAG_BIASPARAMS_TEST_COV = "_biasnoisecoverage_p9_n1000"
@@ -156,15 +172,24 @@ N_COVERAGE_CENTER = 500
 IDX_OBS = 0
 
 PARAM_NAMES_KEY = ("omega_cold", "sigma8_cold", "b1")
+# Extra bias params for PkPgmB-vs-PkPgm PrecPct on CV-mean / SHAMe OOD only.
+PARAM_NAMES_BIAS = ("b2", "bs2", "bl")
+PARAM_NAMES_SINGLE_OBS = PARAM_NAMES_KEY + PARAM_NAMES_BIAS
 PARAM_LATEX = {
     "omega_cold": "OmegaC",
     "sigma8_cold": "SigmaEight",
-    "b1": "BOne",
+    "b1": "Bo",
+    "b2": "Bt",
+    "bs2": "BsTwo",
+    "bl": "BL",
 }
 PARAM_PLAIN = {
     "omega_cold": "Omega_c",
     "sigma8_cold": "sigma_8",
     "b1": "b1",
+    "b2": "b2",
+    "bs2": "bs2",
+    "bl": "bl",
 }
 
 DATASET_LATEX = {
@@ -197,6 +222,8 @@ COMPARISONS = (
     ("pk_pgm_b", "pk"),
     ("pk_pgm_b", "pk_pgm"),
 )
+# Bias-only PrecPct/PrecFactor: full combo vs Pgg+Pgm (CV-mean + SHAMe OOD).
+BIAS_PREC_COMPARISON = ("pk_pgm_b", "pk_pgm")
 
 # External packages used directly in this work (mock generation, statistics,
 # SBI inference, hyperparameter sweeps, and paper figures). Display name for
@@ -546,21 +573,34 @@ def _mean_prec_pct_macros(
             pcts = 100.0 * (err_ref[ok] / err_new[ok] - 1.0)
             pct_mean = float(np.mean(pcts))
             pct_scatter = float(np.std(pcts))
-            name = (
-                f"PrecPct{ds_tex}{COMBO_LATEX[combo_new]}Vs"
+            name_suffix = (
+                f"{ds_tex}{COMBO_LATEX[combo_new]}Vs"
                 f"{COMBO_LATEX[combo_ref]}{PARAM_LATEX[pn]}"
             )
-            comment = (
+            comment_pct = (
                 f"{ds_plain}: mean percent precision increase on {PARAM_PLAIN[pn]} for "
                 f"{COMBO_PLAIN[combo_new]} vs {COMBO_PLAIN[combo_ref]} "
                 f"(mean of 100*(err_ref/err_new-1) over {n_ok}/{n_tot} mocks; "
                 f"scatter={pct_scatter:.3g})"
             )
+            comment_factor = (
+                f"{ds_plain}: mean precision-increase factor on {PARAM_PLAIN[pn]} for "
+                f"{COMBO_PLAIN[combo_new]} vs {COMBO_PLAIN[combo_ref]} "
+                f"(mean of err_ref/err_new over {n_ok}/{n_tot} mocks; "
+                f"scatter_pct={pct_scatter:.3g}; >100% → factor ×)"
+            )
             print(
                 f"  [{dataset}] {PARAM_PLAIN[pn]}: mean {pct_mean:.3g}%  "
                 f"(scatter {pct_scatter:.3g}%, n={n_ok}/{n_tot})"
             )
-            out.append(LatexQuantity(name, pct_mean, _format_percent(pct_mean), comment))
+            out.append(
+                _prec_increase_quantity(
+                    name_suffix=name_suffix,
+                    pct=pct_mean,
+                    comment_pct=comment_pct,
+                    comment_factor=comment_factor,
+                )
+            )
     return out
 
 
@@ -643,21 +683,52 @@ def _format_percent(x: float) -> str:
     return f"{x:.0f}"
 
 
+def _format_factor(x: float) -> str:
+    """Multiplicative precision factor ``err_ref/err_new``; 2 significant figures."""
+    return f"{x:.2g}"
+
+
 def _format_rel_err_pct(x: float) -> str:
     """One decimal, strip trailing zeros (e.g. 7.4 or 15)."""
     s = f"{x:.1f}"
     return s.rstrip("0").rstrip(".") if "." in s else s
 
 
+def _prec_increase_quantity(
+    *,
+    name_suffix: str,
+    pct: float,
+    comment_pct: str,
+    comment_factor: str,
+) -> LatexQuantity:
+    """``PrecPct*`` if ≤100, else ``PrecFactor*`` = ``err_ref/err_new`` (= pct/100 + 1).
+
+    E.g. 100% more precise → factor ``2``; 200% → factor ``3``.
+    """
+    if pct > 100.0:
+        factor = pct / 100.0 + 1.0
+        return LatexQuantity(
+            f"PrecFactor{name_suffix}",
+            factor,
+            _format_factor(factor),
+            comment_factor,
+        )
+    return LatexQuantity(
+        f"PrecPct{name_suffix}",
+        pct,
+        _format_percent(pct),
+        comment_pct,
+    )
+
+
 def _format_err(x: float) -> str:
-    """Compact 16–84% err width for LaTeX (4 significant figures)."""
-    return f"{x:.4g}"
+    """Posterior 16–84% err width for LaTeX (2 significant figures)."""
+    return f"{x:.2g}"
 
 
 def _format_frac_diff_pct(x: float) -> str:
-    """Signed percent fractional difference; one decimal, strip trailing zeros."""
-    s = f"{x:.1f}"
-    return s.rstrip("0").rstrip(".") if "." in s else s
+    """Signed percent fractional difference (1 significant figure)."""
+    return f"{x:.1g}"
 
 
 def _cv_width_comparison_macros(
@@ -792,15 +863,57 @@ def _fob_sigma_macros(
     return out
 
 
+def _shame_fom_kmax_incr_macros() -> List[LatexQuantity]:
+    """Percent FoM(σ8) increase, k_max 0.37 vs 0.2, SHAMe fid (Fig. 9)."""
+    import plotter_figs as pf  # heavy; load only when computing FoM
+
+    tag_mock = "_nbar0.00022"
+    dataset = "shame_ood_fid"
+    ds_tex = DATASET_LATEX[dataset]
+    ds_plain = DATASET_PLAIN[dataset]
+    pn_tex = PARAM_LATEX[SHAME_FOM_PARAM_PN]
+    pn_plain = PARAM_PLAIN[SHAME_FOM_PARAM_PN]
+    k_ref = SHAME_FOM_KMAX_REF
+    k_hi = SHAME_FOM_KMAX_HIGH
+    out: List[LatexQuantity] = []
+    for combo in SHAME_FOM_COMBOS:
+        stats, _fid_mask = COMBO_CONFIG[combo]
+        mask_ref = pf.overall_k_mask(stats, k_ref)
+        mask_hi = pf.overall_k_mask(stats, k_hi)
+        f_ref, reason_ref = pf.load_ensemble_fom_marg(
+            stats, mask_ref, SHAME_FOM_PARAM_KEY, test_mode="shame", tag_mock=tag_mock,
+        )
+        f_hi, reason_hi = pf.load_ensemble_fom_marg(
+            stats, mask_hi, SHAME_FOM_PARAM_KEY, test_mode="shame", tag_mock=tag_mock,
+        )
+        if f_ref is None or f_hi is None or not np.isfinite(f_ref) or not np.isfinite(f_hi):
+            raise ValueError(
+                f"Bad FoM for {combo} k={k_ref}/{k_hi}: {f_ref} ({reason_ref}), "
+                f"{f_hi} ({reason_hi})"
+            )
+        pct = 100.0 * (f_hi / f_ref - 1.0)
+        name = f"FoMIncrPct{ds_tex}{COMBO_LATEX[combo]}{pn_tex}{SHAME_FOM_KMAX_TEX}"
+        comment = (
+            f"{ds_plain}: percent FoM increase on {pn_plain} for {COMBO_PLAIN[combo]} "
+            f"at overall k_max=max vs EFT "
+            f"(100*(FoM_hi/FoM_ref-1); FoM {f_hi:.4g}/{f_ref:.4g}; Fig. 9)"
+        )
+        out.append(LatexQuantity(name, pct, _format_percent(pct), comment))
+    return out
+
+
 def _prec_pct_macros(
     dataset: str,
     errs_by_combo: Mapping[str, Mapping[str, float]],
+    *,
+    param_names: Sequence[str] = PARAM_NAMES_KEY,
+    comparisons: Sequence[Tuple[str, str]] = COMPARISONS,
 ) -> List[LatexQuantity]:
     out: List[LatexQuantity] = []
     ds_tex = DATASET_LATEX[dataset]
     ds_plain = DATASET_PLAIN[dataset]
-    for combo_new, combo_ref in COMPARISONS:
-        for pn in PARAM_NAMES_KEY:
+    for combo_new, combo_ref in comparisons:
+        for pn in param_names:
             err_new = errs_by_combo[combo_new][pn]
             err_ref = errs_by_combo[combo_ref][pn]
             if not np.isfinite(err_new) or not np.isfinite(err_ref) or err_new <= 0:
@@ -809,16 +922,29 @@ def _prec_pct_macros(
                     f"{err_new}, {err_ref}"
                 )
             pct = 100.0 * (err_ref / err_new - 1.0)
-            name = (
-                f"PrecPct{ds_tex}{COMBO_LATEX[combo_new]}Vs"
+            name_suffix = (
+                f"{ds_tex}{COMBO_LATEX[combo_new]}Vs"
                 f"{COMBO_LATEX[combo_ref]}{PARAM_LATEX[pn]}"
             )
-            comment = (
+            comment_pct = (
                 f"{ds_plain}: percent precision increase on {PARAM_PLAIN[pn]} for "
                 f"{COMBO_PLAIN[combo_new]} vs {COMBO_PLAIN[combo_ref]} "
                 f"(100*(err_ref/err_new-1); err {err_ref:.4g}/{err_new:.4g})"
             )
-            out.append(LatexQuantity(name, pct, _format_percent(pct), comment))
+            comment_factor = (
+                f"{ds_plain}: precision-increase factor on {PARAM_PLAIN[pn]} for "
+                f"{COMBO_PLAIN[combo_new]} vs {COMBO_PLAIN[combo_ref]} "
+                f"(err_ref/err_new; err {err_ref:.4g}/{err_new:.4g}; "
+                f">100% → factor ×)"
+            )
+            out.append(
+                _prec_increase_quantity(
+                    name_suffix=name_suffix,
+                    pct=pct,
+                    comment_pct=comment_pct,
+                    comment_factor=comment_factor,
+                )
+            )
     return out
 
 
@@ -915,18 +1041,23 @@ def _write_dat(path: Path, quantities: Sequence[LatexQuantity]) -> None:
         "%   \\input{<figures>/paper_quantities.dat}",
         "% then e.g.",
         "%   $\\PrecPctCVMeanPkPgmVsPkOmegaC\\%$ more precise on $\\Omega_\\mathrm{c}$,",
+        "%   or factor $\\PrecFactorCVMeanPkPgmVsPkSigmaEight\\times$ when >100\\%,",
         "%   relative error $\\RelErrCVMeanPkPgmOmegaC\\%$.",
         "%   Software: \\SoftwarePackages",
         "%",
-        "% PrecPct* = 100 * (err_ref / err_new - 1)  (percent precision increase).",
+        "% PrecPct*    = 100 * (err_ref / err_new - 1)  when that increase is ≤100.",
+        "% PrecFactor* = err_ref / err_new               when the % increase would be >100",
+        "%               (e.g. 100% → 2×, 200% → 3×).",
         "% RelErr*  = 100 * err / theta_true         (percent relative error).",
-        "% MeanOfCVs / MeanOfCoverage / MeanOfCoverageCenter PrecPct* =",
-        "%   mean of that percent increase over the corresponding mock set.",
+        "% MeanOfCVs / MeanOfCoverage / MeanOfCoverageCenter PrecPct*/PrecFactor* =",
+        "%   mean of that increase over the corresponding mock set.",
         "% MeanErr* = mean posterior 16-84% err over that mock set.",
         "% ErrCVMean* / ErrCVRecentered* = full-combo CV widths (inf-on-mean /",
         "%   recentered pooled indiv.); FracDiffPctErr* = 100*(err_a/err_b - 1).",
         "% FoBSigma* = marginal FoB |mean-truth|/sigma (posterior cov. diagonal);",
-        "%   Bo/Bt = b_o (b1) and b_t (bs2) on SHAMe OOD, full stats combo only.",
+        "%   Bo/Bt/Bs = b_o (b1), b_t (b2), b_s (bs2) on SHAMe OOD, full stats combo only.",
+        "% FoMIncrPct* = 100*(FoM_hi/FoM_ref-1) for FoM(sigma_8) on SHAMe OOD fid,",
+        "%   overall k_max max vs EFT (Fig. 9; Pgg+Pgm and full stats).",
         "% err = 0.5*(p84-p16) of unreparameterized K=3 ensemble posterior samples.",
         "% SoftwarePackages* = external packages used in mock generation,",
         "%   inference, sweeps, and paper figures.",
@@ -1001,13 +1132,37 @@ def compute_all(idx_obs: int = IDX_OBS) -> List[LatexQuantity]:
         for combo in COMBO_KEYS:
             print(f"[{dataset} | {combo}]")
             errs_by_combo[combo] = _posterior_errs_ensemble(
-                combo, test_mode=test_mode, tag_mock=tag_mock
+                combo,
+                test_mode=test_mode,
+                tag_mock=tag_mock,
+                param_names=PARAM_NAMES_SINGLE_OBS,
             )
         if dataset == "cv_mean":
-            errs_cv_mean_by_combo = errs_by_combo
-        _print_summary(dataset, errs_by_combo, truths[dataset])
+            errs_cv_mean_by_combo = {
+                c: {pn: errs_by_combo[c][pn] for pn in PARAM_NAMES_KEY}
+                for c in COMBO_KEYS
+            }
+        _print_summary(
+            dataset,
+            {c: {pn: errs_by_combo[c][pn] for pn in PARAM_NAMES_KEY} for c in COMBO_KEYS},
+            truths[dataset],
+        )
         quantities.extend(_prec_pct_macros(dataset, errs_by_combo))
-        quantities.extend(_rel_err_macros(dataset, errs_by_combo, truths[dataset]))
+        quantities.extend(
+            _prec_pct_macros(
+                dataset,
+                errs_by_combo,
+                param_names=PARAM_NAMES_BIAS,
+                comparisons=(BIAS_PREC_COMPARISON,),
+            )
+        )
+        quantities.extend(
+            _rel_err_macros(
+                dataset,
+                {c: {pn: errs_by_combo[c][pn] for pn in PARAM_NAMES_KEY} for c in COMBO_KEYS},
+                truths[dataset],
+            )
+        )
 
     shame_fob_params = [pn for pn, _tex, _plain in SHAME_FOB_PARAMS]
     for tag_mock, dataset_key, _tex in TAG_MOCKS_SHAME:
@@ -1029,6 +1184,15 @@ def compute_all(idx_obs: int = IDX_OBS) -> List[LatexQuantity]:
         quantities.extend(
             _fob_sigma_macros(dataset_key, SHAME_FOB_COMBO, fob_bias)
         )
+
+    print(
+        f"\n=== SHAMe fid FoM(σ8) k_max {SHAME_FOM_KMAX_HIGH} vs "
+        f"{SHAME_FOM_KMAX_REF} (Fig. 9) ==="
+    )
+    fom_incr = _shame_fom_kmax_incr_macros()
+    for q in fom_incr:
+        print(f"  \\{q.name}{{{q.formatted}}}")
+    quantities.extend(fom_incr)
 
     combos_needed = sorted({c for pair in MEAN_OF_CVS_COMPARISONS for c in pair})
     if CV_WIDTH_COMBO not in combos_needed:

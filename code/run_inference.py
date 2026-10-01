@@ -105,6 +105,12 @@ def main():
             f"(default: {TEST_CHECKPOINT_EVERY})."
         ),
     )
+    parser.add_argument(
+        "--n-samples",
+        type=int,
+        default=10000,
+        help="Posterior draws per test observation (default: 10000).",
+    )
     args = parser.parse_args()
 
     
@@ -130,6 +136,7 @@ def main():
                 overwrite=args.overwrite_test,
                 batch_timeout_seconds=args.batch_timeout_seconds,
                 checkpoint_every=args.checkpoint_every,
+                n_samples=args.n_samples,
             )
         else:
             test_likefree_inference_ood(
@@ -137,6 +144,7 @@ def main():
                 overwrite=args.overwrite_test,
                 batch_timeout_seconds=args.batch_timeout_seconds,
                 checkpoint_every=args.checkpoint_every,
+                n_samples=args.n_samples,
             )
 
     # WARNING not implemented yet !
@@ -348,6 +356,7 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
 
 def test_likefree_inference(
     config, overwrite=False, batch_timeout_seconds=None, checkpoint_every=None,
+    n_samples=10000,
 ):
     """
     Test function using parameters from the config file."""
@@ -465,6 +474,7 @@ def test_likefree_inference(
             y_test_unscaled=y_mean,
             tag_test_eval=tag_test_eval,
             n_test_eval=n_test_eval,
+            n_samples=n_samples,
             **batch_kwargs,
         )
     else:
@@ -474,12 +484,14 @@ def test_likefree_inference(
             y_test_unscaled=y_obs,
             tag_test_eval=tag_test_eval,
             n_test_eval=n_test_eval,
+            n_samples=n_samples,
             **batch_kwargs,
         )
 
 
 def test_likefree_inference_ood(
     config, overwrite=False, batch_timeout_seconds=None, checkpoint_every=None,
+    n_samples=10000,
 ):
     """
     Test function using parameters from the config file."""
@@ -588,6 +600,7 @@ def test_likefree_inference_ood(
             y_test_unscaled=y_mean,
             tag_test_eval=tag_test_eval,
             n_test_eval=n_test_eval,
+            n_samples=n_samples,
             **batch_kwargs,
         )
     else:
@@ -597,6 +610,7 @@ def test_likefree_inference_ood(
             y_test_unscaled=y_obs,
             tag_test_eval=tag_test_eval,
             n_test_eval=n_test_eval,
+            n_samples=n_samples,
             **batch_kwargs,
         )
 
@@ -644,10 +658,9 @@ def run_likelihood_inference(config):
         ys_obs = y[idxs_obs]
         ys_err_obs = y_err[idxs_obs]
         
-    # get bounds
-    _, dict_bounds_cosmo, _ = genp.define_LH_cosmo(tag_params)
-    _, dict_bounds_bias, _ = genp.define_LH_bias(tag_biasparams)
-    dict_bounds = {**dict_bounds_cosmo, **dict_bounds_bias}
+    # get bounds (define_LH_cosmo/define_LH_bias were removed; use BOUNDS via get_bounds)
+    dict_bounds_cosmo = genp.get_bounds("cosmo")
+    dict_bounds_bias = genp.get_bounds("bias")
     
     print("bounds")
     print(dict_bounds_cosmo)

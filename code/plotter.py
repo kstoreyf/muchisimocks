@@ -618,7 +618,7 @@ def plot_hists_var(theta_true_arr, theta_pred_arr, var_pred_arr, param_labels,
     if theta_true_arr.ndim==2:
         theta_true_arr = np.array([theta_true_arr])
         theta_pred_arr = np.array([theta_pred_arr])
-        covs_pred_arr = np.array([covs_pred_arr])
+        var_pred_arr = np.array([var_pred_arr])
     n_params = theta_true_arr.shape[-1]
     
     if label_arr is None:
@@ -1677,7 +1677,9 @@ def plot_pnn(pnn, kk_emu=None, pnn_emu=None):
             pk_emu = pnn_emu[ii]
             ax[contf].loglog(kk_emu, pk_emu, ls=':', color='C'+str(ii), 
                             )
-            ax_err[contf].semilogx(kk_emu, (pk[i_k_emu]/pk_emu)-1, 
+            # Align measured P(k) onto the emulator k-grid for the residual panel
+            pk_on_emu = np.interp(kk_emu, kk, pk)
+            ax_err[contf].semilogx(kk_emu, (pk_on_emu/pk_emu)-1, 
                                 ls='-', color='C'+str(ii),)
                 
             

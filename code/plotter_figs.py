@@ -270,7 +270,7 @@ COLOR_INDIV_MEANS = "black"       # optional: distribution of posterior means
 COLOR_RECENTERED = "#8B5A2B"      # brown: recentered pooled + mean-of-means mark
 COLOR_RAND = "#8C8C8C"            # grey: random individual posteriors
 LW_MEAN_A = 1.2
-LW_RECENTERED_A = 1.6
+LW_RECENTERED_A = 1.2  # match mean / 2D contour outline weight
 LW_RAND_A = 0.5
 LW_MEAN_MARK_A = 1.0              # vertical line for θ̄ / mean-of-means
 LW_CONTOUR_A = LW_MEAN_A  # alias
@@ -2941,8 +2941,8 @@ def plot_figA_mean_vs_indiv_means_contours(
         + [LABEL_RECENTERED_A]
     )
     shades = [True] + [False] * n_extra + [False]  # 2D fill: mean only
-    # 1D 1σ bar shade: mean + brown recentered (not the thin grey indivs)
-    bar_shades = [True] + [False] * n_extra + [True]
+    # 1D: mean keeps bar shade; brown recentered is outline-only (match 2D contours)
+    bar_shades = [True] + [False] * n_extra + [False]
     linewidths = [LW_MEAN_A] + [LW_RAND_A] * n_extra + [LW_RECENTERED_A]
     smooths = [4] + [4] * n_extra + [4]
     bins_list = [8] + [8] * n_extra + [8]
