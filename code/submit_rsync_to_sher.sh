@@ -101,9 +101,11 @@ require_master_or_shell() {
     local probe_dir rsync_rc
     probe_dir="$(mktemp -d)"
     rsync_rc=0
-    # Empty dir: creates REMOTE_DIR if the Oak parent exists, and leaves a
-    # ControlPersist master. DTN rejects ssh -fN / remote shells.
-    rsync -a -e ssh "${probe_dir}/" "${DEST_HOST}:${REMOTE_DIR}/" || rsync_rc=$?
+    # Empty dir: leaves a ControlPersist master. DTN rejects ssh -fN.
+    # Do not -a onto the Oak root: it cannot set directory mtimes there
+    # (Operation not permitted, rsync code 23) even when the copy works.
+    rsync -r -O --no-perms --no-owner --no-group -e ssh \
+      "${probe_dir}/" "${DEST_HOST}:${DEST_PATH%/}/" || rsync_rc=$?
     rm -rf "${probe_dir}"
     if [[ "${rsync_rc}" -ne 0 ]]; then
       echo "ERROR: could not open an rsync connection to ${DEST_HOST}." >&2
@@ -140,6 +142,33 @@ require_master_or_shell() {
   fi
 }
 
+# rsync creates only the last path component. DTN has no shell, so walk
+# SRC_NAME and create each parent (not the leaf) with an empty rsync.
+ensure_remote_parents() {
+  local rel="${SRC_NAME%/}"
+  local rest="${rel%/*}"
+  [[ "${rest}" == "${rel}" ]] && return 0
+  local probe acc part
+  probe="$(mktemp -d)"
+  acc="${DEST_PATH%/}"
+  local IFS=/
+  local -a parts
+  read -r -a parts <<< "${rest}"
+  unset IFS
+  for part in "${parts[@]}"; do
+    [[ -z "${part}" ]] && continue
+    acc="${acc}/${part}"
+    if ! rsync -a -e "ssh -o BatchMode=yes" "${probe}/" "${DEST_HOST}:${acc}/"; then
+      rm -rf "${probe}"
+      echo "ERROR: could not create ${DEST_HOST}:${acc}/" >&2
+      echo "If the Oak root is missing, create it once from a login node:" >&2
+      echo "  ssh sher \"mkdir -p '${DEST_PATH}'\"" >&2
+      return 1
+    fi
+  done
+  rm -rf "${probe}"
+}
+
 # --- worker ---
 if [[ "${RUN_MODE}" == true ]]; then
   echo "========================================"
@@ -157,6 +186,10 @@ if [[ "${RUN_MODE}" == true ]]; then
   fi
 
   require_master_or_shell false
+
+  if [[ "${DRY_RUN}" != true ]]; then
+    ensure_remote_parents
+  fi
 
   # No -z: .npy floats barely compress and burn CPU.
   # --partial --append-verify: resume after network drops.
@@ -239,7 +272,8 @@ if [[ "${DRY_RUN}" == true ]]; then
   ARGS+=(--dry-run)
 fi
 
-JOB_NAME="rsync_${SRC_NAME}"
+# Slashes in --src (data/pks_mlib/...) must not become log subdirs.
+JOB_NAME="rsync_${SRC_NAME//\//_}"
 STAMP="$(date +%Y%m%d_%H%M%S)"
 LOG_FILE="${CODE_DIR}/logs/${JOB_NAME}_${STAMP}.log"
 nohup bash "${CODE_DIR}/submit_rsync_to_sher.sh" "${ARGS[@]}" >"${LOG_FILE}" 2>&1 &

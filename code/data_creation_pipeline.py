@@ -129,8 +129,12 @@ def run_creation(idx_mock, modecosmo='lh', tag_params=None):
 def run_single(param_dict, seed, idx_mock, dir_mocks,
                n_grid=512, n_grid_target=128, box_size=1000.,
                n_threads_bacco=8, n_workers_m2m=0,
-               subdir_prefix='lh'):
-    
+               subdir_prefix='lh',
+               fixed_amplitude=False, initial_phase=0.):
+    # fixed_amplitude / initial_phase are passed to create_lpt_simulation; the defaults
+    # (False, 0) reproduce the main library. Set fixed_amplitude=True and
+    # initial_phase in {0, pi} for paired-and-fixed mocks (e.g. SHAMe-matched).
+
     deconvolve_lr_field = True
     run_zspace = True
     # set the below settings only in case we really want only parts.
@@ -218,7 +222,7 @@ def run_single(param_dict, seed, idx_mock, dir_mocks,
     if run_ZA:
         print("Generating ZA sim", flush=True)
         sim, disp_field = bacco.utils.create_lpt_simulation(cosmo, box_size, Nmesh=n_grid, Seed=seed,
-                                                            FixedInitialAmplitude=False, InitialPhase=0, 
+                                                            FixedInitialAmplitude=fixed_amplitude, InitialPhase=initial_phase,
                                                             expfactor=expfactor, LPT_order=1, order_by_order=None,
                                                             phase_type=1, ngenic_phases=True, return_disp=True, 
                                                             sphere_mode=0)

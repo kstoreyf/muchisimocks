@@ -178,7 +178,7 @@ NBAR_COLORS_STATS = {
     "_nbar0.00022": "0.42",   # fiducial → mid grey
     "_nbar0.00011": "0.60",   # lower n̄ → lighter
 }
-# Legend entries are n̄ only; title "SHAMe mock" is set on the legend itself.
+# Legend entries are n̄ only; title "SHAMe high-fidelity mock" is set on the legend itself.
 NBAR_LABELS_STATS = {
     "_nbar0.00054": r"$\bar{n}=5.4\times10^{-4}$",
     "_nbar0.00022": r"$\bar{n}=2.2\times10^{-4}$",
@@ -250,9 +250,9 @@ STAT_COMBOS_OVERALL = [
     (list(stats), COLORS_FID[i]) for i, (stats, _) in enumerate(KP035_CONFIGS)
 ]
 KMAX_OVERALL_XLABEL = "\n".join([
-    r"$k_{\mathrm{max}}^{\mathrm{all}}\ (\leq 0.25)$",
+    r"$k_{\mathrm{max}}^{\mathrm{all}}\ (\leq 0.25)\,[h/\mathrm{Mpc}]$",
     r"$k_{\mathrm{max}}^{P_{\mathrm{gg}}}\ (>0.25;\ "
-    r"k_{\mathrm{max}}^{B}=k_{\mathrm{max}}^{P_{\mathrm{gm}}}=0.25)$",
+    r"k_{\mathrm{max}}^{B}=k_{\mathrm{max}}^{P_{\mathrm{gm}}}=0.25)\,[h/\mathrm{Mpc}]$",
 ])
 KMAX_XLIM = (0.09, 0.375)  # shared by fig 8 / 9
 
@@ -877,6 +877,39 @@ def _sweep_pgm_fob3(
             statistics_row, candidates, tag_mock=tag_mock,
         )
         kmax = kmax_kpgm_numeric(tag_kpgm)
+        if val is None:
+            if report_missing:
+                _report_missing_fob3(panel_title, statistics_row, tag_mock, kmax, reasons)
+            continue
+        xs.append(kmax)
+        ys.append(val)
+    return np.array(xs), np.array(ys)
+
+
+def _sweep_joint_fob3(
+    statistics_row, *, tag_mock=TAG_MOCK_SHAME, report_missing=False,
+):
+    """Shared k_max sweep: k_B = k_Pgm = k (Pgg fixed at KMAX_PK).
+
+    Two-statistic combos sweep the one cut they include; the full combo sets
+    both equal.
+    """
+    xs, ys = [], []
+    panel_title = "joint sweep (k_B = k_Pgm)"
+    for tag_kb, tag_kpgm in zip(TAGS_KMAX_KB, TAGS_KMAX_KPGM):
+        has_b, has_pgm = "bispec" in statistics_row, "pgm" in statistics_row
+        if has_b and has_pgm:
+            candidates = _joint_mask_candidates(tag_kb, tag_kpgm)
+        elif has_b:
+            candidates = _mask_candidates_kb(tag_kb)
+        elif has_pgm:
+            candidates = [_with_fixed_kp(tag_kpgm)]
+        else:
+            return np.array([]), np.array([])
+        val, reasons = _try_load_shame_fob3(
+            statistics_row, candidates, tag_mock=tag_mock,
+        )
+        kmax = kmax_kb_numeric(tag_kb)
         if val is None:
             if report_missing:
                 _report_missing_fob3(panel_title, statistics_row, tag_mock, kmax, reasons)
@@ -1937,7 +1970,7 @@ def plot_fig2_statistics_ranges(save_name="fig2_statistics_ranges"):
         ax.legend(
             h_shame, l_shame, loc="lower left",
             fontsize=LEGENDSIZE - 1,
-            title="SHAMe mock",
+            title="SHAMe high-fidelity mock",
             title_fontsize=LEGENDSIZE - 1,
             frameon=False, labelcolor="black",
         )
@@ -2356,7 +2389,7 @@ def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_
         arr = samples if samples.ndim == 2 else samples[:, 0, :]
         samples_list.append((arr, names))
         colors_b.append(shades_noisy[i])
-        labels_b.append(f"SHAMe mock, {NBAR_LABELS[tag_mock]}")
+        labels_b.append(f"SHAMe high-fidelity mock, {NBAR_LABELS[tag_mock]}")
         shades_b.append(True)
         linestyles_b.append("-")
         linewidths_b.append(1.0)
@@ -2491,21 +2524,29 @@ def plot_fig8_scale_dependence_fob3_nbars(
     ref3 = fob_chi2_sqrt_limit(3)
     load_shame_fob3._param_names_fob = param_names_fob
     load_shame_fob3._fob_keys = fob_keys
-    fig, axes = plt.subplots(2, 1, figsize=(7, 6.5), sharey=True)
+    fig, axes = plt.subplots(3, 1, figsize=(7, 9.5), sharey=True)
     nbar_legend_shades = _nbar_shades("0.25")
 
     panel_specs = [
         (
             axes[0],
             _sweep_bispec_fob3,
-            r"$k_\mathrm{max}^{B_\mathrm{ggg}}$",
+            r"$k_\mathrm{max}^{B_\mathrm{ggg}}\,[h/\mathrm{Mpc}]$",
             True,
         ),
         (
             axes[1],
             _sweep_pgm_fob3,
-            r"$k_\mathrm{max}^{P_\mathrm{gm}}$",
+            r"$k_\mathrm{max}^{P_\mathrm{gm}}\,[h/\mathrm{Mpc}]$",
             False,
+        ),
+        (
+            axes[2],
+            _sweep_joint_fob3,
+            # Pgg cut written manually as 0.37 (masks still use _kp0.35), as in 9-02 nb.
+            r"$k_\mathrm{max}^{B_\mathrm{ggg}} = k_\mathrm{max}^{P_\mathrm{gm}}\,[h/\mathrm{Mpc}]$"
+            r" ($k_\mathrm{max}^{P_\mathrm{gg}} = 0.37\,h/\mathrm{Mpc}$)",
+            None,  # no constant lines: every combo varies along this axis
         ),
     ]
 
@@ -2517,7 +2558,7 @@ def plot_fig8_scale_dependence_fob3_nbars(
                 c = color_shades[j]
                 # Stat labels only on the fiducial nbar (mid shade) to avoid clutter.
                 line_label = label if tag_mock == TAG_MOCK_SHAME else None
-                const_val = _constant_fob3_on_sweep(
+                const_val = None if bispec_sweep is None else _constant_fob3_on_sweep(
                     statistics_row,
                     bispec_sweep=bispec_sweep,
                     tag_mock=tag_mock,
@@ -2557,8 +2598,8 @@ def plot_fig8_scale_dependence_fob3_nbars(
         ax.tick_params(labelsize=12)
         ax.axhline(1.0, color="0.35", ls=":", lw=1.0, zorder=0)
     ylab = FOB3_YLABEL if ylabel is None else ylabel
-    axes[0].set_ylabel(ylab, fontsize=14)
-    axes[1].set_ylabel(ylab, fontsize=14)
+    for ax in axes:
+        ax.set_ylabel(ylab, fontsize=14)
     axes[0].set_ylim(0.0, 2.5)
 
     handles_stat_raw, labels_stat = axes[0].get_legend_handles_labels()
