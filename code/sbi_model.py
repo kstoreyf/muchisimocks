@@ -302,17 +302,6 @@ def _fit_config_from_training_dict(
     )
 
 
-def _fit_config_from_wandb_run(run, max_epochs_default, validation_fraction_default):
-    """See ``_fit_config_from_training_dict``."""
-    raw = {k: v for k, v in dict(run.config).items() if not str(k).startswith("_")}
-    return _fit_config_from_training_dict(
-        raw,
-        max_epochs_default,
-        validation_fraction_default,
-        source="W&B run %s" % run.id,
-    )
-
-
 def _fit_config_from_config_pkl(path, max_epochs_default, validation_fraction_default):
     """Load sweep hparams from a trial's ``config.pkl`` (same schema as W&B config)."""
     with open(path, "rb") as f:
@@ -810,8 +799,8 @@ class SBIModel():
             wandb.finish()
             
         elif self.run_mode == 'best':
-            # matches_sweep_model True: copy trained run into dir_sbi (local sweep subdir if
-            # present, else W&B artifact download). False: retrain from W&B run hparams.
+            # matches_sweep_model True: copy the trained sweep trial into dir_sbi. False: retrain
+            # with that trial's hyperparameters (its config.pkl) on this config's data.
             # Best run id: read from best_run.txt under results_sbi/sbi{sweep_name} (not
             # self.dir_sbi, which is the _best... output tree).
             try:
@@ -853,88 +842,38 @@ class SBIModel():
             local_posterior = os.path.join(local_run_dir, "posterior.p")
             local_cfg_pkl = os.path.join(local_run_dir, "config.pkl")
 
-            if self.matches_sweep_model and os.path.isfile(local_posterior):
-                print(
-                    "run_mode=best: hyperparameters/source = sweep trial checkpoint (copy local posterior; "
-                    "same bx/n_train and tags_mask as sweep).",
-                    flush=True,
+            # Every sweep trial is saved locally under the sweep dir (fit_model save_dir), so the
+            # chosen trial must be there; there is no W&B download fallback.
+            if not os.path.isfile(local_cfg_pkl):
+                raise SystemExit(
+                    "run_mode=best: sweep trial %s has no %s; the sweep dir must hold every trial"
+                    % (best_run_id, local_cfg_pkl)
                 )
-                print(
-                    "run_mode=best: found trained model under sweep dir — copying to %s "
-                    "(skipping wandb login / artifact download)."
-                    % self.dir_sbi,
-                    flush=True,
-                )
+            if self.matches_sweep_model:
+                # Same data as the sweep: reuse the trained trial.
+                if not os.path.isfile(local_posterior):
+                    raise SystemExit("run_mode=best: missing trained trial %s" % local_posterior)
                 os.makedirs(self.dir_sbi, exist_ok=True)
                 for fn in ["posterior.p", "inference.p", "param_names.txt", "config.pkl"]:
-                    src = os.path.join(local_run_dir, fn)
-                    if os.path.exists(src):
-                        shutil.copy2(src, os.path.join(self.dir_sbi, fn))
+                    shutil.copy2(os.path.join(local_run_dir, fn), os.path.join(self.dir_sbi, fn))
                 for f in pathlib.Path(local_run_dir).glob("scaler_y_*.p"):
                     shutil.copy2(f, os.path.join(self.dir_sbi, f.name))
-                print("Copied best sweep model to %s" % self.dir_sbi)
-            elif self.matches_sweep_model:
-                wandb.login()
-                api = wandb.Api()
-                entity = api.default_entity
-                run_path = "%s/%s/%s" % (entity, project_name, best_run_id)
-                best_run = api.run(run_path)
                 print(
-                    "run_mode=best: resolved sweep run %s (W&B path %s)"
-                    % (best_run.id, run_path),
+                    "run_mode=best: copied sweep trial %s (same bx/n_train/tags_mask) to %s"
+                    % (best_run_id, self.dir_sbi),
                     flush=True,
                 )
-                model_artifacts = [
-                    a for a in best_run.logged_artifacts() if a.type == "model"
-                ]
-                assert model_artifacts, (
-                    "No model artifact for best run %s (no local posterior at %s)"
-                    % (best_run.id, local_posterior)
-                )
-                artifact = model_artifacts[0]
-                download_root = artifact.download()
-                os.makedirs(self.dir_sbi, exist_ok=True)
-                for fn in ["posterior.p", "inference.p", "param_names.txt", "config.pkl"]:
-                    src = os.path.join(download_root, fn)
-                    if os.path.exists(src):
-                        shutil.copy2(src, os.path.join(self.dir_sbi, fn))
-                for f in pathlib.Path(download_root).glob("scaler_y_*.p"):
-                    shutil.copy2(f, os.path.join(self.dir_sbi, f.name))
-                print("Copied best sweep model to %s" % self.dir_sbi)
             else:
+                # Different data: retrain with the trial's hyperparameters.
+                try:
+                    cfg = _fit_config_from_config_pkl(local_cfg_pkl, max_epochs, validation_fraction)
+                except ValueError as e:
+                    raise SystemExit(str(e)) from e
                 print(
-                    "run_mode=best: retrain path — apply best sweep trial hyperparameters to this job's "
-                    "training data (output dir_sbi=%s; trial %s under %s)."
-                    % (self.dir_sbi, best_run_id, sweep_dir),
+                    "run_mode=best: retraining with hparams of trial %s (%s) into %s"
+                    % (best_run_id, local_cfg_pkl, self.dir_sbi),
                     flush=True,
                 )
-                cfg = None
-                if os.path.isfile(local_cfg_pkl):
-                    try:
-                        cfg = _fit_config_from_config_pkl(
-                            local_cfg_pkl, max_epochs, validation_fraction
-                        )
-                    except ValueError as e:
-                        raise SystemExit(str(e)) from e
-                    print(
-                        "run_mode=best: hparams from %s (skip W&B run fetch)"
-                        % local_cfg_pkl,
-                        flush=True,
-                    )
-                if cfg is None:
-                    wandb.login()
-                    api = wandb.Api()
-                    entity = api.default_entity
-                    run_path = "%s/%s/%s" % (entity, project_name, best_run_id)
-                    best_run = api.run(run_path)
-                    print(
-                        "run_mode=best: resolved sweep run %s for hparams (%s)"
-                        % (best_run.id, run_path),
-                        flush=True,
-                    )
-                    cfg = _fit_config_from_wandb_run(
-                        best_run, max_epochs, validation_fraction
-                    )
                 wandb.login()
                 wandb.init(
                     project=project_name,
@@ -943,7 +882,7 @@ class SBIModel():
                 )
                 self.fit_model(cfg, save_model=True)
                 wandb.finish()
-            
+
         elif self.run_mode == 'single':
             print(
                 "run_mode=single: hyperparameters from built-in defaults in sbi_model.SBIModel.run "

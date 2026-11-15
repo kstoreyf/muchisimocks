@@ -149,6 +149,17 @@ def main():
     
 
 
+def training_prior_bounds(tag_biasparams):
+    """Cosmology bounds + the bias(/noise) bounds of the registered set ``tag_biasparams``."""
+    key = tag_biasparams.lstrip("_")
+    cfg = genp.PARAM_SETS_NESTED.get(key) or genp.PARAM_SETS_LH.get(key)
+    if cfg is None:
+        raise KeyError(f"{key!r} is not in generate_params.PARAM_SETS_NESTED / PARAM_SETS_LH")
+    bounds = dict(genp.get_bounds("cosmo"))
+    bounds.update(genp.get_bounds(cfg["bounds_type"], anoise_option=cfg.get("anoise_option")))
+    return bounds
+
+
 def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
     """
     Train function using parameters from the config file.
@@ -196,16 +207,13 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
         idxs_params, params_df, biasparams_df
     )
 
-    # Build bounds directly from the known parameter set bounds.
-    # Noise parameters are stored inside tag_biasparams now.
-    dict_bounds = {}
-    for pn in param_names:
-        for bounds_set in genp.BOUNDS.values():
-            if pn in bounds_set:
-                dict_bounds[pn] = bounds_set[pn]
-                break
-        else:
-            raise KeyError(f"Missing bounds for parameter '{pn}'. Update generate_params.BOUNDS.")
+    # Prior bounds from the training sets' own registry entries (a parameter like An_homog has
+    # different bounds in different noise models, so never look it up across all of BOUNDS).
+    all_bounds = training_prior_bounds(tag_biasparams)
+    missing = [pn for pn in param_names if pn not in all_bounds]
+    if missing:
+        raise KeyError(f"No bounds for {missing} in the {tag_biasparams!r} parameter set")
+    dict_bounds = {pn: all_bounds[pn] for pn in param_names}
     print('theta shape:', theta.shape)
     print(param_names)
     

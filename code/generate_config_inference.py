@@ -37,18 +37,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIGS_TRAIN_DIR = REPO_ROOT / "configs" / "configs_train"
 DEFAULT_CONFIGS_TEST_DIR = REPO_ROOT / "configs" / "configs_test"
 
-NOISE_MODES = ("noiseless", "noisy", "noisym2")
-# noisym2: second-order multiplicative noise (m2p3), see generate_params biasnoisem2nest_*.
+NOISE_MODES = ("noiseless", "noisy")
 NOISE_MODE_TRAIN_BIAS = {
     "noiseless": "_biasnest_p4_n320000",
     "noisy": "_biasnoisenestv2_p9_n320000",
-    "noisym2": "_biasnoisem2nest_p7_n320000",
 }
 
 
 def resolve_train_tag_bundle(tag_params: str, noise_mode: str) -> dict:
     """
-    From cosmo ``tag_params`` and ``noise_mode`` (``noiseless``, ``noisy``, or ``noisym2``),
+    From cosmo ``tag_params`` and ``noise_mode`` (``noiseless`` or ``noisy``),
     return ``tag_params``, ``tag_biasparams``, and ``tag_noise`` for training configs.
     """
     if noise_mode not in NOISE_MODE_TRAIN_BIAS:
@@ -217,17 +215,14 @@ _TEST_SCENARIO_TAGS = {
     "coverage": {
         "noiseless": ("_biascoverage_p4_n1000", None),
         "noisy": ("_biasnoisecoveragev2_p9_n1000", "_noisefly"),
-        "noisym2": ("_biasnoisem2coverage_p7_n1000", "_noisefly"),
     },
     "fixed_cosmo_shame_mean": {
         "noiseless": ("_biasshame_p0_n1", None),
         "noisy": ("_biasshame_noisebest_p0_n1", "_noisefly"),
-        "noisym2": ("_biasshame_noisem2best_p0_n1", "_noisefly"),
     },
     "fixed_cosmo_shame_sample": {
         "noiseless": ("_biasshame_p0_n1", None),
         "noisy": ("_biasshame_noisebest_p0_n1", "_noisefly"),
-        "noisym2": ("_biasshame_noisem2best_p0_n1", "_noisefly"),
     },
 }
 

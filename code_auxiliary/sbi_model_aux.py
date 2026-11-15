@@ -58,3 +58,14 @@ def wandb_sweep_best_run(sweep, *, minimize: str):
     return run
 
 
+def _fit_config_from_wandb_run(run, max_epochs_default, validation_fraction_default):
+    """See ``_fit_config_from_training_dict``."""
+    raw = {k: v for k, v in dict(run.config).items() if not str(k).startswith("_")}
+    return _fit_config_from_training_dict(
+        raw,
+        max_epochs_default,
+        validation_fraction_default,
+        source="W&B run %s" % run.id,
+    )
+
+
