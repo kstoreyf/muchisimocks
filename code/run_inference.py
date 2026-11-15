@@ -349,6 +349,8 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
                 sweep_num_runs=sweep_num_runs,
                 wandb_config_yaml_path=config_yaml_path,
                 nth_best_run=config.get("nth_best_run"),
+                groups_train=idxs_params[idxs_train, 0],  # cosmology index per row -> grouped val split
+                seed=int(config.get("seed", 0)),
                 )
     sbi_network.run(max_epochs=2000)
     #sbi_network.run(max_epochs=10)

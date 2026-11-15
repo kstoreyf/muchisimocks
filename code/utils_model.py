@@ -186,7 +186,10 @@ def pnn_to_pgm(pnn, bias_params, pk_type='pk'):
     message = 'Please, pass a valid bias array, with b1, b2, bs2, bl'
     assert len(bias_params) == 4, message
     bias_params_extended = np.concatenate(([1], bias_params))
-    pnn_idx_pgm = [1, 5, 6, 7, 8]
+    # cross terms <O_i, 1>: the matter field is the advected "1" operator (index 0).
+    # PNN pairs follow combinations_with_replacement(range(5), 2), so (0,i) -> index i.
+    # (Before v2 this was [1, 5, 6, 7, 8] = <O_i, delta_L operator>.)
+    pnn_idx_pgm = [0, 1, 2, 3, 4]
     pks_cross = [pnn[i][pk_type] for i in pnn_idx_pgm]
     return np.dot(bias_params_extended, pks_cross)
 

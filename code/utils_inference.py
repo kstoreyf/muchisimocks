@@ -399,17 +399,47 @@ def unreparameterize_theta(theta, param_names, *, strict=True):
     return theta_out, names_arr
 
 
+def physical_moments_from_samples(samples, param_names):
+    """
+    Exact posterior mean and covariance in physical parameter space.
+
+    Unreparameterizes every draw first (b1 = (sigma8*b1)/sigma8 per draw, etc.), drops
+    non-finite draws, then takes the mean and ``np.cov``. Prefer this whenever samples
+    are available: the sigma8--bias posteriors are strongly correlated, so any moment-level
+    conversion is only approximate.
+
+    Parameters
+    ----------
+    samples : (n_draws, n_params) array, reparameterized or physical columns
+    param_names : names for the columns of ``samples``
+
+    Returns
+    -------
+    mean : (n_params,) array, cov : (n_params, n_params) array, names : list of str (physical)
+    """
+    samples = np.asarray(samples, dtype=float)
+    if samples.ndim != 2:
+        raise ValueError(f"expected (n_draws, n_params) samples, got {samples.shape}")
+    samples_u, names_u = unreparameterize_theta(samples, list(param_names))
+    samples_u = samples_u[np.all(np.isfinite(samples_u), axis=1)]
+    if samples_u.shape[0] < 2:
+        n = samples.shape[1]
+        return np.full(n, np.nan), np.full((n, n), np.nan), list(names_u)
+    return samples_u.mean(axis=0), np.cov(samples_u.T), list(names_u)
+
+
 def unreparameterize_prediction_block(theta_pred, theta_true, param_names, covs_per_sample=None):
     """
-    Unreparameterize one prediction block: ``theta_pred`` / ``theta_true`` shaped
+    Unreparameterize one prediction block from MOMENTS: ``theta_pred`` / ``theta_true`` shaped
     ``(n_samples, n_params)``, optional per-sample covariances ``(n_samples, n_params, n_params)``
-    in reparameterized column order. Uses predicted ``sigma8_cold`` per row for the
-    covariance scaling (pre-unreparameterization values).
+    in reparameterized column order.
+
+    Point estimates are mean(y)/mean(sigma8)^n and covariances use the linearized (delta-method)
+    map in ``scale_covariance_unreparameterize_approx``; both are first-order approximations.
+    When posterior samples are available use ``physical_moments_from_samples`` instead (exact).
     """
     names = list(param_names)
-    idx_sigma8 = names.index('sigma8_cold')
     tp = np.asarray(theta_pred, dtype=float)
-    sigma8_vals = tp[:, idx_sigma8]
     theta_pred_u, names_out = unreparameterize_theta(theta_pred, names)
     theta_true_u, _ = unreparameterize_theta(theta_true, names)
     cov_out = None
@@ -417,68 +447,58 @@ def unreparameterize_prediction_block(theta_pred, theta_true, param_names, covs_
         c = np.asarray(covs_per_sample, dtype=float)
         cov_out = np.empty_like(c)
         for j in range(c.shape[0]):
-            cov_out[j] = scale_covariance_unreparameterize_approx(
-                c[j], names, float(sigma8_vals[j])
-            )
+            cov_out[j] = scale_covariance_unreparameterize_approx(c[j], names, theta_row=tp[j])
     return theta_pred_u, theta_true_u, cov_out, list(names_out)
 
 
-def scale_covariance_unreparameterize_approx(cov, param_names, sigma8_value):
+def scale_covariance_unreparameterize_approx(cov, param_names, sigma8_value=None, theta_row=None):
     """
-    Approximate covariance map from reparameterized to physical space (linearized inverse;
-    rows/cols involving ``sigma8_cold`` with a reparameterized parameter are zeroed).
+    Linearized (delta-method) covariance map from reparameterized to physical space:
+    C_phys = J C J^T, where each physical parameter p = y / sigma8^n (n = 1 for ``*_x`` columns,
+    n = 2 for ``*_sq`` columns), so dp/dy = 1/sigma8^n and dp/dsigma8 = -n y / sigma8^(n+1).
+
+    The sigma8 terms are what carry the strong sigma8--bias correlation; before 2026-11-15 this
+    function zeroed them, which badly misestimated Var(b1), Cov(b1, sigma8) and anything built
+    from the 3x3 (omega, sigma8, b1) block. Still first order: prefer
+    ``physical_moments_from_samples`` when samples are available.
 
     Parameters
     ----------
-    cov : (n, n) array
-    param_names : sequence of str
-        Names in the same order as rows/columns of ``cov`` (reparameterized space).
-    sigma8_value : float
-        sigma8_cold value for this sample (e.g. from predicted mean).
+    cov : (n, n) array, reparameterized space
+    param_names : names for rows/columns of ``cov`` (reparameterized space)
+    sigma8_value : deprecated, ignored when ``theta_row`` is given (kept for call compatibility)
+    theta_row : (n,) array, reparameterized point estimate (posterior mean); required
 
     Returns
     -------
-    cov_scaled : ndarray
-        Copy of ``cov`` after scaling.
+    cov_phys : (n, n) array
     """
+    if theta_row is None:
+        raise ValueError(
+            "scale_covariance_unreparameterize_approx needs theta_row (the reparameterized point "
+            "estimate) to build the Jacobian; the sigma8-only scaling it used to do is wrong."
+        )
     param_names_list = [str(p) for p in param_names]
-    cov = np.asarray(cov, dtype=float).copy()
+    cov = np.asarray(cov, dtype=float)
+    theta_row = np.asarray(theta_row, dtype=float)
     idx_sigma8 = param_names_list.index('sigma8_cold')
+    s8 = float(theta_row[idx_sigma8])
 
-    reparam_to_orig = {}
+    n = len(param_names_list)
+    jac = np.eye(n)
     for i, pn in enumerate(param_names_list):
-        if pn.startswith(REPARAM_PREFIX_SQ):
-            orig = pn[len(REPARAM_PREFIX_SQ) :]
-            if orig in PARAMS_SIGMA8_SQUARED_MULT:
-                reparam_to_orig[i] = orig
-        elif pn.startswith(REPARAM_PREFIX_X):
-            orig = pn[len(REPARAM_PREFIX_X) :]
-            if orig in PARAMS_SIGMA8_MULT:
-                reparam_to_orig[i] = orig
-
-    for reparam_idx, orig_param_name in reparam_to_orig.items():
-        if orig_param_name in PARAMS_SIGMA8_MULT:
-            cov[reparam_idx, reparam_idx] = cov[reparam_idx, reparam_idx] / (sigma8_value ** 2)
-            for k in range(len(param_names_list)):
-                if k != reparam_idx:
-                    if k == idx_sigma8:
-                        cov[reparam_idx, k] = 0.0
-                        cov[k, reparam_idx] = 0.0
-                    else:
-                        cov[reparam_idx, k] = cov[reparam_idx, k] / sigma8_value
-                        cov[k, reparam_idx] = cov[k, reparam_idx] / sigma8_value
-        elif orig_param_name in PARAMS_SIGMA8_SQUARED_MULT:
-            cov[reparam_idx, reparam_idx] = cov[reparam_idx, reparam_idx] / (sigma8_value ** 4)
-            for k in range(len(param_names_list)):
-                if k != reparam_idx:
-                    if k == idx_sigma8:
-                        cov[reparam_idx, k] = 0.0
-                        cov[k, reparam_idx] = 0.0
-                    else:
-                        cov[reparam_idx, k] = cov[reparam_idx, k] / (sigma8_value ** 2)
-                        cov[k, reparam_idx] = cov[k, reparam_idx] / (sigma8_value ** 2)
-
-    return cov
+        power = None
+        if pn.startswith(REPARAM_PREFIX_SQ) and pn[len(REPARAM_PREFIX_SQ):] in PARAMS_SIGMA8_SQUARED_MULT:
+            power = 2
+        elif pn.startswith(REPARAM_PREFIX_X) and pn[len(REPARAM_PREFIX_X):] in PARAMS_SIGMA8_MULT:
+            power = 1
+        if power is None:
+            continue
+        y = float(theta_row[i])
+        jac[i, :] = 0.0
+        jac[i, i] = 1.0 / s8 ** power
+        jac[i, idx_sigma8] = -power * y / s8 ** (power + 1)
+    return jac @ cov @ jac.T
 
 
 def get_chain_statistics(
@@ -616,6 +636,7 @@ __all__ = [
     "REPARAM_PREFIX_SQ",
     "reparameterized_sample_name",
     "has_reparameterized_sigma8_columns",
+    "physical_moments_from_samples",
     "unreparameterize_prediction_block",
     "forward_reparameterized_value",
     "scale_covariance_unreparameterize_approx",

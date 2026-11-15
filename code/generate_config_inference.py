@@ -17,7 +17,7 @@ Generates YAML configuration files for inference.
 # ``sweep``); only hyperparameters come from the wandb sweep.
 BX_SWEEP = 32
 N_TRAIN_SWEEP = 10000
-SWEEP_NUM_RUNS = 30
+SWEEP_NUM_RUNS = 15
 # Fiducial bispec k-bin suffix in sweep / best_run tag strings (like BX_SWEEP for bx).
 TAG_MASK_BISPEC_SWEEP = "_kb0.25"
 
@@ -50,12 +50,10 @@ def resolve_train_tag_bundle(tag_params: str, noise_mode: str) -> dict:
         raise KeyError(
             f"Unknown noise_mode {noise_mode!r}; expected one of {list(NOISE_MODE_TRAIN_BIAS)}"
         )
-    if noise_mode != "noiseless" and not tag_params.startswith("_"):
-        raise ValueError(f"tag_params must start with '_', got {tag_params!r}")
     out = {
         "tag_params": tag_params,
         "tag_biasparams": NOISE_MODE_TRAIN_BIAS[noise_mode],
-        "tag_noise": None if noise_mode == "noiseless" else "_noise_unit" + tag_params,
+        "tag_noise": None if noise_mode == "noiseless" else "_noisefly",
     }
     return out
 
@@ -199,23 +197,23 @@ PARAM_SETS_TEST = {
 }
 
 # In-distribution test presets only. Values are (tag_biasparams_test, tag_noise_test) where
-# tag_noise_test None means no noise fields; "__unit__" means "_noise_unit" + tag_params_test.
+# tag_noise_test None means noiseless; "_noisefly" means on-the-fly per-row unit noise.
 # For shame + noisy, bias stays ``_biasshame_*`` (fixed bias draw); only the noise-field tag is derived.
 _TEST_SCENARIO_TAGS = {
     "coverage": {
         "noiseless": ("_biascoverage_p4_n1000", None),
-        "noisy": ("_biasnoisecoverage_p9_n1000", "__unit__"),
-        "noisym2": ("_biasnoisem2coverage_p7_n1000", "__unit__"),
+        "noisy": ("_biasnoisecoverage_p9_n1000", "_noisefly"),
+        "noisym2": ("_biasnoisem2coverage_p7_n1000", "_noisefly"),
     },
     "fixed_cosmo_shame_mean": {
         "noiseless": ("_biasshame_p0_n1", None),
-        "noisy": ("_biasshame_noisebest_p0_n1", "__unit__"),
-        "noisym2": ("_biasshame_noisem2best_p0_n1", "__unit__"),
+        "noisy": ("_biasshame_noisebest_p0_n1", "_noisefly"),
+        "noisym2": ("_biasshame_noisem2best_p0_n1", "_noisefly"),
     },
     "fixed_cosmo_shame_sample": {
         "noiseless": ("_biasshame_p0_n1", None),
-        "noisy": ("_biasshame_noisebest_p0_n1", "__unit__"),
-        "noisym2": ("_biasshame_noisem2best_p0_n1", "__unit__"),
+        "noisy": ("_biasshame_noisebest_p0_n1", "_noisefly"),
+        "noisym2": ("_biasshame_noisem2best_p0_n1", "_noisefly"),
     },
 }
 
@@ -227,12 +225,6 @@ def resolve_test_scenario_tags(scenario, noise_mode, tag_params_test):
     if noise_mode not in NOISE_MODES:
         raise KeyError(f"Unknown noise_mode {noise_mode!r}; expected one of {NOISE_MODES}")
     bias_t, noise_t = _TEST_SCENARIO_TAGS[scenario][noise_mode]
-    if noise_t == "__unit__":
-        if tag_params_test is None:
-            raise ValueError(f"scenario {scenario!r} needs tag_params_test for noisy unit-noise tag")
-        if not tag_params_test.startswith("_"):
-            raise ValueError(f"tag_params_test must start with '_', got {tag_params_test!r}")
-        noise_t = "_noise_unit" + tag_params_test
     return {"tag_biasparams_test": bias_t, "tag_noise_test": noise_t}
 
 

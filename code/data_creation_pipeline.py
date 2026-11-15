@@ -1,5 +1,6 @@
 """Create muchisimocks: bias fields, tracer fields, and catalogs for a range of idx_mock."""
 import argparse
+import json
 import numpy as np
 import os
 import pandas as pd
@@ -55,8 +56,42 @@ def run_fromdict():
                subdir_prefix='mock')
 
 
+# Initial-condition seed base per mock set: seed = SEED_BASE_IC[tag_params] + idx_mock.
+# Every lh/fixed set must be registered here so test sets never reuse training phases.
+# Legacy sets (base 0) all share seeds 0..N-1 with the training set; kept for reproducibility.
+SEED_BASE_IC = {
+    # training set
+    '_p5_n10000': 0,
+    # legacy test sets (base 0: phases overlap training mocks 0..999)
+    '_coverage_p5_n1000': 0,
+    '_shame_p0_n1000': 0,
+    '_quijote_p0_n1000': 0,
+    # v2 test sets (independent phases)
+    '_coveragev2_p5_n1000': 100000,
+    '_shamev2_p0_n1000': 200000,
+}
+
+
+def get_seed_ic(tag_params, idx_mock):
+    if tag_params not in SEED_BASE_IC:
+        raise ValueError(
+            f"tag_params={tag_params!r} has no entry in SEED_BASE_IC; register a seed base "
+            "that does not overlap existing sets before generating mocks."
+        )
+    return SEED_BASE_IC[tag_params] + idx_mock
+
+
+def write_seed_record(dir_LH, seed, tag_params, idx_mock, modecosmo):
+    Path(dir_LH).mkdir(parents=True, exist_ok=True)
+    fn_seed = f'{dir_LH}/seed.json'
+    record = {'seed_ic': int(seed), 'seed_base_ic': int(seed - idx_mock),
+              'tag_params': tag_params, 'idx_mock': int(idx_mock), 'modecosmo': modecosmo}
+    with open(fn_seed, 'w') as f:
+        json.dump(record, f)
+
+
 def run_creation(idx_mock, modecosmo='lh', tag_params=None):
-    
+
     print("Setting up", flush=True)
     n_grid = 512
     n_grid_target = 128
@@ -67,11 +102,11 @@ def run_creation(idx_mock, modecosmo='lh', tag_params=None):
         assert tag_params is not None, "for modecosmo=lh, must provide tag_params"
         tag_mocks = tag_params
         #tag_mocks = tag_params + '_rerun'
-        seed = idx_mock
+        seed = get_seed_ic(tag_params, idx_mock)
         subdir_prefix='LH'
     elif modecosmo == 'fixed':
         tag_mocks = tag_params
-        seed = idx_mock
+        seed = get_seed_ic(tag_params, idx_mock)
         subdir_prefix='mock'
     # main for fisher: tag_params = f'_fisher_quijote'
     elif modecosmo == 'fisher':
@@ -119,7 +154,10 @@ def run_creation(idx_mock, modecosmo='lh', tag_params=None):
         param_dict.update(param_dict_fixed)
         
     print("param_dict:", param_dict, flush=True)
-    
+    print(f"IC seed = {seed}", flush=True)
+    if modecosmo in ('lh', 'fixed'):
+        write_seed_record(f'{dir_mocks}/{subdir_prefix}{idx_mock}', seed, tag_params, idx_mock, modecosmo)
+
     run_single(param_dict, seed, idx_mock, dir_mocks,
                n_grid=n_grid, n_grid_target=n_grid_target, box_size=box_size,
                n_threads_bacco=n_threads_bacco, n_workers_m2m=n_workers_m2m,

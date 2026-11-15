@@ -161,7 +161,7 @@ def configure_figures(
     }
 
 # Intermediate products for slow coverage / convergence loads (under figures/, gitignored).
-CACHE_DIR = REPO_ROOT / "figures" / "paper_figures_cache"
+CACHE_DIR = REPO_ROOT / "figures" / "paper_figures_cache_v2"  # v2: exact physical-space moments (2026-11-15)
 OVERWRITE_CACHE = False  # True → recompute and overwrite existing cache files
 
 # --- Fig 2 statistics ranges ---
@@ -704,8 +704,7 @@ def compute_fom_key_block(cov, param_names, theta_pred_row=None):
         if theta_pred_row is None:
             raise ValueError("theta_pred_row required to unreparameterize FoM covariance")
         tp = np.asarray(theta_pred_row, dtype=float)
-        sigma8 = float(tp[names.index("sigma8_cold")])
-        cov_arr = ui.scale_covariance_unreparameterize_approx(cov_arr, names, sigma8)
+        cov_arr = ui.scale_covariance_unreparameterize_approx(cov_arr, names, theta_row=tp)
         _, names = ui.unreparameterize_theta(tp, names)
         names = list(names)
     idx_fob = [names.index(pn) for pn in PARAM_NAMES_FOB]
@@ -792,8 +791,11 @@ def load_shame_fob3(
         return None, f"all-NaN samples (mask={tag_mask!r}, mock={tag_mock!r})"
     if samples.ndim == 2:
         samples = samples[:, np.newaxis, :]
-    theta_pred = np.mean(samples[:, 0, :], axis=0)
-    cov = np.cov(samples[:, 0, :].T)
+    if param_names_fob is not None and "sigma8_cold_x_b1" in param_names_fob:
+        theta_pred = np.mean(samples[:, 0, :], axis=0)
+        cov = np.cov(samples[:, 0, :].T)
+    else:
+        theta_pred, cov, param_names = ui.physical_moments_from_samples(samples[:, 0, :], param_names)
     theta_phys = data_loader.load_theta_ood(
         DATA_MODE_TEST_SHAME,
         tag_mock,
@@ -986,8 +988,7 @@ def load_ensemble_fom3(statistics_row, tag_mask, *, test_mode="shame", tag_mock=
         return None, path_err
     if samples.ndim == 2:
         samples = samples[:, np.newaxis, :]
-    theta_pred = np.mean(samples[:, 0, :], axis=0)
-    cov = np.cov(samples[:, 0, :].T)
+    theta_pred, cov, param_names = ui.physical_moments_from_samples(samples[:, 0, :], param_names)
     _, fom3 = compute_fom_key_block(cov, param_names, theta_pred_row=theta_pred)
     if fom3 is None or not np.isfinite(fom3):
         return None, f"non-finite FoM3 (mask={tag_mask!r}, mode={test_mode})"
@@ -1007,8 +1008,7 @@ def load_ensemble_fom_marg(
         samples = samples[:, np.newaxis, :]
     if not np.isfinite(samples).any():
         return None, f"all-NaN samples (mask={tag_mask!r}, mode={test_mode})"
-    theta_pred = np.mean(samples[:, 0, :], axis=0)
-    cov = np.cov(samples[:, 0, :].T)
+    theta_pred, cov, param_names = ui.physical_moments_from_samples(samples[:, 0, :], param_names)
     fom_marg, _ = compute_fom_key_block(cov, param_names, theta_pred_row=theta_pred)
     val = fom_marg.get(param_key)
     if val is None or not np.isfinite(val):
@@ -1183,11 +1183,25 @@ def _finite_sample_rows(samples_arr):
     return np.where(np.all(np.isfinite(theta_pred), axis=1))[0]
 
 
-def _moments_from_samples_3d(samples_arr, param_names):
+def _moments_from_samples_3d(samples_arr, param_names, *, physical=False):
+    """Per-obs posterior mean and covariance.
+
+    physical=True: exact moments in physical space (each draw unreparameterized first, see
+    ui.physical_moments_from_samples); returned names are the physical names.
+    """
     rows = _finite_sample_rows(samples_arr)
     npar = samples_arr.shape[2]
     if rows.size == 0:
-        return np.empty((0, npar)), np.empty((0, npar, npar)), list(param_names), rows
+        names_out = list(param_names)
+        if physical:
+            _, names_out = ui.unreparameterize_theta(np.zeros((1, npar)), list(param_names))
+            names_out = list(names_out)
+        return np.empty((0, npar)), np.empty((0, npar, npar)), names_out, rows
+    if physical:
+        moments = [ui.physical_moments_from_samples(samples_arr[:, i, :], param_names) for i in rows]
+        theta_pred = np.array([m[0] for m in moments])
+        covs_pred = np.array([m[1] for m in moments])
+        return theta_pred, covs_pred, list(moments[0][2]), rows
     theta_pred = np.array([np.nanmean(samples_arr[:, i, :], axis=0) for i in rows])
     covs_pred = np.array([np.cov(samples_arr[:, i, :].T) for i in rows])
     return theta_pred, covs_pred, list(param_names), rows
@@ -1281,7 +1295,7 @@ def load_coverage_metrics(
         return None, base_info
 
     theta_pred, covs_pred, param_names, rows = _moments_from_samples_3d(
-        samples_arr, param_names_all,
+        samples_arr, param_names_all, physical=True,
     )
     n_use = int(rows.size)
     base_info["n_cov"] = n_use
@@ -2106,8 +2120,8 @@ def plot_fig4_coverage_binned_diff(save_name="fig4_coverage_binned_diff"):
             param_names = list(param_names)
             i_show = [param_names.index(pn) for pn in names_show]
             samples_show = samples_arr[:, :, i_show]
-            theta_pred, covs_pred, _, rows = _moments_from_samples_3d(
-                samples_show, names_show,
+            theta_pred, covs_pred, names_u, rows = _moments_from_samples_3d(
+                samples_show, names_show, physical=True,
             )
             theta_true_all = data_loader.load_theta_test(
                 TAG_PARAMS_TEST_COV, TAG_BIASPARAMS_TEST_COV,
@@ -2116,24 +2130,12 @@ def plot_fig4_coverage_binned_diff(save_name="fig4_coverage_binned_diff"):
             if theta_true_all.ndim == 1:
                 theta_true_all = np.tile(theta_true_all, (samples_arr.shape[1], 1))
             theta_true_phys = theta_true_all[rows]
-            if tag_reparam:
-                theta_true_rp, names_rp = utils_inference.reparameterize_theta(
-                    theta_true_phys, list(param_vary),
-                )
-                names_rp = list(names_rp)
-                theta_true = np.column_stack(
-                    [theta_true_rp[:, names_rp.index(pn)] for pn in names_show]
-                )
-            else:
-                theta_true = np.column_stack(
-                    [theta_true_phys[:, list(param_vary).index(pn)] for pn in names_show]
-                )
-            tp, tt, covs, names_u = utils_inference.unreparameterize_prediction_block(
-                theta_pred, theta_true, names_show, covs_pred,
+            tt = np.column_stack(
+                [theta_true_phys[:, list(param_vary).index(pn)] for pn in names_u]
             )
-            theta_pred_list.append(tp)
+            theta_pred_list.append(theta_pred)
             theta_true_list.append(tt)
-            covs_list.append(covs)
+            covs_list.append(covs_pred)
         return {
             "theta_pred_u": theta_pred_list,
             "theta_true_u": theta_true_list,

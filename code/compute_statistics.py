@@ -24,6 +24,30 @@ python compute_statistics.py --statistic bispec --idx_mock_start 0 --idx_mock_en
 def main():
     #run_loop()
     parse_args()
+
+
+# On-the-fly noise (v2): when tag_noise == NOISE_FLY_TAG, the unit Gaussian noise field is
+# generated per (mock set, cosmology, bias row) instead of loaded from disk, so every bias/noise
+# row gets an independent realization. The seed depends only on tag_params/idx_mock/idx_bias (not
+# on tag_noise), so pk / pgm / bispec of the same row all see the same field, and any row can be
+# recomputed exactly. The field is unit-variance (multiplicative-noise convention).
+NOISE_FLY_TAG = '_noisefly'
+NOISE_SEED_SCHEME = 2  # bump if the seeding scheme ever changes
+
+
+def uses_perrow_noise(tag_noise):
+    return tag_noise == NOISE_FLY_TAG
+
+
+def noise_seed_entropy(tag_params, idx_mock, idx_bias):
+    import zlib
+    set_id = zlib.crc32(tag_params.encode())  # stable across runs/machines, unlike hash()
+    return [NOISE_SEED_SCHEME, set_id, int(idx_mock), int(idx_bias)]
+
+
+def make_noise_field_perrow(tag_params, idx_mock, idx_bias, n_grid=128):
+    rng = np.random.default_rng(noise_seed_entropy(tag_params, idx_mock, idx_bias))
+    return rng.standard_normal((n_grid, n_grid, n_grid))
     
 
 def parse_args():
@@ -197,7 +221,7 @@ def run(statistic, idx_mock,
         # Enforce consistent convention for which noise fields are used.
         # - multiplicative noise amplitudes => unit-variance noise fields (tag contains 'unit')
         # - Gaussian/additive amplitude    => non-unit noise fields (tag does NOT contain 'unit')
-        tag_noise_has_unit = ('unit' in tag_noise)
+        tag_noise_has_unit = ('unit' in tag_noise) or uses_perrow_noise(tag_noise)  # fly noise is unit-variance
         if has_anoise_mult and not tag_noise_has_unit:
             raise ValueError(
                 "Multiplicative noise parameters were provided in tag_biasparams "
@@ -280,6 +304,15 @@ def run(statistic, idx_mock,
     box_size = 1000.0
     n_grid_orig = 512 # we just know this from how we created the fields
 
+    # Load this cosmology's bias fields once (previously reloaded for every bias row)
+    bias_terms_eul_cosmo = None
+    if fn_fields is not None and statistic in ('pk', 'pgm', 'bispec'):
+        bias_terms_eul_cosmo = get_bias_fields(fn_fields)
+        if bias_terms_eul_cosmo is None:
+            raise FileNotFoundError(f"Bias fields {fn_fields} not found")
+    tracer_kwargs = dict(tag_params=tag_params, idx_mock=idx_mock,
+                         bias_terms_eul=bias_terms_eul_cosmo)
+
     # Main computation loop
     for i, fn_statistic in enumerate(files_to_compute):
         
@@ -303,7 +336,7 @@ def run(statistic, idx_mock,
 
                 tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
                                         biasparams_dict_fixed,
-                                        n_grid_orig)
+                                        n_grid_orig, **tracer_kwargs)
                 compute_pk(tracer_field, cosmo, box_size,
                                         n_threads=n_threads, fn_stat=fn_statistic)
                 end = time.time()
@@ -323,10 +356,11 @@ def run(statistic, idx_mock,
 
                 tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
                                         biasparams_dict_fixed,
-                                        n_grid_orig)
-                bias_terms_eul = get_bias_fields(fn_fields)
-                # Get the second bias field (index 1)
-                matter_density_field = bias_terms_eul[1]
+                                        n_grid_orig, **tracer_kwargs)
+                # Matter field = the advected "1" operator (index 0), i.e. the emulated N-body
+                # matter density; matches the SHAMe N-body P_mm to ~1% to k=0.38.
+                # (Before v2 this used index 1, the advected linear delta_L operator.)
+                matter_density_field = bias_terms_eul_cosmo[0]
                 # normalize the matter density field by n_grid_orig**3 for muchisimocks
                 matter_density_field_norm = matter_density_field/n_grid_orig**3
                 compute_pgm(tracer_field, matter_density_field_norm, cosmo, box_size,
@@ -341,7 +375,7 @@ def run(statistic, idx_mock,
                 assert base_bispec is not None, "base_bispec must be provided for bispectrum computation"
                 tracer_field = make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df,
                                         biasparams_dict_fixed,
-                                        n_grid_orig)
+                                        n_grid_orig, **tracer_kwargs)
                 compute_bispectrum(base_bispec, tracer_field, fn_stat=fn_statistic)
             
                 end = time.time()
@@ -372,24 +406,32 @@ def get_bias_fields(fn_fields):
 
 
 def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, biasparams_dict_fixed,
-                      n_grid_orig):
-    
+                      n_grid_orig, tag_params=None, idx_mock=None, bias_terms_eul=None):
+
     print("make_tracer_field")
     print(fn_fields)
     print(idx_bias, idx_noise)
     print(tag_noise)
-    
+
     if tag_noise is not None:
-        # Check if idx_noise is None when we need it
-        if idx_noise is None:
-            raise ValueError(f"idx_noise is None but tag_noise='{tag_noise}' was provided. "
-                           f"This suggests a mismatch in the logic for determining noise indices.")
-        
-        # get noise field
-        fn_noise = str(paths.noise_fields_dir(tag_noise) / f'noise_field_n{idx_noise}.npy')
-        if not os.path.exists(fn_noise):
-            raise ValueError(f"Noise field {fn_noise} does not exist!")
-        noise_field = np.load(fn_noise)
+        if uses_perrow_noise(tag_noise):
+            # v2: independent field per (set, cosmology, bias row), generated on the fly
+            if tag_params is None or idx_mock is None:
+                raise ValueError("per-row noise needs tag_params and idx_mock")
+            idx_bias_seed = 0 if idx_bias is None else idx_bias
+            noise_field = make_noise_field_perrow(tag_params, idx_mock, idx_bias_seed)
+            print(f"per-row noise seed entropy {noise_seed_entropy(tag_params, idx_mock, idx_bias_seed)}")
+        else:
+            # Check if idx_noise is None when we need it
+            if idx_noise is None:
+                raise ValueError(f"idx_noise is None but tag_noise='{tag_noise}' was provided. "
+                               f"This suggests a mismatch in the logic for determining noise indices.")
+
+            # get noise field
+            fn_noise = str(paths.noise_fields_dir(tag_noise) / f'noise_field_n{idx_noise}.npy')
+            if not os.path.exists(fn_noise):
+                raise ValueError(f"Noise field {fn_noise} does not exist!")
+            noise_field = np.load(fn_noise)
 
         # Noise amplitude is now sourced from tag_biasparams.
         A_noise_dict = biasparams_dict_fixed.copy() if biasparams_dict_fixed else {}
@@ -421,8 +463,9 @@ def make_tracer_field(fn_fields, idx_bias, idx_noise, tag_noise, biasparams_df, 
         noise_model = 'multiplicative'
 
     if fn_fields is not None:
-        # load eulerian bias fields
-        bias_terms_eul = get_bias_fields(fn_fields)
+        # load eulerian bias fields (reuse the per-cosmology copy when the caller passes it)
+        if bias_terms_eul is None:
+            bias_terms_eul = get_bias_fields(fn_fields)
         # get bias vector
         biasparam_dict = biasparams_dict_fixed.copy()
         if biasparams_df is not None:

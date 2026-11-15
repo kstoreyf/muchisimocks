@@ -367,6 +367,45 @@ def _training_config_to_plain_dict(config):
     return {k: v for k, v in raw.items() if not str(k).startswith("_")}
 
 
+VAL_SPLIT_SEED = 42  # fixed so validation losses are comparable across sweep runs / ensemble members
+
+
+def grouped_val_indices(groups, validation_fraction, seed=VAL_SPLIT_SEED):
+    """Row indices of a validation set made of whole groups (cosmologies).
+
+    With bx bias/noise draws per cosmology, a random row split puts the same N-body field in
+    both train and val, so early stopping and the sweep objective can't see overfitting to a
+    field's cosmic variance. Holding out whole cosmologies avoids that.
+    """
+    groups = np.asarray(groups)
+    uniq = np.unique(groups)
+    rng = np.random.default_rng(seed)
+    n_val = max(1, int(round(validation_fraction * len(uniq))))
+    val_groups = rng.choice(uniq, size=n_val, replace=False)
+    return np.nonzero(np.isin(groups, val_groups))[0]
+
+
+class NPEGroupedVal(NPE):
+    """NPE whose train/val split is fixed in advance (e.g. by cosmology) instead of random rows."""
+
+    def __init__(self, *args, val_indices=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._fixed_val_indices = None if val_indices is None else np.asarray(val_indices)
+
+    def get_dataloaders(self, starting_round=0, training_batch_size=200,
+                        validation_fraction=0.1, resume_training=False, dataloader_kwargs=None):
+        if self._fixed_val_indices is not None and not resume_training:
+            n = self.get_simulations(starting_round)[0].size(0)
+            is_val = np.zeros(n, dtype=bool)
+            is_val[self._fixed_val_indices] = True
+            self.train_indices = torch.from_numpy(np.nonzero(~is_val)[0])
+            self.val_indices = torch.from_numpy(np.nonzero(is_val)[0])
+            # resume_training=True makes sbi reuse the indices set above (it only affects the split)
+            resume_training = True
+        return super().get_dataloaders(starting_round, training_batch_size, validation_fraction,
+                                       resume_training, dataloader_kwargs)
+
+
 class SBIModel():
 
     def __init__(self, theta_train=None, y_train_unscaled=None,
@@ -381,6 +420,8 @@ class SBIModel():
                      sweep_num_runs=None,
                      wandb_config_yaml_path=None,
                      nth_best_run=None,
+                     groups_train=None,
+                     seed=0,
                      ):
 
         self.dir_sbi = str(paths.DIR_RESULTS / "results_sbi" / f"sbi{tag_sbi}")
@@ -390,6 +431,9 @@ class SBIModel():
         
         self.theta_train = theta_train
         self.y_train_unscaled = y_train_unscaled
+        # cosmology index per training row; if given, validation holds out whole cosmologies
+        self.groups_train = None if groups_train is None else np.asarray(groups_train)
+        self.seed = int(seed)
 
         self.theta_test = theta_test
         self.y_test_unscaled = y_test_unscaled
@@ -473,10 +517,13 @@ class SBIModel():
                     'goal': 'minimize'
                 },
                 'parameters': {
-                    'learning_rate': {'values': [1e-2, 3e-3, 1e-3, 3e-4, 1e-4, 3e-5, 1e-5]},
-                    'hidden_features': {'values': [32, 64, 128, 256]},
+                    # Pruned from 14 rand30 sweeps (Nov 2026): lr 1e-5/3e-3/1e-2, hidden 32/64 and
+                    # 4 transforms never came within 0.3 nats of a sweep's best; 256 was the usual
+                    # winner (top edge), so 512 is added. Batch size showed no trend; kept in full.
+                    'learning_rate': {'values': [1e-3, 3e-4, 1e-4, 3e-5]},
+                    'hidden_features': {'values': [128, 256, 512]},
                     'training_batch_size': {'values': [32, 64, 128, 256]},
-                    'num_transforms': {'values': [4, 6, 8, 10]},
+                    'num_transforms': {'values': [6, 8, 10]},
                 }
             }
             lock_dir = (
@@ -791,7 +838,19 @@ class SBIModel():
         print("theta_train shape:", self.theta_train.shape)
         print(f"validation_fraction (sbi internal split): {validation_fraction}")
         
-        inference = NPE(prior=prior, density_estimator=density_estimator_build_fun)
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        if self.groups_train is not None:
+            assert len(self.groups_train) == len(self.theta_train), "groups_train must match theta_train rows"
+            val_indices = grouped_val_indices(self.groups_train, validation_fraction)
+            print(f"Validation split by cosmology: {len(np.unique(self.groups_train[val_indices]))} of "
+                  f"{len(np.unique(self.groups_train))} cosmologies, {len(val_indices)} rows (seed {VAL_SPLIT_SEED})")
+            inference = NPEGroupedVal(prior=prior, density_estimator=density_estimator_build_fun,
+                                      val_indices=val_indices)
+        else:
+            print("WARNING: no groups_train given; sbi splits validation by random rows "
+                  "(rows of one cosmology can land in both train and val)")
+            inference = NPE(prior=prior, density_estimator=density_estimator_build_fun)
         inference = inference.append_simulations(
             torch.tensor(self.theta_train, dtype=torch.float32),
             torch.tensor(self.y_train, dtype=torch.float32),
@@ -813,6 +872,8 @@ class SBIModel():
         best_sd = getattr(inference, "_best_model_state_dict", None)
         if best_sd is not None and inference._neural_net is not None:
             inference._neural_net.load_state_dict(best_sd)
+            # train() returns a deepcopy made before this reload; build_posterior uses that copy
+            density_estimator.load_state_dict(best_sd)
         print("Trained!")
         end = time.time()
         print(f"Training time: {end - start:.2f}s = {(end - start) / 60:.2f} min (max_epochs={max_epochs}, n_threads={self.n_threads})")
