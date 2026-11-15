@@ -41,7 +41,13 @@ import utils_inference
 import utils_inference as ui
 
 from ensemble_kmax_utils import (
-    KP035_CONFIGS,
+    FIDUCIAL_CONFIGS,
+    KCUT_FID_PK,
+    KCUT_FID_OTHER,
+    TAGS_CUTS_KB,
+    TAGS_CUTS_KPGM,
+    fiducial_mask_for_statistics,
+    overall_k_mask,
     N_ENSEMBLE_K,
     load_ensemble_member_samples,
     model_dir,
@@ -64,15 +70,15 @@ from ensemble_kmax_utils import (
 # =============================================================================
 bx = 32
 n_train = 10000
-from generate_config_inference import TAG_SWEEP  # noqa: E402
+from generate_config_inference import FIDUCIAL_MASKS, TAG_SWEEP  # noqa: E402
 TAG_INF_BEST_SUFFIX = "_best" + TAG_SWEEP
 
 data_mode = "muchisimocks"
 tag_reparam = "_rp"
 
-STATISTICS_ARR_FID = [list(stats) for stats, _ in KP035_CONFIGS]
-TAGS_MASK_FID = [mask for _, mask in KP035_CONFIGS]
-# pk, pk+pgm, pk+bispec, pk+bispec+pgm @ kp0.35 / kb0.25 / kpgm0.25
+STATISTICS_ARR_FID = [list(stats) for stats, _ in FIDUCIAL_CONFIGS]
+TAGS_MASK_FID = [mask for _, mask in FIDUCIAL_CONFIGS]
+# pk, pk+pgm, pk+bispec, pk+bispec+pgm at the fiducial cuts (generate_config_inference.FIDUCIAL_MASKS)
 COLORS_FID = ["#79D0EC", "#6BB756", "#9D86E0", "#B32168"]
 N_ENSEMBLE_DRAWS = 5000
 
@@ -106,8 +112,7 @@ FONTSIZE_LEGEND = 12
 #   legend_loc='upper left'     matplotlib loc in that axes
 #   loc_legend=(x, y)           bbox_to_anchor in that axes (None = no offset)
 LOC_LEGEND = (1.02, 0.98)
-KMAX_PK = 0.35  # fiducial P_gg cut
-KMAX_LOOSE = 0.4  # empty / loose mask label on scale sweeps
+KMAX_PK = KCUT_FID_PK  # fiducial P_gg cut
 ANOISE_OPTION = "Anmult"
 
 dir_sbi = paths.DIR_RESULTS / "results_sbi"
@@ -200,7 +205,7 @@ NBAR_LABELS = {
 }
 COLOR_NOISY = COLORS_FID[3]
 STATISTICS_FULL_ROW = ["pk", "bispec", "pgm"]
-TAG_MASK_FULL = "_kp0.35_kb0.25_kpgm0.25"
+TAG_MASK_FULL = fiducial_mask_for_statistics(STATISTICS_FULL_ROW)
 TAG_STATS_FULL = "_pk_bispec_pgm"
 
 # --- FoB / FoM ---
@@ -231,31 +236,26 @@ FOM_MARG_LABELS = {
     "b1": r"FoM($b_1$)",
 }
 
-# --- Fig 8 scale dependence (fixed kp=0.35) ---
-TAGS_KMAX_KPGM = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.27", "_kpgm0.32", "_kpgm0.37"]
-TAGS_KMAX_KB = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.27", "_kb0.32", "_kb0.37"]
+# --- Fig 8 scale dependence (P_gg fixed at KMAX_PK); x = cut label (all bins' top edges <= x) ---
+TAGS_KMAX_KPGM = TAGS_CUTS_KPGM
+TAGS_KMAX_KB = TAGS_CUTS_KB
 STAT_COMBOS_SCALE = [
     (["pk", "pgm"], COLORS_FID[1]),
     (["pk", "bispec"], COLORS_FID[2]),
     (["pk", "bispec", "pgm"], COLORS_FID[3]),
 ]
 
-# --- Fig 9 overall k_max ---
-_K_MIN_STAT = 0.01
-_K_MAX_STAT = 0.4
-_N_BINS_PK = 32
-K_EDGES_PK = np.logspace(np.log10(_K_MIN_STAT), np.log10(_K_MAX_STAT), _N_BINS_PK + 1)
-K_CENTERS_PK = np.sqrt(K_EDGES_PK[:-1] * K_EDGES_PK[1:])
-K_OVERALL = [0.1, 0.15, 0.2, 0.25, 0.27, 0.32, 0.37]
+# --- Fig 9 overall k_max (x = cut label, as in fig 8; no-cut point not plotted) ---
+K_OVERALL = list(data_loader.K_CUTS)
 STAT_COMBOS_OVERALL = [
-    (list(stats), COLORS_FID[i]) for i, (stats, _) in enumerate(KP035_CONFIGS)
+    (list(stats), COLORS_FID[i]) for i, (stats, _) in enumerate(FIDUCIAL_CONFIGS)
 ]
 KMAX_OVERALL_XLABEL = "\n".join([
-    r"$k_{\mathrm{max}}^{\mathrm{all}}\ (\leq 0.25)\,[h/\mathrm{Mpc}]$",
-    r"$k_{\mathrm{max}}^{P_{\mathrm{gg}}}\ (>0.25;\ "
-    r"k_{\mathrm{max}}^{B}=k_{\mathrm{max}}^{P_{\mathrm{gm}}}=0.25)\,[h/\mathrm{Mpc}]$",
+    rf"$k_{{\mathrm{{max}}}}^{{\mathrm{{all}}}}\ (\leq {KCUT_FID_OTHER:.2f})\,[h/\mathrm{{Mpc}}]$",
+    rf"$k_{{\mathrm{{max}}}}^{{P_{{\mathrm{{gg}}}}}}\ (>{KCUT_FID_OTHER:.2f};\ "
+    rf"k_{{\mathrm{{max}}}}^{{B}}=k_{{\mathrm{{max}}}}^{{P_{{\mathrm{{gm}}}}}}={KCUT_FID_OTHER:.2f})\,[h/\mathrm{{Mpc}}]$",
 ])
-KMAX_XLIM = (0.09, 0.375)  # shared by fig 8 / 9
+KMAX_XLIM = (0.09, 0.385)  # shared by fig 8 / 9
 
 # --- Fig 10 / 11 convergence ---
 n_cosmo_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
@@ -264,7 +264,7 @@ N_COVERAGE = 1000
 NCOSMO_ALPHA_LO, NCOSMO_ALPHA_HI = 0.15, 1.0
 XLABEL_NSIMS = r"$N_\mathrm{train}$ ($= N_\mathrm{cosmo} \times N_\mathrm{bias}$)"
 STATISTICS_FULL_CONV = ["pk", "bispec", "pgm"]
-TAG_MASKS_FULL_CONV = "_kp0.35_kb0.25_kpgm0.25"
+TAG_MASKS_FULL_CONV = fiducial_mask_for_statistics(STATISTICS_FULL_CONV)
 
 # --- Appendix A (9-8 A1 style) ---
 COLOR_INDIV_MEANS = "black"       # optional: distribution of posterior means
@@ -404,7 +404,7 @@ def ensemble_samples_exist(*, test_mode="shame", tag_mock=TAG_MOCK_SHAME):
 def load_fiducial_ensemble_samples_list(*, test_mode="shame", tag_mock=TAG_MOCK_SHAME):
     """Build samples_list / labels / colors / tags for plot_contours_inf."""
     samples_list, labels, colors, tags_inf, keep_idx = [], [], [], [], []
-    for i, ((statistics, mask), color) in enumerate(zip(KP035_CONFIGS, COLORS_FID)):
+    for i, ((statistics, mask), color) in enumerate(zip(FIDUCIAL_CONFIGS, COLORS_FID)):
         samples, param_names, err = _ensemble_samples_for(
             statistics, mask, test_mode=test_mode, tag_mock=tag_mock,
         )
@@ -704,30 +704,28 @@ def compute_fom_key_block(cov, param_names, theta_pred_row=None):
 # --- Scale / FoB helpers ---
 
 def kmax_kb_numeric(tag_kb):
-    if tag_kb == "":
-        return KMAX_PK
-    return float(tag_kb.replace("_kb", ""))
+    k = data_loader.parse_kcut("bispec", tag_kb)
+    return data_loader.K_NO_CUT if k is None else k
 
 
 def kmax_kpgm_numeric(tag_kpgm):
-    if tag_kpgm == "":
-        return KMAX_PK
-    return float(tag_kpgm.replace("_kpgm", ""))
+    k = data_loader.parse_kcut("pgm", tag_kpgm)
+    return data_loader.K_NO_CUT if k is None else k
 
 
 def _with_fixed_kp(mask_suffix):
-    """Prepend fiducial _kp0.35 to kb/kpgm (or empty) suffixes.
+    """Prepend the fiducial P_gg cut to kb/kpgm (or empty) suffixes.
 
     Note: ``_kpgm*`` also starts with ``_kp`` as a string prefix — match ``_kp``
     only when it is the Pk cut tag (``_kp0.`` / ``_kp`` alone), not ``_kpgm``.
     """
     if mask_suffix == "_kp" or mask_suffix.startswith("_kp0") or mask_suffix.startswith("_kp1"):
         return mask_suffix
-    return f"_kp{KMAX_PK:g}{mask_suffix}"
+    return data_loader.kcut_tag("pk", KMAX_PK) + mask_suffix
 
 
 def _mask_candidates_kb(tag_kb):
-    # pk+bispec: joined _kp0.35_kb*
+    # pk+bispec: joined fiducial _kp + _kb*
     return [_with_fixed_kp(tag_kb)]
 
 
@@ -815,10 +813,11 @@ def _report_missing_fob3(panel_title, statistics_row, tag_mock, kmax, reasons):
 
 
 def _sweep_bispec_fob3(
-    statistics_row, *, tag_kpgm_fixed="_kpgm0.25", tag_mock=TAG_MOCK_SHAME, report_missing=False,
+    statistics_row, *, tag_kpgm_fixed=FIDUCIAL_MASKS["pgm"], tag_mock=TAG_MOCK_SHAME,
+    report_missing=False,
 ):
     xs, ys = [], []
-    panel_title = "bispec sweep (PGM kmax=0.25 fixed)"
+    panel_title = f"bispec sweep (PGM kmax={KCUT_FID_OTHER:.2f} fixed)"
     for tag_kb in TAGS_KMAX_KB:
         if "bispec" in statistics_row:
             if "pgm" in statistics_row:
@@ -841,10 +840,11 @@ def _sweep_bispec_fob3(
 
 
 def _sweep_pgm_fob3(
-    statistics_row, *, tag_kb_fixed="_kb0.25", tag_mock=TAG_MOCK_SHAME, report_missing=False,
+    statistics_row, *, tag_kb_fixed=FIDUCIAL_MASKS["bispec"], tag_mock=TAG_MOCK_SHAME,
+    report_missing=False,
 ):
     xs, ys = [], []
-    panel_title = "PGM sweep (bispec kmax=0.25 fixed)"
+    panel_title = f"PGM sweep (bispec kmax={KCUT_FID_OTHER:.2f} fixed)"
     for tag_kpgm in TAGS_KMAX_KPGM:
         if "pgm" in statistics_row:
             if "bispec" in statistics_row:
@@ -904,13 +904,13 @@ def _constant_fob3_on_sweep(
 ):
     """FoB3 for combos that do not vary along the swept k_max axis."""
     if bispec_sweep and statistics_row == ["pk", "pgm"]:
-        candidates = ["_kp0.35_kpgm0.25"]
+        candidates = [fiducial_mask_for_statistics(["pk", "pgm"])]
         panel_title = "bispec sweep (constant Pgg+Pgm)"
-        kmax = 0.25
+        kmax = KCUT_FID_OTHER
     elif not bispec_sweep and statistics_row == ["pk", "bispec"]:
-        candidates = ["_kp0.35_kb0.25"]
+        candidates = [fiducial_mask_for_statistics(["pk", "bispec"])]
         panel_title = "PGM sweep (constant Pgg+Bggg)"
-        kmax = 0.25
+        kmax = KCUT_FID_OTHER
     else:
         return None
     val, reasons = _try_load_shame_fob3(
@@ -919,43 +919,6 @@ def _constant_fob3_on_sweep(
     if val is None and report_missing:
         _report_missing_fob3(panel_title, statistics_row, tag_mock, kmax, reasons)
     return val
-
-
-def kmax_label_to_upper_edge(kmax_label, *, family="pk"):
-    """Upper edge of the last included bin for a nominal kmax mask label."""
-    kmax = float(kmax_label)
-    if family in ("pk", "pgm"):
-        centers, edges = K_CENTERS_PK, K_EDGES_PK
-    else:
-        raise ValueError(f"unknown family={family!r}")
-    included = np.where(centers < kmax)[0]
-    if included.size == 0:
-        return float(edges[0])
-    return float(edges[int(included[-1]) + 1])
-
-
-def kmax_plot_x_pk(kmax_label):
-    return kmax_label_to_upper_edge(kmax_label, family="pk")
-
-
-def overall_k_mask(statistics_row, k):
-    """Joined tags_mask for joint overall scale cut at k.
-
-    For k <= 0.25 every statistic uses k; for k > 0.25, Pk uses k while
-    bispec and Pgm are capped at 0.25.
-    """
-    k_other = k if k <= 0.25 else 0.25
-    parts = []
-    for s in statistics_row:
-        if s == "pk":
-            parts.append(f"_kp{k}")
-        elif s == "bispec":
-            parts.append(f"_kb{k_other}")
-        elif s == "pgm":
-            parts.append(f"_kpgm{k_other}")
-        else:
-            raise ValueError(s)
-    return "".join(parts)
 
 
 def load_ensemble_fom_marg(
@@ -995,7 +958,7 @@ def _overall_kmax_fom_marg_ensemble(
                     f"stats={get_stat_label_short(statistics_row)} | {tag_mock} | k={k} | {reason}"
                 )
             continue
-        xs.append(kmax_plot_x_pk(k))
+        xs.append(k)
         ys.append(val)
     return np.array(xs), np.array(ys)
 
@@ -1883,7 +1846,7 @@ def plot_fig4_coverage_binned_diff(save_name="fig4_coverage_binned_diff"):
             "names_u": list(names_u),
         }
 
-    _fig4 = load_or_build("fig4_coverage_arrays_kp035_ensK3_ip", _build_fig4_coverage_arrays)
+    _fig4 = load_or_build("fig4_coverage_arrays_fid_ensK3_ip", _build_fig4_coverage_arrays)
     theta_pred_u = _fig4["theta_pred_u"]
     theta_true_u = _fig4["theta_true_u"]
     names_u = _fig4["names_u"]
@@ -2024,7 +1987,7 @@ def plot_fig5_coverage_pp_center(save_name=None, n_center_pts=None):
         return pp
 
     pp_emp_center = load_or_build(
-        f"fig5_pp_emp_arr_kp035_ensK3_ip_center{n_center_pts}", _build_fig5_pp_emp_center,
+        f"fig5_pp_emp_arr_fid_ensK3_ip_center{n_center_pts}", _build_fig5_pp_emp_center,
     )
     _plot_pp_overlay(
         pp_emp_center, save_name,
@@ -2116,7 +2079,7 @@ def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_
     else:
         missing_b.append(("noisy × shame mean-CV", "; ".join(missing_nm)))
 
-    # Noiseless fixed-cosmo mean — top-1 if present (KP035 noiseless not trained yet).
+    # Noiseless fixed-cosmo mean — top-1 if present.
     tags_inf_noiseless, _, _, _ = utils_plot.setup_inference_tags(
         data_mode=data_mode, tag_params=TAG_PARAMS_TRAIN,
         tag_biasparams="_biasnest_p4_n320000", statistics_arr=[statistics_full],
@@ -2160,7 +2123,7 @@ def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_
         print("ERROR: need noisy SHAMe nbar ensemble samples.")
         return
     if not has_noiseless:
-        print("WARNING: noiseless CV-mean at kp0.35 missing — plotting noisy ensemble only.")
+        print("WARNING: noiseless CV-mean at the fiducial cut missing — plotting noisy ensemble only.")
 
     cosmo_vary, bias_vary, param_vary = utils_plot.load_training_params(
         TAG_PARAMS_TRAIN, TAG_BIASPARAMS_TRAIN, bx=bx,
@@ -2205,7 +2168,7 @@ def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_
 
 
 # =============================================================================
-# Fig 8 — Scale dependence FoB (fixed kp=0.35)
+# Fig 8 — Scale dependence FoB (P_gg fixed at KMAX_PK)
 # =============================================================================
 
 def plot_fig8_scale_dependence_fob3_nbars(
@@ -2242,9 +2205,8 @@ def plot_fig8_scale_dependence_fob3_nbars(
         (
             axes[2],
             _sweep_joint_fob3,
-            # Pgg cut written manually as 0.37 (masks still use _kp0.35), as in 9-02 nb.
             r"$k_\mathrm{max}^{B_\mathrm{ggg}} = k_\mathrm{max}^{P_\mathrm{gm}}\,[h/\mathrm{Mpc}]$"
-            r" ($k_\mathrm{max}^{P_\mathrm{gg}} = 0.37\,h/\mathrm{Mpc}$)",
+            rf" ($k_\mathrm{{max}}^{{P_\mathrm{{gg}}}} = {KMAX_PK:.2f}\,h/\mathrm{{Mpc}}$)",
             None,  # no constant lines: every combo varies along this axis
         ),
     ]
@@ -2292,7 +2254,7 @@ def plot_fig8_scale_dependence_fob3_nbars(
         ax.set_xlabel(xlabel, fontsize=14)
 
     for ax in axes:
-        ax.axvline(0.25, color="0.6", ls="--", lw=1.0, zorder=0)
+        ax.axvline(KCUT_FID_OTHER, color="0.6", ls="--", lw=1.0, zorder=0)
         ax.set_xlim(*KMAX_XLIM)
         ax.tick_params(labelsize=12)
         ax.axhline(1.0, color="0.35", ls=":", lw=1.0, zorder=0)
@@ -2367,7 +2329,7 @@ def plot_fig9_scale_dependence_overall_kmax_fom3_nbars(
                     xs, ys, color=c, ls="-", marker="o", lw=1.3, ms=5,
                     label=line_label, zorder=2 + j,
                 )
-        ax.axvline(kmax_plot_x_pk(0.25), color="0.6", ls="--", lw=1.0, zorder=0)
+        ax.axvline(KCUT_FID_OTHER, color="0.6", ls="--", lw=1.0, zorder=0)
         ax.set_ylabel(FOM_MARG_LABELS[param_key], fontsize=14)
         ax.set_yscale("log")
         ax.set_xlim(*KMAX_XLIM)
@@ -2428,7 +2390,7 @@ def _conv_cache_suffix(k_members):
 def plot_fig10_convergence_pgg_b_pgm(save_name="fig10_convergence_pgg_b_pgm", *, k_members=None):
     """k_members=None → K=3 ensemble (paper); k_members=1 → top model only."""
     df_conv_full = load_or_build(
-        "df_conv_pk_bispec_pgm_kp0.35_kb0.25_kpgm0.25_b1phys_err" + _conv_cache_suffix(k_members),
+        f"df_conv_pk_bispec_pgm{TAG_MASKS_FULL_CONV}_b1phys_err" + _conv_cache_suffix(k_members),
         lambda: collect_coverage_grid(
             STATISTICS_FULL_CONV, TAG_MASKS_FULL_CONV, n_cosmo_arr, bx_arr,
             k_members=k_members,

@@ -18,17 +18,19 @@ BX_SWEEP = 32
 N_TRAIN_SWEEP = 10000
 SWEEP_NUM_RUNS = 16
 TAG_SWEEP = f"-rand{SWEEP_NUM_RUNS}"  # sweep/best dir suffix; single source of truth
-# Fiducial scale cut per statistic. Hyperparameter sweeps are run (and named) at this mask;
-# models at other cuts reuse the fiducial sweep's hyperparameters.
-FIDUCIAL_MASKS = {"pk": "_kp0.35", "bispec": "_kb0.25", "pgm": "_kpgm0.25"}
+# Scale cuts (labels from data_loader.K_CUTS; a cut keeps every bin with top edge <= label).
+# SWEEP_MASKS: where hyperparameter sweeps are run (and named); models at other cuts reuse
+# that sweep's hyperparameters. FIDUCIAL_MASKS: the analysis fiducial (currently the same).
+SWEEP_MASKS = {"pk": "_kp0.37", "bispec": "_kb0.24", "pgm": "_kpgm0.24"}
+FIDUCIAL_MASKS = dict(SWEEP_MASKS)
 # v2 test cosmology/IC sets (own IC seeds; v1 _coverage/_shame shared phases with training).
 TAG_PARAMS_COVERAGE = "_coveragev2_p5_n1000"
 TAG_PARAMS_SHAME = "_shamev2_p0_n1000"
 
 
 def tags_mask_for_sweep(statistics):
-    """Fiducial per-statistic masks (``FIDUCIAL_MASKS``) that name a statistic combo's sweep."""
-    return [FIDUCIAL_MASKS[s] for s in statistics]
+    """Per-statistic masks (``SWEEP_MASKS``) at which a statistic combo's sweep is run/named."""
+    return [SWEEP_MASKS[s] for s in statistics]
 
 # Resolve config output directories relative to repo root.
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -362,7 +364,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     Generates a YAML configuration file for testing.
 
     ``tags_mask`` is a list (length ``len(statistics)``) of per-statistic suffix strings
-    (e.g. ``""`` or ``"_kb0.25"`` for bispec); joined into ``tag_masks`` for
+    (e.g. ``""`` or ``"_kb0.24"`` for bispec); joined into ``tag_masks`` for
     ``tag_data_train`` / ``tag_data_test`` / ``tag_inf_train``, matching training configs.
 
     If ``tag_sweep`` is set, ``nth_best_run`` (default 0) picks a line from
@@ -605,106 +607,42 @@ def generate_test_config_from_preset(
     return generate_test_config(**common)
 
 
+STAT_COMBOS = (["pk"], ["pk", "pgm"], ["pk", "bispec"], ["pk", "bispec", "pgm"])
+
+
 def main():
+    """Write the configs for one step of the v2 pipeline; edit the settings below.
+
+    Default: fiducial-cut sweep configs for every statistic combo. Scale-cut / convergence
+    grids are built from ensemble_kmax_utils (``iter_*_configs``) in their job scripts.
+    """
     overwrite = False
-    # Cosmo LH tag (see ``generate_params`` / data dirs); pair with noise_mode for bias+noise tags.
+    noise_mode = "noisy"  # see NOISE_MODE_TRAIN_BIAS
     tag_params_train = "_p5_n10000"
-    #noise_mode = "noiseless"  # or "noisy" or "noisym2"; see NOISE_MODE_TRAIN_BIAS
-    noise_mode = "noisy"
-    #noise_mode = "noisym2"
+    mode = "train"  # "train" | "test"
+    run_mode = "sweep"  # train only: "sweep" | "best"
+    nth_best_run = None  # best / test: line of the sweep's best_runs.txt (None = top run)
+    test_names = ["coverage", "fixed_cosmo_shame_mean", "ood"]
+    n_train, bx = N_TRAIN_SWEEP, BX_SWEEP
+
     train_kw = resolve_train_tag_bundle(tag_params_train, noise_mode)
-
-
-    # Training: run_mode 'single' | 'sweep' | 'best'; tag_sweep required for sweep/best (e.g. '-rand10').
-    # Note: run_mode is only for training; testing is always 'load', and if tag_sweep is passed will use best
-    
-    mode = "test"
-    #mode = "train"
-    #run_mode = "single"
-    #tag_sweep = None
-    #run_mode = "sweep"
-    run_mode = "best"
-    tag_sweep = TAG_SWEEP
-    nth_best_run = None
-    #nth_best_run = 4  # index in best_runs.txt; loop range(5) for top-5 configs
-
-    stat_arr = [
-        #["pk"],
-        #["pk", "pgm"],
-        #["pk", "bispec"],
-        # ["pk", "bispec", "pgm"],
-        ["pk", "bispec", "pgm"],
-    ]
-    # tags_mask_arr = [
-    #     # [""],
-    #     # ["", "_kpgm0.25"],    
-    #     # ["", "_kb0.25"],
-    #     #["", "_kb0.25", ""],
-    #     ["", "_kb0.25", "_kpgm0.25"],
-    # ]
-    #tags_mask_arr = [["", "_kpgm0.25"]]
-    #tags_mask_arr = [["", ""]]
-    #tags_mask_arr = [[""]]
-    #tag_mask_bispec_arr = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
-    #tags_mask_arr = [["", tag_mask_bispec] for tag_mask_bispec in tag_mask_bispec_arr]
-    #tag_mask_pgm_arr = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
-    #tags_mask_arr = [["", tag_mask_pgm] for tag_mask_pgm in tag_mask_pgm_arr]
-    #tag_mask_bispec_arr = ["_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
-    #tag_mask_pgm_arr = ["_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
-    #tags_mask_arr = [["", tag_mask_bispec, tag_mask_pgm] for tag_mask_bispec in tag_mask_bispec_arr for tag_mask_pgm in tag_mask_pgm_arr]
-    tag_mask_bispec_arr = ["_kb0.1", "_kb0.15", "_kb0.2", "_kb0.25", "_kb0.3", "_kb0.35", ""]
-    tag_mask_pgm_arr = ["_kpgm0.1", "_kpgm0.15", "_kpgm0.2", "_kpgm0.25", "_kpgm0.3", "_kpgm0.35", ""]
-    tags_mask_arr = [["", tag_mask_bispec, tag_mask_pgm] for tag_mask_bispec in tag_mask_bispec_arr for tag_mask_pgm in tag_mask_pgm_arr]
-    
-
-    n_train_arr = [10000]
-    bx_arr = [32]
-    #n_train_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
-    #bx_arr = [1, 2, 4, 8, 16, 32]
-
-    # assert len(tags_mask_arr) == len(stat_arr), (
-    #     "tags_mask_arr must have one entry per stat_arr row (aligned lengths and statistics)"
-    # )
-    for i,statistics in enumerate(stat_arr):
-        for n_train in n_train_arr:
-            for bx in bx_arr:
-                for j,tags_mask in enumerate(tags_mask_arr):
-                    # uncomment if you want to run a single tags_mask aligned with the statistics
-                    #if i!=j:
-                    #    continue
-                    print(statistics)
-                    print(tags_mask)
-                    #tags_mask = [tag_mask_pgm if s == "pgm" else "" for s in statistics]
-                    if mode == "train":
-                        generate_train_config(
-                            overwrite=overwrite,
-                            statistics=statistics,
-                            tags_mask=tags_mask,
-                            n_train=n_train,
-                            bx=bx,
-                            run_mode=run_mode,
-                            tag_sweep=tag_sweep,
-                            **train_kw,
-                        )
-                    elif mode == "test":
-                        #for test_name in PARAM_SETS_TEST:
-                        for test_name in ["ood"]:
-                        #for test_name in ["ood", "coverage", "fixed_cosmo_shame_mean"]:
-                        #for test_name in ["coverage", "ood"]:
-                        #for test_name in ["coverage", "fixed_cosmo_shame_mean"]:
-                        #for test_name in ["fixed_cosmo_shame_sample"]:
-                            generate_test_config_from_preset(
-                                test_name,
-                                tag_params=tag_params_train,
-                                noise_mode=noise_mode,
-                                overwrite=overwrite,
-                                statistics=statistics,
-                                n_train=n_train,
-                                bx=bx,
-                                tags_mask=tags_mask,
-                                tag_sweep=tag_sweep,
-                                nth_best_run=nth_best_run,
-                            )
+    for statistics in STAT_COMBOS:
+        tags_mask = [FIDUCIAL_MASKS[s] for s in statistics]
+        if mode == "train":
+            generate_train_config(
+                overwrite=overwrite, statistics=list(statistics), tags_mask=tags_mask,
+                n_train=n_train, bx=bx, run_mode=run_mode, tag_sweep=TAG_SWEEP,
+                nth_best_run=nth_best_run, **train_kw,
+            )
+        elif mode == "test":
+            for test_name in test_names:
+                generate_test_config_from_preset(
+                    test_name, tag_params=tag_params_train, noise_mode=noise_mode,
+                    overwrite=overwrite, statistics=list(statistics), n_train=n_train, bx=bx,
+                    tags_mask=tags_mask, tag_sweep=TAG_SWEEP, nth_best_run=nth_best_run,
+                )
+        else:
+            raise ValueError(f"mode={mode!r}")
 
 
 if __name__ == "__main__":

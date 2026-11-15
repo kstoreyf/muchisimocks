@@ -16,10 +16,12 @@ from pathlib import Path
 
 import numpy as np
 
+import data_loader
 import paths
 import utils_plot
 from choose_best_run import build_sweep_tag_inf
 from generate_config_inference import (
+    FIDUCIAL_MASKS,
     build_tag_data,
     resolve_test_scenario_tags,
     resolve_train_tag_bundle,
@@ -34,7 +36,6 @@ NOISE_MODE = "noisy"
 TAG_PARAMS_TRAIN = "_p5_n10000"
 DATA_MODE = "muchisimocks"
 TAG_REPARAM = "_rp"
-KMAX_PK_LOOSE = 0.4
 
 # --- Train/test tags: single source of truth for analysis + figure code (v2 sets) ---
 _TRAIN_TAGS = resolve_train_tag_bundle(TAG_PARAMS_TRAIN, NOISE_MODE)
@@ -52,82 +53,51 @@ TAG_BIASPARAMS_TEST_FIXED = _FIXED_TAGS["tag_biasparams_test"]
 TAG_NOISE_TEST_FIXED = _FIXED_TAGS["tag_noise_test"]
 TAG_DATAGEN_TEST_MEAN = "_mean"
 
-TAGS_KMAX_KB = [
-    "_kb0.1",
-    "_kb0.15",
-    "_kb0.17",
-    "_kb0.2",
-    "_kb0.25",
-    "_kb0.27",
-    "_kb0.3",
-    "_kb0.32",
-    "_kb0.37",
-    "",
-]
-TAGS_KMAX_KPGM = [
-    "_kpgm0.1",
-    "_kpgm0.15",
-    "_kpgm0.2",
-    "_kpgm0.25",
-    "_kpgm0.27",
-    "_kpgm0.32",
-    "_kpgm0.37",
-    "",
-]
-# Bin edges for the kp=0.35 kpgm/kb scale grid (no loose/empty cut).
-TAGS_KMAX_BIN_EDGES = [
-    "_kpgm0.1",
-    "_kpgm0.15",
-    "_kpgm0.2",
-    "_kpgm0.25",
-    "_kpgm0.27",
-    "_kpgm0.32",
-    "_kpgm0.37",
-]
-TAGS_KMAX_KB_BIN_EDGES = [t.replace("_kpgm", "_kb") for t in TAGS_KMAX_BIN_EDGES]
-K_OVERALL = [0.1, 0.15, 0.2, 0.25, 0.27, 0.32, 0.37, 0.4]
-K_PK_FIXED_SCALE = [0.32, 0.35, 0.37]
+# --- Scale-cut grids. Labels are data_loader.K_CUTS, shared by every statistic (a cut keeps
+# bins with top edge <= label); '' = no cut (plotted at K_NO_CUT). ---
+KCUT_FID_PK = data_loader.parse_kcut("pk", FIDUCIAL_MASKS["pk"])
+KCUT_FID_OTHER = data_loader.parse_kcut("bispec", FIDUCIAL_MASKS["bispec"])  # B and P_gm
+assert KCUT_FID_OTHER == data_loader.parse_kcut("pgm", FIDUCIAL_MASKS["pgm"])
+TAGS_CUTS_KB = [data_loader.kcut_tag("bispec", k) for k in data_loader.K_CUTS]
+TAGS_CUTS_KPGM = [data_loader.kcut_tag("pgm", k) for k in data_loader.K_CUTS]
+TAGS_KMAX_KB = TAGS_CUTS_KB + [""]
+TAGS_KMAX_KPGM = TAGS_CUTS_KPGM + [""]
+K_OVERALL = list(data_loader.K_CUTS) + [data_loader.K_NO_CUT]
+K_PK_FIXED_SCALE = [0.31, 0.34, 0.37]
 STAT_ROWS = [["pk"], ["pk", "pgm"], ["pk", "bispec"], ["pk", "bispec", "pgm"]]
 STAT_ROWS_SCALE = [["pk", "pgm"], ["pk", "bispec"], ["pk", "bispec", "pgm"]]
 NBAR_TAGS_SHAME = ["_nbar0.00011", "_nbar0.00022", "_nbar0.00054"]
 N_ENSEMBLE_K = 3
 
-# Canonical cut for dedicated HP sweep / ensemble at kp=0.35, kb=0.25, kpgm=0.25
-KP035_CONFIGS: list[tuple[list[str], str]] = [
-    (["pk"], "_kp0.35"),
-    (["pk", "pgm"], "_kp0.35_kpgm0.25"),
-    (["pk", "bispec"], "_kp0.35_kb0.25"),
-    (["pk", "bispec", "pgm"], "_kp0.35_kb0.25_kpgm0.25"),
+# Fiducial cut for each statistic combo (also where the HP sweep is run, see SWEEP_MASKS).
+FIDUCIAL_CONFIGS: list[tuple[list[str], str]] = [
+    (stats, "".join(FIDUCIAL_MASKS[s] for s in stats)) for stats in STAT_ROWS
 ]
 
 
-def iter_kp035_configs() -> list[tuple[list[str], str]]:
-    """(statistics, joined mask) pairs for the kp0.35 / kb0.25 / kpgm0.25 ensemble."""
-    return [(list(stats), mask) for stats, mask in KP035_CONFIGS]
+def iter_fiducial_configs() -> list[tuple[list[str], str]]:
+    """(statistics, joined mask) pairs for the fiducial-cut ensembles."""
+    return [(list(stats), mask) for stats, mask in FIDUCIAL_CONFIGS]
 
 
-def fiducial_kp035_mask_for_statistics(statistics: list[str]) -> str:
-    """Joined mask of the KP035 fiducial cut used as the HP-sweep source."""
-    key = tuple(statistics)
-    for stats, mask in KP035_CONFIGS:
-        if tuple(stats) == key:
-            return mask
-    raise ValueError(f"no KP035 fiducial mask for statistics={statistics!r}")
+def fiducial_mask_for_statistics(statistics: list[str]) -> str:
+    """Joined fiducial mask for a statistic combo."""
+    return "".join(FIDUCIAL_MASKS[s] for s in statistics)
 
 
-def iter_kp035_scale_bin_configs(
-    kp: float = 0.35,
+def iter_scale_bin_configs(
+    kp: float = KCUT_FID_PK,
     *,
     tags_kb: list[str] | None = None,
     tags_kpgm: list[str] | None = None,
 ) -> list[tuple[list[str], str, list[str]]]:
-    """Scale grid at fixed ``kp``: sweep kb and kpgm over bin edges (no loose).
+    """Scale grid at fixed ``kp``: sweep kb and kpgm over K_CUTS (no '' point).
 
     Returns ``(statistics, joined_mask, tags_mask)``. Deduplicates the shared
-    ``pk+bispec+pgm`` point at kb=0.25 / kpgm=0.25.
+    ``pk+bispec+pgm`` point at the fiducial kb / kpgm.
     """
-    tags_kb = list(tags_kb if tags_kb is not None else TAGS_KMAX_KB_BIN_EDGES)
-    tags_kpgm = list(tags_kpgm if tags_kpgm is not None else TAGS_KMAX_BIN_EDGES)
+    tags_kb = list(tags_kb if tags_kb is not None else TAGS_CUTS_KB)
+    tags_kpgm = list(tags_kpgm if tags_kpgm is not None else TAGS_CUTS_KPGM)
     seen: set[tuple[tuple[str, ...], str]] = set()
     out: list[tuple[list[str], str, list[str]]] = []
 
@@ -172,30 +142,22 @@ def tags_mask_kp_kb_kpgm(
     """Per-statistic masks for joint ``pk+bispec+pgm`` at fixed ``kp`` with both cuts."""
     if not tag_kb or not tag_kpgm:
         raise ValueError("tag_kb and tag_kpgm must be non-empty for the Cartesian grid")
-    return [f"_kp{kp}", tag_kb, tag_kpgm]
+    return [data_loader.kcut_tag("pk", kp), tag_kb, tag_kpgm]
 
 
-def iter_kp035_cartesian_bipgm_configs(
-    kp: float = 0.35,
+def iter_cartesian_bipgm_configs(
+    kp: float = KCUT_FID_PK,
     *,
     tags_kb: list[str] | None = None,
     tags_kpgm: list[str] | None = None,
 ) -> list[tuple[list[str], str, list[str]]]:
     """Full ``kb × kpgm`` Cartesian grid for ``pk+bispec+pgm`` at fixed ``kp``.
 
-    Default lists match the figure-variants heatmap (no loose/empty): 9 kb × 7 kpgm
-    = 63 cells. Returns ``(statistics, joined_mask, tags_mask)``.
+    Default lists are all K_CUTS for both (no '' point). Returns
+    ``(statistics, joined_mask, tags_mask)``.
     """
-    tags_kb = list(
-        tags_kb
-        if tags_kb is not None
-        else [t for t in TAGS_KMAX_KB if t]
-    )
-    tags_kpgm = list(
-        tags_kpgm
-        if tags_kpgm is not None
-        else [t for t in TAGS_KMAX_KPGM if t]
-    )
+    tags_kb = list(tags_kb if tags_kb is not None else TAGS_CUTS_KB)
+    tags_kpgm = list(tags_kpgm if tags_kpgm is not None else TAGS_CUTS_KPGM)
     statistics = ["pk", "bispec", "pgm"]
     out: list[tuple[list[str], str, list[str]]] = []
     for tag_kb in tags_kb:
@@ -247,12 +209,12 @@ def mask_for_bispec_sweep(
     statistics_row: list[str],
     tag_kb: str,
     *,
-    tag_kpgm_fixed: str = "_kpgm0.25",
+    tag_kpgm_fixed: str = FIDUCIAL_MASKS["pgm"],
 ) -> str:
     if "bispec" in statistics_row:
         if "pgm" in statistics_row:
-            return f"{tag_kb}{tag_kpgm_fixed}" if tag_kb else f"_kb{KMAX_PK_LOOSE}{tag_kpgm_fixed}"
-        return tag_kb if tag_kb else f"_kb{KMAX_PK_LOOSE}"
+            return f"{tag_kb}{tag_kpgm_fixed}"
+        return tag_kb
     return tag_kpgm_fixed
 
 
@@ -260,7 +222,7 @@ def mask_for_pgm_sweep(
     statistics_row: list[str],
     tag_kpgm: str,
     *,
-    tag_kb_fixed: str = "_kb0.25",
+    tag_kb_fixed: str = FIDUCIAL_MASKS["bispec"],
 ) -> str:
     if "pgm" in statistics_row:
         if "bispec" in statistics_row:
@@ -270,18 +232,12 @@ def mask_for_pgm_sweep(
 
 
 def overall_k_mask(statistics_row: list[str], k: float) -> str:
-    k_other = k if k <= 0.25 else 0.25
-    parts: list[str] = []
-    for stat in statistics_row:
-        if stat == "pk":
-            parts.append(f"_kp{k}")
-        elif stat == "bispec":
-            parts.append(f"_kb{k_other}")
-        elif stat == "pgm":
-            parts.append(f"_kpgm{k_other}")
-        else:
-            raise ValueError(stat)
-    return "".join(parts)
+    """Joined mask for the overall scale cut at ``k``: every statistic is cut at ``k`` up to
+    the fiducial B / P_gm cut (KCUT_FID_OTHER); above it only P(k) keeps moving."""
+    k_other = min(k, KCUT_FID_OTHER)
+    return "".join(
+        data_loader.kcut_tag(stat, k if stat == "pk" else k_other) for stat in statistics_row
+    )
 
 
 def iter_kmax_figure_configs() -> list[tuple[list[str], str]]:
@@ -303,8 +259,8 @@ def tags_mask_fixed_kp_scale_sweep(
     *,
     tag_kb: str | None = None,
     tag_kpgm: str | None = None,
-    tag_kb_fixed: str = "_kb0.25",
-    tag_kpgm_fixed: str = "_kpgm0.25",
+    tag_kb_fixed: str = FIDUCIAL_MASKS["bispec"],
+    tag_kpgm_fixed: str = FIDUCIAL_MASKS["pgm"],
 ) -> list[str]:
     """Per-statistic masks for Fig-8-style sweeps with Pk fixed at ``kp``.
 
@@ -313,7 +269,7 @@ def tags_mask_fixed_kp_scale_sweep(
     """
     if tag_kb is not None and tag_kpgm is not None:
         raise ValueError("pass tag_kb or tag_kpgm, not both")
-    kp_tag = f"_kp{kp}"
+    kp_tag = data_loader.kcut_tag("pk", kp)
     out: list[str] = []
     for stat in statistics:
         if stat == "pk":
@@ -340,7 +296,7 @@ def tags_mask_fixed_kp_scale_sweep(
 def iter_scale_sweep_fixed_kp_configs(
     kp_values: list[float] | None = None,
 ) -> list[tuple[list[str], list[str]]]:
-    """(statistics, tags_mask) pairs for fixed-Pk scale sweeps (Fig 8 @ kp=0.32/0.35/0.37)."""
+    """(statistics, tags_mask) pairs for fixed-Pk scale sweeps (Fig 8 @ kp in K_PK_FIXED_SCALE)."""
     kp_values = list(kp_values or K_PK_FIXED_SCALE)
     seen: set[tuple[tuple[str, ...], tuple[str, ...]]] = set()
     configs: list[tuple[list[str], list[str]]] = []

@@ -73,7 +73,7 @@ sys.path.insert(0, str(CODE_DIR))
 
 import data_loader  # noqa: E402
 from ensemble_kmax_utils import (  # noqa: E402
-    KP035_CONFIGS,
+    FIDUCIAL_CONFIGS,
     N_ENSEMBLE_K,
     load_ensemble_member_samples,
     model_dir,
@@ -103,13 +103,13 @@ N_TRAIN = 10000
 
 DATA_MODE = "muchisimocks"
 
-STATISTICS_ARR_FID = [list(stats) for stats, _ in KP035_CONFIGS]
-TAGS_MASK_FID = [mask for _, mask in KP035_CONFIGS]
+STATISTICS_ARR_FID = [list(stats) for stats, _ in FIDUCIAL_CONFIGS]
+TAGS_MASK_FID = [mask for _, mask in FIDUCIAL_CONFIGS]
 
 COMBO_KEYS = ("pk", "pk_pgm", "pk_b", "pk_pgm_b")
 COMBO_CONFIG: Dict[str, Tuple[List[str], str]] = {
     key: (list(stats), mask)
-    for key, (stats, mask) in zip(COMBO_KEYS, KP035_CONFIGS)
+    for key, (stats, mask) in zip(COMBO_KEYS, FIDUCIAL_CONFIGS)
 }
 # Full stats combo used for Appendix A CV-mean vs recentered vs mean-indiv widths.
 CV_WIDTH_COMBO = "pk_pgm_b"
@@ -156,8 +156,8 @@ SHAME_FOB_PARAMS: Tuple[Tuple[str, str, str], ...] = (
 )
 FOB_RIDGE = 1e-8
 
-# Fig. 9: FoM(σ8) increase when pushing overall k_max EFT→max (0.2 → 0.37; SHAMe fid n̄).
-SHAME_FOM_KMAX_REF = 0.2  # EFT-scale cut
+# Fig. 9: FoM(σ8) increase when pushing overall k_max EFT→max (0.21 → 0.37; SHAMe fid n̄).
+SHAME_FOM_KMAX_REF = 0.21  # EFT-scale cut (same bins as the v1 '0.2' cut)
 SHAME_FOM_KMAX_HIGH = 0.37  # max Pgg scale
 SHAME_FOM_KMAX_TEX = "KmaxMaxVsKmaxEFT"
 SHAME_FOM_PARAM_KEY = "sigma8"  # plotter_figs FOB_KEYS name
@@ -861,7 +861,7 @@ def _fob_sigma_macros(
 
 
 def _shame_fom_kmax_incr_macros() -> List[LatexQuantity]:
-    """Percent FoM(σ8) increase, k_max 0.37 vs 0.2, SHAMe fid (Fig. 9)."""
+    """Percent FoM(σ8) increase, k_max SHAME_FOM_KMAX_HIGH vs SHAME_FOM_KMAX_REF, SHAMe fid (Fig. 9)."""
     import plotter_figs as pf  # heavy; load only when computing FoM
 
     tag_mock = "_nbar0.00022"

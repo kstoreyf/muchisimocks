@@ -18,10 +18,6 @@ def _default_dir_params(dir_params):
     return dir_params
 
 
-def _default_masks_dir():
-    return str(paths.PROJECT_ROOT / "data" / "masks")
-
-
 def _is_nested_bias(biasparams_df):
     """Check if bias params DataFrame has nested metadata columns."""
     return biasparams_df is not None and 'idx_cosmo' in biasparams_df.columns
@@ -186,174 +182,129 @@ def get_bias_indices_for_idx(idx_mock, modecosmo='lh', params_df=None, biasparam
     return idxs_bias
 
 
-def _validate_tag_mask(statistic: str, tag_mask: str) -> None:
-    """
-    Validate that `tag_mask` is either "" (no masking) or one of the supported
-    kmax/bin-selection tokens for the given statistic.
+# =============================================================================
+# Scale cuts
+# =============================================================================
+# A cut tag ``_kp0.37`` / ``_kb0.24`` / ``_kpgm0.24`` keeps every bin whose *top edge* is
+# <= the label (bispectrum: all three sides). One label grid is shared by all statistics; it
+# is chosen so every step adds >= 1 bin for both the log P(k)/P_gm binning and the linear
+# bispectrum binning (no two labels select the same bins). No cut = empty tag (all bins).
+#
+# Masks are precomputed once per data tree with code_auxiliary/make_masks.py and only
+# loaded here; ``mask_data`` re-derives each mask from the data's k and checks it matches.
 
-    This prevents accidentally applying bispectrum/k tokens to pgm (or vice-versa)
-    and silently returning an "all bins" mask.
-    """
-    if not isinstance(tag_mask, str):
-        raise TypeError(f"tag_mask must be a string (or empty string). Got {type(tag_mask)}")
+# Bin edges; must match compute_statistics (k_min=0.01, k_max=0.4; 32 log / 12 linear bins).
+K_EDGES = {
+    "pk": np.logspace(np.log10(0.01), np.log10(0.4), 33),
+    "bispec": np.linspace(0.01, 0.4, 13),
+}
+K_EDGES["pklin"] = K_EDGES["pk"]
+K_EDGES["pgm"] = K_EDGES["pk"]
 
+K_CUTS = (0.11, 0.15, 0.18, 0.21, 0.24, 0.27, 0.31, 0.34, 0.37)
+K_NO_CUT = 0.40  # label used on plots for the empty (all-bins) tag
+KCUT_PREFIX = {"pk": "_kp", "pklin": "_kp", "bispec": "_kb", "pgm": "_kpgm"}
+_KCUT_TOL = 1e-6
+
+
+def kcut_tag(statistic: str, kmax) -> str:
+    """Tag for cutting ``statistic`` at ``kmax`` ('' for no cut, i.e. kmax None or >= 0.40)."""
+    if kmax is None or kmax >= K_NO_CUT - _KCUT_TOL:
+        return ""
+    if not any(abs(kmax - k) < _KCUT_TOL for k in K_CUTS):
+        raise ValueError(f"kmax={kmax} is not one of K_CUTS={K_CUTS}")
+    return f"{KCUT_PREFIX[statistic]}{kmax:.2f}"
+
+
+def parse_kcut(statistic: str, tag_mask: str):
+    """kmax for a single-statistic cut tag, or None for ''. Rejects labels not in K_CUTS."""
     tag_mask = tag_mask.strip()
     if tag_mask == "":
-        return
-
-    # Supported mask tokens:
-    # - pk:    'kmaxpk' or 'kp'
-    # - bispec:'kmaxbispec' or 'kb'
-    # - pgm:   'kmaxpgm' or 'kpgm'
-    allowed = None
-    if statistic in ("pk", "pklin"):
-        allowed = r"^_?(?:kmaxpk|kp)(\d+(?:\.\d+)?)$"
-    elif statistic == "bispec":
-        allowed = r"^_?(?:kmaxbispec|kb)(\d+(?:\.\d+)?)$"
-    elif statistic == "pgm":
-        allowed = r"^_?(?:kmaxpgm|kpgm)(\d+(?:\.\d+)?)$"
-    else:
-        # mask_data() prints and falls back for unknown statistics; keep behavior.
-        return
-
-    if allowed is None or re.fullmatch(allowed, tag_mask) is None:
+        return None
+    prefix = KCUT_PREFIX[statistic]
+    m = re.fullmatch(re.escape(prefix) + r"(\d\.\d\d)", tag_mask)
+    if m is None or not any(abs(float(m.group(1)) - k) < _KCUT_TOL for k in K_CUTS):
+        allowed = ", ".join(kcut_tag(statistic, k) for k in K_CUTS)
         raise ValueError(
-            f"Invalid tags_mask token {tag_mask!r} for statistic {statistic!r}. "
-            f"Allowed: {allowed!r} (or '' for no mask)."
+            f"Invalid scale cut {tag_mask!r} for {statistic!r}; allowed: {allowed} (or '' for none)"
         )
+    return float(m.group(1))
+
+
+def _bin_top_edges(statistic, k):
+    """Top edge of the bin each k value (bin centre) falls in; checks k against K_EDGES."""
+    edges = K_EDGES[statistic]
+    k = np.asarray(k, dtype=float)
+    idx = np.searchsorted(edges, k) - 1
+    if np.any(idx < 0) or np.any(idx >= len(edges) - 1):
+        raise ValueError(f"{statistic} k values outside the expected bins [{edges[0]}, {edges[-1]}]")
+    centers = np.sqrt(edges[:-1] * edges[1:]) if statistic != "bispec" else 0.5 * (edges[:-1] + edges[1:])
+    if not np.allclose(k, centers[idx], rtol=1e-2):
+        raise ValueError(f"{statistic} k values don't match K_EDGES bin centres; binning changed?")
+    return edges[idx + 1]
+
+
+def compute_kcut_mask(statistic, tag_mask, k):
+    """Bool mask over data bins for ``tag_mask`` (bispec: k is the (3, n_triangles) k123 array)."""
+    kmax = parse_kcut(statistic, tag_mask)
+    top = _bin_top_edges(statistic, k)
+    n_bins = top.shape[-1]
+    if kmax is None:
+        return np.ones(n_bins, dtype=bool)
+    keep = top <= kmax + _KCUT_TOL
+    return keep.all(axis=0) if statistic == "bispec" else keep
+
+
+def masks_dir() -> Path:
+    return Path(paths.DIR_DATA) / "masks"
+
+
+def mask_path(statistic, tag_mask) -> Path:
+    stat = "pk" if statistic == "pklin" else statistic
+    return masks_dir() / f"mask_{stat}{tag_mask}.txt"
+
+
+def load_kcut_mask(statistic, tag_mask, k):
+    """Load the precomputed mask and check it against the one implied by the data's k."""
+    expected = compute_kcut_mask(statistic, tag_mask, k)
+    if tag_mask.strip() == "":
+        return expected
+    fn = mask_path(statistic, tag_mask)
+    if not fn.is_file():
+        raise FileNotFoundError(f"Missing mask {fn}; run code_auxiliary/make_masks.py")
+    mask = np.loadtxt(fn, dtype=int).astype(bool)
+    if mask.shape != expected.shape or not np.array_equal(mask, expected):
+        raise ValueError(f"Mask {fn} doesn't match the bins of the loaded data; rerun make_masks.py")
+    return mask
 
 
 def mask_data(statistic, tag_mask, k, y, y_err):
-    if isinstance(tag_mask, str):
-        tag_mask = tag_mask.strip()
-    _validate_tag_mask(statistic, tag_mask)
-
-    if statistic in ('pk', 'pklin'):
-        mask = get_Pk_mask(tag_mask=tag_mask, k=k)
-    elif statistic == 'pgm':
-        mask = get_Pgm_mask(tag_mask=tag_mask, k=k)
-    elif statistic == 'bispec':
-        mask = get_bispec_mask(tag_mask=tag_mask, k=k, bispec=y)
-    else:
+    tag_mask = tag_mask.strip() if isinstance(tag_mask, str) else tag_mask
+    if statistic not in KCUT_PREFIX:
         print("No mask for this statistic, using all data")
-        mask = [True]*y.shape[-1]
-        mask = np.array(mask)
-    print(f"Masked {np.sum(~np.array(mask).astype(bool))} out of {len(mask)} bins")
-    mask = mask.astype(bool)
-    if k.ndim == 1:
-        k_masked = k[mask]
-    elif k.ndim == 2:
-        k_masked = k[:,mask]
+        mask = np.ones(y.shape[-1], dtype=bool)
     else:
-        raise ValueError(f"Unexpected k shape: {k.shape}")
-    
+        # k is per-bin (pk/pgm: (n_bins,) or (n_mocks, n_bins); bispec: (3, n_triangles))
+        k_arr = np.asarray(k)
+        if statistic == "bispec":
+            k_bins = k_arr
+        else:
+            k_bins = k_arr if k_arr.ndim == 1 else k_arr[0]
+        mask = load_kcut_mask(statistic, tag_mask, k_bins)
+    print(f"Masked {np.sum(~mask)} out of {len(mask)} bins")
+    if np.ndim(k) == 1:
+        k_masked = np.asarray(k)[mask]
+    elif np.ndim(k) == 2:
+        k_masked = np.asarray(k)[:, mask]
+    else:
+        raise ValueError(f"Unexpected k shape: {np.shape(k)}")
+
     if y.ndim == 1:
         return k_masked, y[mask], y_err[mask]
     elif y.ndim == 2:
-        return k_masked, y[:,mask], y_err[:,mask]
+        return k_masked, y[:, mask], y_err[:, mask]
     else:
         raise ValueError(f"Unexpected y shape: {y.shape}")
-
-
-# TODO make mask saving more robust
-# used to both remove nonpositive data, and to select certain k_bins
-def _build_pk_mask(tag_mask, k_arr):
-    mask = np.ones(k_arr.shape[-1], dtype=bool)
-    if 'kmaxpk' in tag_mask or 'kp' in tag_mask:
-        match = re.search(r'(?:kmaxpk|kp)([\d.]+)', tag_mask)
-        if match:
-            kmax = float(match.group(1))
-            if k_arr.ndim == 1:
-                mask = mask & (k_arr < kmax)
-            elif k_arr.ndim == 2:
-                mask = mask & np.all(k_arr < kmax, axis=0)
-            else:
-                raise ValueError(f"Unexpected k shape for pk masking: {k_arr.shape}")
-        else:
-            raise ValueError(f"Could not extract kmax value from tag_mask: {tag_mask}")
-    return mask
-
-
-def get_Pk_mask(tag_mask='', k=None):
-    dir_masks = _default_masks_dir()
-    # Mask depends only on the intended bin selection (tag_mask), not on data values.
-    fn_mask = f'{dir_masks}/mask_pk{tag_mask}.txt'
-    n_bins = None if k is None else np.asarray(k).shape[-1]
-    if os.path.exists(fn_mask):
-        mask = np.loadtxt(fn_mask, dtype=bool)
-        # Stale/empty mask files (e.g. from concurrent first writes) must not zero out P(k).
-        if mask.size == 0 or (n_bins is not None and mask.size != n_bins):
-            if k is None:
-                raise ValueError(
-                    f"Invalid mask file {fn_mask} (size={mask.size}); pass k to regenerate."
-                )
-            print(
-                f"Regenerating pk mask {fn_mask} "
-                f"(loaded size={mask.size}, expected {n_bins})"
-            )
-            mask = _build_pk_mask(tag_mask, np.asarray(k))
-            os.makedirs(dir_masks, exist_ok=True)
-            np.savetxt(fn_mask, mask.astype(int), fmt='%i')
-        return mask
-
-    assert k is not None, "must pass k, if mask doesn't yet exist!"
-    k_arr = np.asarray(k)
-    mask = _build_pk_mask(tag_mask, k_arr)
-    os.makedirs(dir_masks, exist_ok=True)
-    np.savetxt(fn_mask, mask.astype(int), fmt='%i')
-    return mask
-
-
-def get_Pgm_mask(tag_mask='', k=None):
-    dir_masks = _default_masks_dir()
-    fn_mask = f'{dir_masks}/mask_pgm{tag_mask}.txt'
-    if os.path.exists(fn_mask):
-        return np.loadtxt(fn_mask, dtype=bool)
-    else:
-        assert k is not None, "must pass either Pk or k, if mask doesn't yet exist!"
-        k_arr = np.asarray(k)
-        mask = np.ones(k_arr.shape[-1], dtype=bool)
-        # Apply kmax cutoff if specified
-        if 'kmaxpgm' in tag_mask or 'kpgm' in tag_mask:
-            match = re.search(r'(?:kmaxpgm|kpgm)([\d.]+)', tag_mask)
-            if match:
-                kmax = float(match.group(1))
-                if k_arr.ndim == 1:
-                    mask = mask & (k_arr < kmax)
-                elif k_arr.ndim == 2:
-                    mask = mask & np.all(k_arr < kmax, axis=0)
-                else:
-                    raise ValueError(f"Unexpected k shape for pgm masking: {k_arr.shape}")
-            else:
-                raise ValueError(f"Could not extract kmax value from tag_mask: {tag_mask}")
-
-        np.savetxt(fn_mask, mask.astype(int), fmt='%i')
-    return mask
-
-
-
-def get_bispec_mask(tag_mask='', k=None, bispec=None):
-    dir_masks = _default_masks_dir()
-    fn_mask = f'{dir_masks}/mask_bispec{tag_mask}.txt'
-    if os.path.exists(fn_mask):
-        return np.loadtxt(fn_mask, dtype=bool)
-    else:
-        if 'kmaxbispec' in tag_mask or 'kb' in tag_mask:
-            match = re.search(r'(?:kmaxbispec|kb)([\d.]+)', tag_mask)
-            if match:
-                kmax = float(match.group(1))
-            else:
-                raise ValueError(f"Could not extract kmax value from tag_mask: {tag_mask}")
-            mask = np.all(np.array(k).T<kmax, axis=1)
-        else:
-            assert k is not None, "must pass k, if mask doesn't yet exist!"
-            if bispec is not None:
-                mask = np.ones(np.asarray(bispec).shape[-1], dtype=int)
-            else:
-                k_arr = np.asarray(k)
-                mask = np.ones(k_arr.shape[-1] if k_arr.ndim > 1 else k_arr.shape[0], dtype=int)
-        np.savetxt(fn_mask, mask.astype(int), fmt='%i')
-    return mask
 
 
 def load_params(tag_params=None, tag_biasparams=None,
