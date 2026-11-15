@@ -1119,7 +1119,7 @@ def _coverage_samples_path(tag_inf, tag_test):
     return None, None
 
 
-def _load_ensemble_coverage_3d(statistics, tag_masks, *, bx_val=None, n_cosmo_val=None):
+def _load_ensemble_coverage_3d(statistics, tag_masks, *, bx_val=None, n_cosmo_val=None, k_members=None):
     """Load coverage chains; prefer K-member mix, else whatever members exist.
 
     Uses ``*_pred.npy`` when present, else ``*_pred_inprogress.npy``. Metrics are
@@ -1130,10 +1130,12 @@ def _load_ensemble_coverage_3d(statistics, tag_masks, *, bx_val=None, n_cosmo_va
         bx_val = bx
     if n_cosmo_val is None:
         n_cosmo_val = n_train
+    if k_members is None:
+        k_members = N_ENSEMBLE_K
     tag_test = build_tag_test_conv(statistics, tag_masks)
     arrays = []
     kinds = []
-    for nth in range(N_ENSEMBLE_K):
+    for nth in range(k_members):
         tag_inf = build_tag_inf_conv(bx_val, n_cosmo_val, statistics, tag_masks, nth=nth)
         fn, kind = _coverage_samples_path(tag_inf, tag_test)
         if fn is None:
@@ -1157,7 +1159,9 @@ def _load_ensemble_coverage_3d(statistics, tag_masks, *, bx_val=None, n_cosmo_va
     names = list(np.loadtxt(fn_pn, dtype=str)) if fn_pn.is_file() else None
     n_mem = len(arrays)
     ip = "inprogress" in kinds
-    if n_mem == N_ENSEMBLE_K:
+    if k_members == 1:
+        kind = "top_inprogress" if ip else "top_done"
+    elif n_mem == k_members:
         kind = "ensemble_inprogress" if ip else "ensemble_done"
     elif n_mem > 1:
         kind = f"partial{n_mem}_inprogress" if ip else f"partial{n_mem}_done"
@@ -1191,10 +1195,13 @@ def _moments_from_samples_3d(samples_arr, param_names):
 
 def load_coverage_metrics(
     bx, n_cosmo, statistics, tag_masks, tag_test=None, *,
-    tag_params_test=None, tag_biasparams_test=None, n_target=None,
+    tag_params_test=None, tag_biasparams_test=None, n_target=None, k_members=None,
 ):
     """
     Load FoM/FoB / MSE / delta metrics for one grid point.
+
+    k_members: number of top models mixed for the standard coverage tag
+    (default N_ENSEMBLE_K; 1 = top model only).
 
     tag_params_test / tag_biasparams_test select the truth vector
     (coverage LH by default; fixed-cosmo shame for CV).
@@ -1230,7 +1237,7 @@ def load_coverage_metrics(
     use_ensemble = tag_test == build_tag_test_conv(statistics, tag_masks)
     if use_ensemble:
         samples_arr, param_names_all, kind = _load_ensemble_coverage_3d(
-            statistics, tag_masks, bx_val=bx, n_cosmo_val=n_cosmo,
+            statistics, tag_masks, bx_val=bx, n_cosmo_val=n_cosmo, k_members=k_members,
         )
         if samples_arr is None:
             base_info["message"] = str(kind)
@@ -1368,7 +1375,7 @@ def load_coverage_metrics(
 def collect_coverage_grid(
     statistics, tag_masks, n_cosmo_values, bx_values, *, verbose=True,
     tag_test=None, tag_params_test=None, tag_biasparams_test=None, n_target=None,
-    grid_label="Coverage",
+    grid_label="Coverage", k_members=None,
 ):
     if tag_test is None:
         tag_test = build_tag_test_conv(statistics, tag_masks)
@@ -1386,7 +1393,7 @@ def collect_coverage_grid(
                 bx_val, n_cosmo, statistics, tag_masks, tag_test=tag_test,
                 tag_params_test=tag_params_test,
                 tag_biasparams_test=tag_biasparams_test,
-                n_target=n_target,
+                n_target=n_target, k_members=k_members,
             )
             prefix = f"[{label}] bx={bx_val}, n_cosmo={n_cosmo}"
             if m is None:
@@ -2009,7 +2016,7 @@ def plot_fig2_statistics_ranges(save_name="fig2_statistics_ranges"):
     plot_shame_nbars(axes[2], "bispec", with_labels=False)
     axes[2].set_yscale("log")
     axes[2].set_xlabel("triangle bin index", fontsize=LABELSIZE)
-    axes[2].set_ylabel(r"$B(k_1,k_2,k_3)$", fontsize=LABELSIZE)
+    axes[2].set_ylabel(r"$k_1k_2k_3\,B(k_1,k_2,k_3)$", fontsize=LABELSIZE)
 
     for ax in axes:
         ax.tick_params(labelsize=TICKSIZE)
@@ -2717,12 +2724,22 @@ plot_fig8b_scale_dependence_overall_kmax_fom3d_full_nbars = (
 # Fig 10 — Convergence Pgg+Pgm+B (3D FoM/FoB)
 # =============================================================================
 
-def plot_fig10_convergence_pgg_b_pgm(save_name="fig10_convergence_pgg_b_pgm"):
-    # Cache bumped: K=3 ensemble mix when all members exist.
+def _conv_cache_suffix(k_members):
+    """Cache suffix for the coverage grid: K=3 ensemble (paper) or top-1 model."""
+    if k_members is None or k_members == N_ENSEMBLE_K:
+        return f"_ensK{N_ENSEMBLE_K}_ip"
+    if k_members == 1:
+        return "_top_ip"
+    return f"_ensK{k_members}_ip"
+
+
+def plot_fig10_convergence_pgg_b_pgm(save_name="fig10_convergence_pgg_b_pgm", *, k_members=None):
+    """k_members=None → K=3 ensemble (paper); k_members=1 → top model only."""
     df_conv_full = load_or_build(
-        "df_conv_pk_bispec_pgm_kp0.35_kb0.25_kpgm0.25_b1phys_err_ensK3_ip",
+        "df_conv_pk_bispec_pgm_kp0.35_kb0.25_kpgm0.25_b1phys_err" + _conv_cache_suffix(k_members),
         lambda: collect_coverage_grid(
             STATISTICS_FULL_CONV, TAG_MASKS_FULL_CONV, n_cosmo_arr, bx_arr,
+            k_members=k_members,
         ),
     )
     print(f"$P_{{gg}}+P_{{gm}}+B_{{ggg}}$: {len(df_conv_full)} grid points loaded")
@@ -2740,7 +2757,8 @@ def plot_fig10_convergence_pgg_b_pgm(save_name="fig10_convergence_pgg_b_pgm"):
 # Fig 11 — Convergence all stat combos
 # =============================================================================
 
-def plot_fig11_convergence_all_combos(save_name="fig11_convergence_all_combos"):
+def plot_fig11_convergence_all_combos(save_name="fig11_convergence_all_combos", *, k_members=None):
+    """k_members=None → K=3 ensemble (paper); k_members=1 → top model only."""
     frames = []
     for statistics, tag_masks, label in zip(
         STATISTICS_ARR_FID, TAGS_MASK_FID,
@@ -2748,11 +2766,13 @@ def plot_fig11_convergence_all_combos(save_name="fig11_convergence_all_combos"):
     ):
         cache_name = (
             "df_conv_" + "_".join(statistics) + (tag_masks or "_nomask")
-            + "_b1phys_err_ensK3_ip"
+            + "_b1phys_err" + _conv_cache_suffix(k_members)
         )
         df = load_or_build(
             cache_name,
-            lambda s=statistics, m=tag_masks: collect_coverage_grid(s, m, n_cosmo_arr, bx_arr),
+            lambda s=statistics, m=tag_masks: collect_coverage_grid(
+                s, m, n_cosmo_arr, bx_arr, k_members=k_members,
+            ),
         )
         if df.empty:
             print(f"No coverage grid for {label}")
