@@ -58,6 +58,7 @@ from generate_config_inference import (  # noqa: E402
     NOISE_MODES,
     resolve_test_scenario_tags,
     resolve_train_tag_bundle,
+    build_sweep_name,
     tags_mask_for_sweep,
     TAG_PARAMS_COVERAGE,
     TAG_SWEEP,
@@ -87,7 +88,7 @@ LOG_CSV_HEADER = [
 
 
 def parse_tags_stat(tags_stat: str) -> tuple[list[str], list[str]]:
-    """Parse ``_pk_bispec`` → statistics; sweep masks via ``tags_mask_for_sweep`` (``TAG_MASK_BISPEC_SWEEP`` on bispec)."""
+    """Parse ``_pk_bispec`` → statistics and their fiducial sweep masks (``tags_mask_for_sweep``)."""
     s = tags_stat.strip()
     if not s:
         raise ValueError("tags_stat is empty")
@@ -111,15 +112,9 @@ def build_sweep_tag_inf(
     reparameterize: bool,
     tag_sweep: str,
 ) -> str:
-    tag_masks = "".join(tags_mask)
-    tag_stats = f'_{"_".join(statistics)}'
-    tag_paramsall = tag_params + tag_biasparams
-    if tag_noise is not None:
-        tag_paramsall += tag_noise
-    tag_data = "_" + data_mode + tag_stats + tag_masks + tag_paramsall
-    tag_inf_num_sweep = f"_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}"
-    base_inf_sweep = tag_data + ("_rp" if reparameterize else "") + tag_inf_num_sweep
-    return base_inf_sweep + f"_sweep{tag_sweep}"
+    """Keyword wrapper around ``generate_config_inference.build_sweep_name``."""
+    return build_sweep_name(data_mode, statistics, tag_params, tag_biasparams, tag_noise,
+                            reparameterize, tag_sweep, tags_mask=tags_mask)
 
 
 def sweep_root_for_tag_inf(tag_inf: str) -> Path:
@@ -627,8 +622,7 @@ def parse_args() -> argparse.Namespace:
         metavar="MASK",
         help=(
             "Per-statistic mask suffixes (one per statistic in --tags_stat). "
-            "Default: tags_mask_for_sweep (bispec → _kb0.25, else empty). "
-            "Fiducial pk+bispec+pgm: --tags-mask '' _kb0.25 _kpgm0.25"
+            "Default: the fiducial masks (generate_config_inference.FIDUCIAL_MASKS)."
         ),
     )
     p.add_argument(

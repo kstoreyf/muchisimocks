@@ -25,7 +25,6 @@ from generate_config_inference import (
     BX_SWEEP,
     N_TRAIN_SWEEP,
     SWEEP_NUM_RUNS,
-    build_tag_data,
     tags_mask_for_sweep,
 )
 
@@ -282,9 +281,8 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
         
     ### Run inference (now only sbi)
     print("tag_inf (SBI):", tag_inf)
-    # run_mode best: copy sweep posterior only if bx/n_train AND tags_mask match the sweep
-    # (fiducial masks from tags_mask_for_sweep). Otherwise retrain with best hparams —
-    # e.g. training _kb0.2 while sweep used TAG_MASK_BISPEC_SWEEP _kb0.25.
+    # run_mode best: copy the sweep trial's posterior only if bx/n_train AND tags_mask match the
+    # (fiducial) sweep; otherwise retrain with its hyperparameters on this config's data.
     sweep_tags_mask = tags_mask_for_sweep(statistics)
     mask_matches_sweep = list(tags_mask) == list(sweep_tags_mask)
     matches_sweep_model = (
@@ -293,30 +291,6 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
         and int(n_train) == N_TRAIN_SWEEP
         and mask_matches_sweep
     )
-    tag_sweep = config.get("tag_sweep")
-    if run_mode == "best" and tag_sweep and sweep_name:
-        reparameterize = config.get("reparameterize", False)
-        tag_data_sweep = build_tag_data(
-            data_mode,
-            statistics,
-            sweep_tags_mask,
-            tag_params,
-            tag_biasparams,
-            tag_noise,
-        )
-        default_sweep_name = (
-            tag_data_sweep
-            + ("_rp" if reparameterize else "")
-            + f"_bx{BX_SWEEP}_ntrain{N_TRAIN_SWEEP}_sweep{tag_sweep}"
-        )
-        if sweep_name != default_sweep_name:
-            print(
-                "run_mode=best: sweep_name differs from default for this train bundle "
-                f"(sweep_name={sweep_name!r}, default={default_sweep_name!r}) — "
-                "retrain with best hparams only (no checkpoint copy).",
-                flush=True,
-            )
-            matches_sweep_model = False
     if run_mode == "best":
         print(
             "run_mode=best: tags_mask=%s | fiducial sweep masks=%s | mask_matches_sweep=%s"
