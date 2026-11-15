@@ -38,12 +38,12 @@ from choose_best_run import (  # noqa: E402
 from generate_config_inference import (  # noqa: E402
     resolve_train_tag_bundle,
     tags_mask_for_sweep,
+    TAG_SWEEP,
 )
 
 NOISE_MODE = "noisy"
 BX = 32
 N_TRAIN = 10_000
-TAG_SWEEP = "-rand30"
 STATISTICS = ["pk", "bispec", "pgm"]
 VALIDATION_FRACTION = 0.1
 VAL_SPLIT_SEED = 42

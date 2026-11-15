@@ -1,6 +1,6 @@
 #!/bin/bash
 # B/P emulator coefficients for select_shame_noisebest.py: one task per (phase, eps realization).
-# Then run on a login node:  python select_shame_noisebest.py fit
+# Then: sbatch --dependency=afterok:<this job> code_auxiliary/jobs/job_select_shame_noisebest_fit.s
 #   sbatch code_auxiliary/jobs/job_select_shame_noisebest.s
 #SBATCH --qos=regular
 #SBATCH --job-name=select_noisebest

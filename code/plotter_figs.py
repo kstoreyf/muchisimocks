@@ -54,7 +54,8 @@ from ensemble_kmax_utils import (
 # =============================================================================
 bx = 32
 n_train = 10000
-TAG_INF_BEST_SUFFIX = "_best-rand30"
+from generate_config_inference import TAG_SWEEP  # noqa: E402
+TAG_INF_BEST_SUFFIX = "_best" + TAG_SWEEP
 
 data_mode = "muchisimocks"
 TAG_PARAMS_TRAIN = "_p5_n10000"

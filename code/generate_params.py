@@ -44,12 +44,15 @@ BOUNDS = {
     "Anoisegaussian": {
         "An_gaussian": [0.0, 2.0],
     },
+    # v2 (2026-11-15): ~1.5x the largest |A| fit on the phase-matched SHAMe mocks over 3 densities and
+    # 3 bias choices (notebooks/2026-11-12_final_checks.ipynb §2.5). Symmetric: A_homog -> 0 for dense
+    # tracers, so the global-sign duplicate can't be removed with a bound.
     "Anoisemult": {
-        'An_homog':  [-3.0, 3.0],
-        'An_b1'   :  [-3.0, 3.0],
-        'An_b2'   :  [-2.0, 2.0],
+        'An_homog':  [-5.0, 5.0],
+        'An_b1'   :  [-5.0, 5.0],
+        'An_b2'   :  [-3.0, 3.0],
         'An_bs2'  :  [-5.0, 5.0],
-        'An_bl'   :  [-10.0, 10.0],
+        'An_bl'   :  [-20.0, 20.0],
     },
     "Anoisemultm2p3": {
         'An_homog'  :  [-3.0, 3.0],
@@ -271,14 +274,14 @@ PARAM_SETS_NESTED = {
         fiducial_dict=None,
         seed=42,
     ),
-    # Bias+noise nested LH (bias + Anmult), 9 total parameters
-    "biasnoisenest_p9_n320000": dict(
+    # Bias+noise nested LH (bias + Anmult v2 bounds), 9 total parameters
+    "biasnoisenestv2_p9_n320000": dict(
         bounds_type="biasnoise",
         anoise_option="Anmult",
         n_cosmo=10_000,
         n_factors=utils_model.n_factor_arr,  # [1,2,4,8,16,32]
         n_params_vary=9,
-        tag_bounds="_biasnoisenest",
+        tag_bounds="_biasnoisenestv2",
         fiducial_dict=None,
         seed=64,
     ),
@@ -342,7 +345,7 @@ def main():
     # generate_params_fisher(**fisher_cfg)
 
     # Bias+noise nested LH (bias + Anmult), 9 total parameters
-    # biasnoisenest_name = "biasnoisenest_p9_n320000"
+    # biasnoisenest_name = "biasnoisenestv2_p9_n320000"
     # biasnoisenest_cfg = PARAM_SETS_NESTED[biasnoisenest_name]
     # generate_params_nested_LH(**biasnoisenest_cfg)
 

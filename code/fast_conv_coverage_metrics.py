@@ -46,7 +46,8 @@ KP035_CONFIGS = [
     (["pk", "bispec"], "_kp0.35_kb0.25"),
     (["pk", "bispec", "pgm"], "_kp0.35_kb0.25_kpgm0.25"),
 ]
-TAG_INF_BEST_SUFFIX = "_best-rand30"
+from generate_config_inference import TAG_SWEEP  # noqa: E402
+TAG_INF_BEST_SUFFIX = "_best" + TAG_SWEEP
 TAG_PARAMS_TRAIN = "_p5_n10000"
 TAG_BIASPARAMS_TRAIN = "_biasnoisenest_p9_n320000"
 TAG_NOISE_TRAIN = "_noise_unit_p5_n10000"
@@ -309,7 +310,7 @@ def process_cell(args):
     rows_out = []
     require_draws = _min_draws_required()
 
-    # Top model = ensemble member 0 (_best-rand30)
+    # Top model = ensemble member 0 (_best{TAG_SWEEP})
     if 0 in loaded:
         arr0, kind0 = loaded[0]
         rows_out.append(

@@ -22,7 +22,7 @@ Outputs: `source code_auxiliary/env_v2.sh` → `/scratch/kstoreyf/muchisimocks/{
 - [ ] Rebuild CV set bias params + redo noisebest selection with the chosen biases and noise model
 
 ## Phase 3 — Recompute statistics (v2 tree)
-- [~] Training `_p5_n10000` × `_biasnoisenest_p9_n320000` × `_noisefly`: pgm (job 7973622) → pk (7973623, aftercorr) at `--mem=6G`, resubmitted 09:45; bispec still to do (~1,400–2,000 core-h)
+- [~] Training `_p5_n10000` × `_biasnoisenestv2_p9_n320000` × `_noisefly` (v2 noise priors: An_homog ±5, An_b1 ±5, An_b2 ±3, An_bs2 ±5, An_bl ±20): params job 7975563 → pgm 7975564 → pk 7975565 (aftercorr); bispec 7975566 (200 × 50 cosmologies, linear binning). The earlier `_biasnoisenest` pk/pgm (old priors) are superseded.
 - [ ] Coverage v2: pk, pgm, bispec
 - [ ] CV v2 (shamev2): pk, pgm, bispec
 - [ ] SHAMe mock P_gm/B consistent with any noise-model / shot-noise choice
@@ -64,3 +64,4 @@ Outputs: `source code_auxiliary/env_v2.sh` → `/scratch/kstoreyf/muchisimocks/{
 - 2026-11-15: per-row noise + P_gm fix in compute_statistics.py; also loads each cosmology's fields once (was per row). Training pgm→pk arrays submitted (100 tasks, %40). Script: code_auxiliary/jobs/job_stats_v2.s
 - 2026-11-15: audit done; v2 conventions set (`env_v2.sh`, `SEED_BASE_IC`, seed.json); v2 test-set datagen submitted (20 GPUs). First coverage mock OK (seed 100000).
 - 2026-11-15: renamed on-the-fly noise tag `_noise_unit_perrow{tag_params}` → `_noisefly` (code + job script); mv'd the two finished training dirs (pks/pgms, 320k files each).
+- 2026-11-15: noise priors widened from the phase-matched fits (notebook §2.5); new param set `_biasnoisenestv2_p9_n320000`; noisebest re-selected on the matched mock (`code_auxiliary/select_shame_noisebest.py`, params_fixed_biasshame_noisebest_p0_n1 overwritten).

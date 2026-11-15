@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pathlib
+import math
 import pickle
 import time
 import tempfile
@@ -14,9 +15,11 @@ import yaml
 import wandb
 
 from sbi.inference import NPE
-from sbi.utils import BoxUniform
 from sbi.neural_nets import posterior_nn
 import torch
+from torch.distributions import biject_to, constraints
+from sbi.utils import BoxUniform
+from sbi.utils.sbiutils import within_support
 
 import paths
 import scaler_custom as scl
@@ -406,11 +409,207 @@ class NPEGroupedVal(NPE):
                                        resume_training, dataloader_kwargs)
 
 
+# ---------------------------------------------------------------------------
+# Prior support and rejection sampling.
+#
+# With ``reparameterize: true`` the flow is trained on sigma8*b (and sigma8**2*b) columns. The
+# bounding box of those product columns is much larger than their true support (a wedge: for a
+# given sigma8, sigma8*b1 lies in [sigma8*lo, sigma8*hi]). sbi only rejects draws outside the
+# prior's ``support``, so with a plain BoxUniform the empty corners were kept and mapped back to
+# physical bias values outside the prior. ``PhysicalSupportBoxUniform`` keeps the same box for
+# training but its support check tests physical bounds.
+#
+# ``sample_batched_isolated`` replaces ``DirectPosterior.sample_batched``, whose rejection loop
+# keeps drawing for every observation until the worst one is done (one leaky observation
+# stalls the whole batch). NOTE: pickled posteriors reference PhysicalSupportBoxUniform /
+# PhysicalBoxConstraint by module path (sbi_model) — don't move or rename them.
+# ---------------------------------------------------------------------------
+
+_PREFIX_SQ = utils_inference.REPARAM_PREFIX_SQ
+_PREFIX_X = utils_inference.REPARAM_PREFIX_X
+_SIGMA8 = "sigma8_cold"
+
+
+def physical_param_name(name: str) -> tuple[str, int]:
+    """(physical name, sigma8 power) for a training column name; power 0 if not reparameterized."""
+    if name.startswith(_PREFIX_SQ):
+        return name[len(_PREFIX_SQ):], 2
+    if name.startswith(_PREFIX_X):
+        return name[len(_PREFIX_X):], 1
+    return name, 0
+
+
+class PhysicalBoxConstraint(constraints.Constraint):
+    """Support = physical prior box, evaluated on (possibly reparameterized) training coords."""
+
+    is_discrete = False
+    event_dim = 1
+
+    def __init__(self, param_names, dict_bounds_physical, box_low, box_high):
+        # box_* = bounding box in training coords; only used for sbi's MCMC/MAP bijection.
+        self.box_low = torch.as_tensor(box_low, dtype=torch.float32)
+        self.box_high = torch.as_tensor(box_high, dtype=torch.float32)
+        names = [str(n) for n in param_names]
+        phys, powers = zip(*(physical_param_name(n) for n in names))
+        missing = [p for p in phys if p not in dict_bounds_physical]
+        if missing:
+            raise KeyError(f"dict_bounds_physical missing bounds for {missing}")
+        if any(powers) and _SIGMA8 not in names:
+            raise ValueError("reparameterized columns present but sigma8_cold is not a column")
+        self.param_names = names
+        self.idx_sigma8 = names.index(_SIGMA8) if _SIGMA8 in names else None
+        self.powers = torch.tensor(powers, dtype=torch.float32)
+        self.low = torch.tensor([dict_bounds_physical[p][0] for p in phys], dtype=torch.float32)
+        self.high = torch.tensor([dict_bounds_physical[p][1] for p in phys], dtype=torch.float32)
+
+    def to_physical(self, value: torch.Tensor) -> torch.Tensor:
+        if self.idx_sigma8 is None:
+            return value
+        s8 = value[..., self.idx_sigma8 : self.idx_sigma8 + 1]
+        # sigma8 <= 0 gives inf/nan here; those draws fail the bounds test below (and sigma8
+        # itself is checked against its own bounds).
+        return value / s8 ** self.powers.to(value.device)
+
+    def check(self, value: torch.Tensor) -> torch.Tensor:
+        phys = self.to_physical(value)
+        low, high = self.low.to(value.device), self.high.to(value.device)
+        return ((phys >= low) & (phys <= high)).all(dim=-1)
+
+
+@biject_to.register(PhysicalBoxConstraint)
+def _biject_physical_box(constraint):
+    # sbi's build_posterior builds an unconstrained-space transform from prior.support (used
+    # for MCMC / MAP only). The bounding-box bijection is valid for that purpose.
+    return biject_to(
+        constraints.independent(constraints.interval(constraint.box_low, constraint.box_high), 1)
+    )
+
+
+class PhysicalSupportBoxUniform(BoxUniform):
+    """BoxUniform over the training-coordinate bounding box whose *support* is the physical box.
+
+    Only the support matters for single-round NPE (training loss does not use the prior;
+    sampling and posterior leakage correction use ``support.check``). ``log_prob`` is the box
+    constant inside the true support and -inf outside; it is not the exact prior density in
+    reparameterized coordinates (that carries a sigma8 Jacobian), and ``sample`` draws from the
+    bounding box — neither is used by our pipeline.
+    """
+
+    def __init__(self, low, high, param_names, dict_bounds_physical, **kwargs):
+        super().__init__(low=low, high=high, **kwargs)
+        self._physical_support = PhysicalBoxConstraint(
+            param_names, dict_bounds_physical, box_low=low, box_high=high
+        )
+        self._log_box_density = float(-torch.log(torch.as_tensor(high) - torch.as_tensor(low)).sum())
+
+    @property
+    def support(self):
+        return self._physical_support
+
+    def log_prob(self, value):
+        inside = self._physical_support.check(value)
+        return torch.where(
+            inside,
+            torch.full(inside.shape, self._log_box_density, dtype=value.dtype, device=value.device),
+            torch.full(inside.shape, -math.inf, dtype=value.dtype, device=value.device),
+        )
+
+
+def sample_batched_isolated(
+    posterior,
+    x,
+    n_samples: int,
+    *,
+    max_draws_per_round: int = 2_000_000,
+    min_acceptance: float = 1e-3,
+    verbose: bool = True,
+):
+    """Rejection-sample ``n_samples`` draws per observation from an sbi ``DirectPosterior``.
+
+    All still-active observations are drawn in one vectorized call per round (same speed as
+    sbi's ``sample_batched`` for well-behaved batches), but finished observations drop out, so
+    later rounds spend the whole draw budget on the few leaky ones. An observation is
+    abandoned (all-NaN) once it has used ``n_samples / min_acceptance`` draws, i.e. once its
+    acceptance is known to be below ``min_acceptance``; other observations are unaffected.
+
+    Returns
+    -------
+    samples : torch.Tensor, shape (n_samples, n_obs, n_params) — same layout as sbi.
+    acceptance : np.ndarray, shape (n_obs,) — accepted / drawn per observation.
+    """
+    estimator = posterior.posterior_estimator
+    prior = posterior.prior
+    x = torch.as_tensor(np.asarray(x), dtype=torch.float32)
+    if x.ndim == 1:
+        x = x.unsqueeze(0)
+    n_obs = x.shape[0]
+    max_draws_per_obs = int(math.ceil(n_samples / min_acceptance))
+
+    accepted = [[] for _ in range(n_obs)]
+    n_acc = torch.zeros(n_obs, dtype=torch.long)
+    n_drawn = torch.zeros(n_obs, dtype=torch.long)
+    active = torch.arange(n_obs)
+    abandoned = []
+    n_rounds = 0
+    t0 = time.time()
+
+    while len(active) > 0:
+        n_rounds += 1
+        need = (n_samples - n_acc[active]).float()
+        rate = torch.where(
+            n_drawn[active] > 0,
+            n_acc[active].float() / n_drawn[active].clamp(min=1).float(),
+            torch.ones(len(active)),
+        ).clamp(min=min_acceptance)
+        m_needed = int(torch.ceil(1.2 * need / rate).max().item())
+        m = max(100, min(m_needed, max_draws_per_round // len(active)))
+
+        with torch.no_grad():
+            cand = estimator.sample((m,), condition=x[active])  # (m, n_active, d)
+        ok = within_support(prior, cand).reshape(m, len(active))
+
+        for j, i in enumerate(active.tolist()):
+            if n_acc[i] < n_samples:
+                a = cand[ok[:, j], j]
+                accepted[i].append(a)
+                n_acc[i] += a.shape[0]
+        n_drawn[active] += m
+
+        done = n_acc[active] >= n_samples
+        give_up = ~done & (n_drawn[active] >= max_draws_per_obs)
+        abandoned.extend(active[give_up].tolist())
+        active = active[~done & ~give_up]
+
+    n_params = cand.shape[-1]
+    samples = torch.full((n_samples, n_obs, n_params), float("nan"))
+    for i in range(n_obs):
+        if i in abandoned:
+            continue
+        samples[:, i] = torch.cat(accepted[i], dim=0)[:n_samples]
+    acceptance = (n_acc.float() / n_drawn.clamp(min=1).float()).numpy()
+
+    if verbose:
+        print(
+            f"sample_batched_isolated: {n_obs} obs x {n_samples} samples in {n_rounds} rounds, "
+            f"{time.time() - t0:.1f}s; acceptance min/median = "
+            f"{acceptance.min():.3g}/{np.median(acceptance):.3g}",
+            flush=True,
+        )
+        if abandoned:
+            print(
+                f"sample_batched_isolated: WARNING abandoned {len(abandoned)} obs with acceptance "
+                f"< {min_acceptance:g} (NaN): idx {abandoned[:20]}"
+                f"{' ...' if len(abandoned) > 20 else ''}",
+                flush=True,
+            )
+    return samples, acceptance
+
+
 class SBIModel():
 
     def __init__(self, theta_train=None, y_train_unscaled=None,
                      theta_test=None, y_test_unscaled=None,
-                     statistics=None, param_names=None, dict_bounds=None, 
+                     statistics=None, param_names=None, dict_bounds=None, dict_bounds_physical=None,
                      run_mode='single', tag_sbi='', n_threads=1, 
                      sweep_name=None, overwrite=False,
                      # True iff bx/n_train match BX_SWEEP/N_TRAIN_SWEEP and tags_mask matches
@@ -462,7 +661,11 @@ class SBIModel():
         self.run_mode = run_mode
         if self.run_mode != 'load':
             assert dict_bounds is not None, 'need dict_bounds if training model'
+            assert dict_bounds_physical is not None, 'need dict_bounds_physical if training model'
         self.dict_bounds = dict_bounds
+        # physical (un-reparameterized) prior bounds; defines the posterior support
+        self.dict_bounds_physical = dict_bounds_physical
+        self.last_acceptance = None
         self.sweep_name = sweep_name
         
         self.n_threads = n_threads
@@ -814,8 +1017,15 @@ class SBIModel():
         # get prior
         l_bounds = np.array([self.dict_bounds[pn][0] for pn in self.param_names])
         u_bounds = np.array([self.dict_bounds[pn][1] for pn in self.param_names])
-        prior = BoxUniform(low=torch.from_numpy(l_bounds),
-                           high=torch.from_numpy(u_bounds))
+        # Box over training coords for sbi, but support = physical prior box: with sigma8
+        # reparameterization the product-column bounding box is mostly outside the true
+        # support (see PhysicalSupportBoxUniform).
+        prior = PhysicalSupportBoxUniform(
+            low=torch.from_numpy(l_bounds),
+            high=torch.from_numpy(u_bounds),
+            param_names=self.param_names,
+            dict_bounds_physical=self.dict_bounds_physical,
+        )
 
         print(self.dict_bounds)
         print("Setting up inference")
@@ -1000,7 +1210,10 @@ class SBIModel():
         y_obs = np.float32(np.array(y_obs))
         # using samples_batched bc always putting into 2d first (if were 2d, "samples")
         
-        samples = self.posterior.sample_batched((n_samples,), x=y_obs)
+        # Per-observation early exit: one leaky observation can no longer stall the batch.
+        samples, self.last_acceptance = sample_batched_isolated(
+            self.posterior, y_obs, n_samples
+        )
         print(f"Time to sample (y_obs.shape={y_obs.shape}, n_samples={n_samples}): {time.time() - start:.2f}s = {(time.time() - start) / 60:.2f} min")
         return samples
     
@@ -1116,10 +1329,11 @@ class SBIModel():
     ):
         """
         Run posterior sampling for one batch in a subprocess so a stall can be killed.
-        Returns (samples, timed_out).
+        Returns (samples, acceptance, timed_out); acceptance is per obs (NaN if timed out).
         """
         if batch_timeout_seconds is None or batch_timeout_seconds <= 0:
-            return self.evaluate(y_test_unscaled_batch, n_samples=n_samples), False
+            samples = self.evaluate(y_test_unscaled_batch, n_samples=n_samples)
+            return samples, self.last_acceptance, False
 
         ctx = mp.get_context("spawn")
         q = ctx.Queue(maxsize=1)
@@ -1152,6 +1366,7 @@ class SBIModel():
                     self._nan_batch_samples(
                         n_samples, batch_size, len(self.param_names),
                     ),
+                    np.full(batch_size, np.nan),
                     True,
                 )
             proc.join(timeout=10.0)
@@ -1164,7 +1379,8 @@ class SBIModel():
                 )
             if status != "ok":
                 raise RuntimeError(f"Batch worker failed: {payload}")
-            return payload, False
+            samples, acceptance = payload
+            return samples, acceptance, False
         finally:
             if proc.is_alive():
                 proc.terminate()
@@ -1194,11 +1410,19 @@ class SBIModel():
         fn_samples_test_pred_inprogress = f'{self.dir_sbi}/samples_test{tag_test_eval}_pred_inprogress.npy'
         checkpoint_file = f"{self.dir_sbi}/checkpoint_samples_test{tag_test_eval}.txt"
         fn_failed_indices = f"{self.dir_sbi}/failed_obs_indices_test{tag_test_eval}.txt"
+        # Per-obs fraction of flow draws inside the physical prior (NaN = not sampled / timed
+        # out / abandoned below min_acceptance). Low values flag leaky posteriors.
+        fn_acceptance = f"{self.dir_sbi}/samples_test{tag_test_eval}_acceptance.npy"
 
         if y_test_unscaled[0].ndim == 1:
             samples_total = 1
         else:
             samples_total = len(y_test_unscaled[0])
+        acceptance = np.full(samples_total, np.nan)
+        if not self.overwrite and os.path.exists(fn_acceptance):
+            prev = np.load(fn_acceptance)
+            if prev.shape == acceptance.shape:
+                acceptance = prev
         existing_samples = None
         
         print(f"Checkpoint file: {checkpoint_file}")
@@ -1304,7 +1528,7 @@ class SBIModel():
 
                 batch_start = time.time()
                 print(f"Evaluating obs indices {batch_indices}")
-                batch_samples, timed_out = self._evaluate_batch_with_timeout(
+                batch_samples, batch_acceptance, timed_out = self._evaluate_batch_with_timeout(
                     y_test_unscaled_batch,
                     n_samples=n_samples,
                     batch_size=batch_size,
@@ -1326,6 +1550,8 @@ class SBIModel():
                     canvas = new_canvas
 
                 self._write_batch_into_canvas(canvas, batch_indices, batch_samples)
+                acceptance[np.asarray(batch_indices)] = np.asarray(batch_acceptance, dtype=float)
+                np.save(fn_acceptance, acceptance)
 
                 if timed_out:
                     with open(fn_failed_indices, "a", encoding="utf-8") as f:
@@ -1443,6 +1669,6 @@ def _evaluate_test_batch_worker(
             samples = samples.detach().cpu().numpy()
         else:
             samples = np.asarray(samples)
-        q.put(("ok", samples))
+        q.put(("ok", (samples, np.asarray(model.last_acceptance))))
     except Exception as ex:
         q.put(("error", repr(ex)))

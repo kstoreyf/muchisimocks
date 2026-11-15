@@ -1,12 +1,12 @@
 """Utilities for K-member ensemble inference across k_max scale cuts.
 
-Hyperparameters come from the fiducial rand30 sweep for each statistic combo
+Hyperparameters come from the fiducial sweep (``TAG_SWEEP``) for each statistic combo
 (``tags_mask_for_sweep``). When no sweep exists at a given k cut, the same
 top-N hyperparameters are retrained at that mask (``nth_best_run`` from the
 fiducial sweep).
 
-Ensemble member 0 uses the existing ``_best-rand30`` directory when present;
-members 1..K-1 use ``_best-rand30_nbest{n}``.
+Ensemble member 0 uses the existing ``_best{TAG_SWEEP}`` directory when present;
+members 1..K-1 use ``_best{TAG_SWEEP}_nbest{n}``.
 """
 
 from __future__ import annotations
@@ -24,9 +24,9 @@ from generate_config_inference import (
     resolve_test_scenario_tags,
     resolve_train_tag_bundle,
     tags_mask_for_sweep,
+    TAG_SWEEP,
 )
 
-TAG_SWEEP = "-rand30"
 BX = 32
 N_TRAIN = 10000
 NOISE_MODE = "noisy"

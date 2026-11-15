@@ -60,6 +60,7 @@ from generate_config_inference import (  # noqa: E402
     resolve_test_scenario_tags,
     resolve_train_tag_bundle,
     tags_mask_for_sweep,
+    TAG_SWEEP,
 )
 
 _RUN_DIR_RE = re.compile(r"^[a-z0-9]{8,}$")
@@ -584,7 +585,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--data-mode", default="muchisimocks")
     p.add_argument("--tag-params-train", default="_p5_n10000")
     p.add_argument("--tag-params-cov", default="_coverage_p5_n1000")
-    p.add_argument("--tag-sweep", default="-rand30")
+    p.add_argument("--tag-sweep", default=TAG_SWEEP)
     p.add_argument(
         "--reparameterize",
         action=argparse.BooleanOptionalAction,

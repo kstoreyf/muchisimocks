@@ -31,7 +31,8 @@ DIR_SBI = paths.DIR_RESULTS / "results_sbi"
 
 BX = 32
 N_TRAIN = 10000
-TAG_INF_BEST_SUFFIX = "_best-rand30"
+from generate_config_inference import TAG_SWEEP  # noqa: E402
+TAG_INF_BEST_SUFFIX = "_best" + TAG_SWEEP
 DATA_MODE = "muchisimocks"
 TAG_PARAMS_TRAIN = "_p5_n10000"
 TAG_BIASPARAMS_TRAIN = "_biasnoisenest_p9_n320000"

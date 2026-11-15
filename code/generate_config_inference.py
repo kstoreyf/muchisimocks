@@ -17,7 +17,8 @@ Generates YAML configuration files for inference.
 # ``sweep``); only hyperparameters come from the wandb sweep.
 BX_SWEEP = 32
 N_TRAIN_SWEEP = 10000
-SWEEP_NUM_RUNS = 15
+SWEEP_NUM_RUNS = 16
+TAG_SWEEP = f"-rand{SWEEP_NUM_RUNS}"  # sweep/best dir suffix; single source of truth
 # Fiducial bispec k-bin suffix in sweep / best_run tag strings (like BX_SWEEP for bx).
 TAG_MASK_BISPEC_SWEEP = "_kb0.25"
 
@@ -36,7 +37,7 @@ NOISE_MODES = ("noiseless", "noisy", "noisym2")
 # noisym2: second-order multiplicative noise (m2p3), see generate_params biasnoisem2nest_*.
 NOISE_MODE_TRAIN_BIAS = {
     "noiseless": "_biasnest_p4_n320000",
-    "noisy": "_biasnoisenest_p9_n320000",
+    "noisy": "_biasnoisenestv2_p9_n320000",
     "noisym2": "_biasnoisem2nest_p7_n320000",
 }
 
@@ -709,7 +710,7 @@ def main():
     #tag_sweep = None
     #run_mode = "sweep"
     run_mode = "best"
-    tag_sweep = "-rand30"
+    tag_sweep = TAG_SWEEP
     nth_best_run = None
     #nth_best_run = 4  # index in best_runs.txt; loop range(5) for top-5 configs
 

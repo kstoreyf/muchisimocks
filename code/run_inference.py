@@ -227,6 +227,8 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
         print("For now setting plite=True whenever reparameterize is true")
         plite = True
 
+    # Physical bounds define the posterior support even when training on reparameterized columns.
+    dict_bounds_physical = dict(dict_bounds)
     if reparameterize:
         print("Reparameterizing theta...")
         theta, param_names = utils_inference.reparameterize_theta(theta, param_names)
@@ -343,6 +345,7 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
                 param_names=param_names,
                 statistics=statistics,
                 dict_bounds=dict_bounds,
+                dict_bounds_physical=dict_bounds_physical,
                 overwrite=overwrite,
                 matches_sweep_model=matches_sweep_model,
                 wandb_sweep_id=config.get("wandb_sweep_id"),
