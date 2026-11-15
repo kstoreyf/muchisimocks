@@ -47,6 +47,16 @@ from ensemble_kmax_utils import (
     model_dir,
     member_samples_path,
     ensemble_coverage_members_exist,
+    TAG_PARAMS_TRAIN,
+    TAG_BIASPARAMS_TRAIN,
+    TAG_NOISE_TRAIN,
+    TAG_PARAMS_TEST_COV,
+    TAG_BIASPARAMS_TEST_COV,
+    TAG_NOISE_TEST_COV,
+    TAG_PARAMS_TEST_FIXED,
+    TAG_BIASPARAMS_TEST_FIXED,
+    TAG_NOISE_TEST_FIXED,
+    TAG_DATAGEN_TEST_MEAN,
 )
 
 # =============================================================================
@@ -58,9 +68,6 @@ from generate_config_inference import TAG_SWEEP  # noqa: E402
 TAG_INF_BEST_SUFFIX = "_best" + TAG_SWEEP
 
 data_mode = "muchisimocks"
-TAG_PARAMS_TRAIN = "_p5_n10000"
-TAG_BIASPARAMS_TRAIN = "_biasnoisenest_p9_n320000"
-TAG_NOISE_TRAIN = "_noise_unit_p5_n10000"
 tag_reparam = "_rp"
 
 STATISTICS_ARR_FID = [list(stats) for stats, _ in KP035_CONFIGS]
@@ -74,15 +81,6 @@ STAT_LABELS_SHORT = {
     "bispec": r"$B_\mathrm{ggg}$",
     "pgm": r"$P_\mathrm{gm}$",
 }
-
-TAG_PARAMS_TEST_FIXED = "_shame_p0_n1000"
-TAG_BIASPARAMS_TEST_FIXED = "_biasshame_noisebest_p0_n1"
-TAG_NOISE_TEST_FIXED = "_noise_unit_shame_p0_n1000"
-TAG_DATAGEN_TEST_MEAN = "_mean"
-
-TAG_PARAMS_TEST_COV = "_coverage_p5_n1000"
-TAG_BIASPARAMS_TEST_COV = "_biasnoisecoverage_p9_n1000"
-TAG_NOISE_TEST_COV = "_noise_unit_coverage_p5_n1000"
 
 DATA_MODE_TEST_SHAME = "shame"
 TAG_MOCK_SHAME = "_nbar0.00022"
@@ -162,7 +160,9 @@ def configure_figures(
     }
 
 # Intermediate products for slow coverage / convergence loads (under figures/, gitignored).
-CACHE_DIR = REPO_ROOT / "figures" / "paper_figures_cache_v2"  # v2: exact physical-space moments (2026-11-15)
+# Keyed on the results tree so caches built from one tree (e.g. v1 results) are never reused
+# for another (MUCHISIMOCKS_RESULTS / env_v2.sh).
+CACHE_DIR = paths.DIR_RESULTS / "paper_figures_cache"
 OVERWRITE_CACHE = False  # True → recompute and overwrite existing cache files
 
 # --- Fig 2 statistics ranges ---

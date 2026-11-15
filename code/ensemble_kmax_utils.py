@@ -24,6 +24,8 @@ from generate_config_inference import (
     resolve_test_scenario_tags,
     resolve_train_tag_bundle,
     tags_mask_for_sweep,
+    TAG_PARAMS_COVERAGE,
+    TAG_PARAMS_SHAME,
     TAG_SWEEP,
 )
 
@@ -34,6 +36,22 @@ TAG_PARAMS_TRAIN = "_p5_n10000"
 DATA_MODE = "muchisimocks"
 TAG_REPARAM = "_rp"
 KMAX_PK_LOOSE = 0.4
+
+# --- Train/test tags: single source of truth for analysis + figure code (v2 sets) ---
+_TRAIN_TAGS = resolve_train_tag_bundle(TAG_PARAMS_TRAIN, NOISE_MODE)
+TAG_BIASPARAMS_TRAIN = _TRAIN_TAGS["tag_biasparams"]
+TAG_NOISE_TRAIN = _TRAIN_TAGS["tag_noise"]
+
+_COV_TAGS = resolve_test_scenario_tags("coverage", NOISE_MODE, TAG_PARAMS_COVERAGE)
+TAG_PARAMS_TEST_COV = TAG_PARAMS_COVERAGE
+TAG_BIASPARAMS_TEST_COV = _COV_TAGS["tag_biasparams_test"]
+TAG_NOISE_TEST_COV = _COV_TAGS["tag_noise_test"]
+
+_FIXED_TAGS = resolve_test_scenario_tags("fixed_cosmo_shame_mean", NOISE_MODE, TAG_PARAMS_SHAME)
+TAG_PARAMS_TEST_FIXED = TAG_PARAMS_SHAME
+TAG_BIASPARAMS_TEST_FIXED = _FIXED_TAGS["tag_biasparams_test"]
+TAG_NOISE_TEST_FIXED = _FIXED_TAGS["tag_noise_test"]
+TAG_DATAGEN_TEST_MEAN = "_mean"
 
 TAGS_KMAX_KB = [
     "_kb0.1",
@@ -204,7 +222,7 @@ def sweep_name_for_tags_mask(statistics: list[str], tags_mask: list[str]) -> str
 
 
 def _train_bundle():
-    return resolve_train_tag_bundle(TAG_PARAMS_TRAIN, NOISE_MODE)
+    return _TRAIN_TAGS
 
 
 def sweep_tag_inf_for_statistics(statistics: list[str]) -> str:
@@ -413,31 +431,27 @@ def shame_test_tag(statistics: list[str], mask: str, tag_mock: str) -> str:
 
 
 def cvmean_test_tag(statistics: list[str], mask: str) -> str:
-    train = _train_bundle()
-    cv = resolve_test_scenario_tags("fixed_cosmo_shame_mean", NOISE_MODE, "_shame_p0_n1000")
     tag_stats = f"_{'_'.join(statistics)}"
     return utils_plot.setup_test_tags(
         data_mode=DATA_MODE,
-        tag_params_test="_shame_p0_n1000",
-        tags_biasparams_test=cv["tag_biasparams_test"],
+        tag_params_test=TAG_PARAMS_TEST_FIXED,
+        tags_biasparams_test=TAG_BIASPARAMS_TEST_FIXED,
         tag_stats_arr=[tag_stats],
-        tag_noise_test=cv["tag_noise_test"],
-        tag_datagen_test="_mean",
+        tag_noise_test=TAG_NOISE_TEST_FIXED,
+        tag_datagen_test=TAG_DATAGEN_TEST_MEAN,
         tags_mask_test=[mask],
     )[0]
 
 
 def cvindiv_test_tag(statistics: list[str], mask: str) -> str:
     """Fixed-cosmo shame per-realization test tag (no ``_mean``)."""
-    train = _train_bundle()
-    cv = resolve_test_scenario_tags("fixed_cosmo_shame_mean", NOISE_MODE, "_shame_p0_n1000")
     tag_stats = f"_{'_'.join(statistics)}"
     return utils_plot.setup_test_tags(
         data_mode=DATA_MODE,
-        tag_params_test="_shame_p0_n1000",
-        tags_biasparams_test=cv["tag_biasparams_test"],
+        tag_params_test=TAG_PARAMS_TEST_FIXED,
+        tags_biasparams_test=TAG_BIASPARAMS_TEST_FIXED,
         tag_stats_arr=[tag_stats],
-        tag_noise_test=cv["tag_noise_test"],
+        tag_noise_test=TAG_NOISE_TEST_FIXED,
         tag_datagen_test="",
         tags_mask_test=[mask],
     )[0]
@@ -447,10 +461,10 @@ def coverage_test_tag(statistics: list[str], mask: str) -> str:
     tag_stats = f"_{'_'.join(statistics)}"
     return utils_plot.setup_test_tags(
         data_mode=DATA_MODE,
-        tag_params_test="_coverage_p5_n1000",
-        tags_biasparams_test="_biasnoisecoverage_p9_n1000",
+        tag_params_test=TAG_PARAMS_TEST_COV,
+        tags_biasparams_test=TAG_BIASPARAMS_TEST_COV,
         tag_stats_arr=[tag_stats],
-        tag_noise_test="_noise_unit_coverage_p5_n1000",
+        tag_noise_test=TAG_NOISE_TEST_COV,
         tag_datagen_test="",
         tags_mask_test=[mask],
     )[0]

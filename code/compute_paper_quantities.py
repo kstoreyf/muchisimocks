@@ -77,6 +77,16 @@ from ensemble_kmax_utils import (  # noqa: E402
     N_ENSEMBLE_K,
     load_ensemble_member_samples,
     model_dir,
+    TAG_PARAMS_TRAIN,
+    TAG_BIASPARAMS_TRAIN,
+    TAG_NOISE_TRAIN,
+    TAG_PARAMS_TEST_COV,
+    TAG_BIASPARAMS_TEST_COV,
+    TAG_NOISE_TEST_COV,
+    TAG_PARAMS_TEST_FIXED,
+    TAG_BIASPARAMS_TEST_FIXED,
+    TAG_NOISE_TEST_FIXED,
+    TAG_DATAGEN_TEST_MEAN,
 )
 import utils_inference  # noqa: E402
 import utils_model  # noqa: E402
@@ -96,8 +106,6 @@ BX = 32
 N_TRAIN = 10000
 
 DATA_MODE = "muchisimocks"
-TAG_PARAMS_TRAIN = "_p5_n10000"
-TAG_BIASPARAMS_TRAIN = "_biasnoisenest_p9_n320000"
 
 STATISTICS_ARR_FID = [list(stats) for stats, _ in KP035_CONFIGS]
 TAGS_MASK_FID = [mask for _, mask in KP035_CONFIGS]
@@ -129,10 +137,6 @@ COMBO_PLAIN = {
     "pk_pgm_b": "Pgg+Pgm+Bggg",
 }
 
-TAG_PARAMS_TEST_FIXED = "_shame_p0_n1000"
-TAG_BIASPARAMS_TEST_FIXED = "_biasshame_noisebest_p0_n1"
-TAG_NOISE_TEST_FIXED = "_noise_unit_shame_p0_n1000"
-TAG_DATAGEN_TEST_MEAN = "_mean"
 
 DATA_MODE_TEST_SHAME = "shame"
 # SHAMe OOD mocks at three number densities (lo → fid → hi n̄).
@@ -164,9 +168,6 @@ SHAME_FOM_PARAM_KEY = "sigma8"  # plotter_figs FOB_KEYS name
 SHAME_FOM_PARAM_PN = "sigma8_cold"
 SHAME_FOM_COMBOS: Tuple[str, ...] = ("pk_pgm", "pk_pgm_b")
 
-TAG_PARAMS_TEST_COV = "_coverage_p5_n1000"
-TAG_BIASPARAMS_TEST_COV = "_biasnoisecoverage_p9_n1000"
-TAG_NOISE_TEST_COV = "_noise_unit_coverage_p5_n1000"
 N_COVERAGE_CENTER = 500
 
 IDX_OBS = 0
