@@ -21,6 +21,9 @@ SWEEP_NUM_RUNS = 16
 TAG_SWEEP = f"-rand{SWEEP_NUM_RUNS}"  # sweep/best dir suffix; single source of truth
 # Fiducial bispec k-bin suffix in sweep / best_run tag strings (like BX_SWEEP for bx).
 TAG_MASK_BISPEC_SWEEP = "_kb0.25"
+# v2 test cosmology/IC sets (own IC seeds; v1 _coverage/_shame shared phases with training).
+TAG_PARAMS_COVERAGE = "_coveragev2_p5_n1000"
+TAG_PARAMS_SHAME = "_shamev2_p0_n1000"
 
 
 def tags_mask_for_sweep(statistics):
@@ -172,17 +175,17 @@ PARAM_SETS_TEST = {
     "coverage": dict(
         evaluate_mean=False,
         data_mode_test="muchisimocks",
-        tag_params_test="_coverage_p5_n1000",
+        tag_params_test=TAG_PARAMS_COVERAGE,
     ),
     "fixed_cosmo_shame_mean": dict(
         evaluate_mean=True,
         data_mode_test="muchisimocks",
-        tag_params_test="_shame_p0_n1000",
+        tag_params_test=TAG_PARAMS_SHAME,
     ),
     "fixed_cosmo_shame_sample": dict(
         evaluate_mean=False,
         data_mode_test="muchisimocks",
-        tag_params_test="_shame_p0_n1000",
+        tag_params_test=TAG_PARAMS_SHAME,
     ),
     "ood": dict(
         _ood=True,
@@ -203,7 +206,7 @@ PARAM_SETS_TEST = {
 _TEST_SCENARIO_TAGS = {
     "coverage": {
         "noiseless": ("_biascoverage_p4_n1000", None),
-        "noisy": ("_biasnoisecoverage_p9_n1000", "_noisefly"),
+        "noisy": ("_biasnoisecoveragev2_p9_n1000", "_noisefly"),
         "noisym2": ("_biasnoisem2coverage_p7_n1000", "_noisefly"),
     },
     "fixed_cosmo_shame_mean": {
@@ -357,7 +360,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                          data_mode_test="muchisimocks",
                          idxs_obs=None,
                          evaluate_mean=True,
-                         tag_params_test="_shame_p0_n1000",
+                         tag_params_test=TAG_PARAMS_SHAME,
                          tag_biasparams_test="_biasshame_p0_n1",
                          tag_noise_test=None,
                          sweep_name_override: str | None = None,

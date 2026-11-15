@@ -66,22 +66,14 @@ class Scaler:
         return err_scaled
     
     def _scale_log_minmax_const(self, x):
-        #print('min:', self.x_train_min)
-        #print(np.min(x, axis=0))
-        x_train_min_const = 10 * np.abs(self.x_train_min) # shift so no negative values, plus a buffer bc other data sets may be diff
+        # shift so no negative values, plus a buffer bc other data sets may be diff
+        x_train_min_const = 10 * np.abs(self.x_train_min)
         x_train_max_const = self.x_train_max + x_train_min_const
-        #print('x_train_min_const:', x_train_min_const)
-        #print('x_train_max_const:', x_train_max_const)
-        x += x_train_min_const
-        #print(np.min(x, axis=0))
-        log_x = np.log10(x)
+        # not in place: callers pass views of their training/test arrays
+        log_x = np.log10(x + x_train_min_const)
         log_x_norm = (log_x - np.log10(x_train_min_const)) / (np.log10(x_train_max_const) - np.log10(x_train_min_const))
-        #print(klsdfs)
-        #print(np.min(x), np.max(x))
-        #print(np.min(log_x), np.max(log_x))
-        #print(np.min(log_x_norm), np.max(log_x_norm))
         return log_x_norm
-    
+
     def _unscale_log_minmax_const(self, x_scaled):
         x_train_min_const = 10 * np.abs(self.x_train_min)
         x_train_max_const = self.x_train_max + x_train_min_const

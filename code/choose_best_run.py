@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import logging
 import multiprocessing as mp
 import os
 import pickle
@@ -60,10 +59,15 @@ from generate_config_inference import (  # noqa: E402
     resolve_test_scenario_tags,
     resolve_train_tag_bundle,
     tags_mask_for_sweep,
+    TAG_PARAMS_COVERAGE,
     TAG_SWEEP,
 )
 
 _RUN_DIR_RE = re.compile(r"^[a-z0-9]{8,}$")
+
+# A run fails the stall test if any test obs has less than this fraction of posterior draws
+# inside the prior support (sbi's own slow-sampling warning threshold).
+STALL_MIN_ACCEPTANCE = 0.01
 
 BEST_RUN_LOG_CSV = "best_run_log.csv"
 BEST_RUN_ID_TXT = "best_run.txt"
@@ -369,20 +373,6 @@ def merge_rows_for_write(
     return rows
 
 
-class _RejectionStallWarningHandler(logging.Handler):
-    def __init__(self) -> None:
-        super().__init__(level=logging.WARNING)
-        self.saw_stall_warning = False
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            msg = self.format(record).lower()
-        except Exception:
-            msg = str(record.msg).lower()
-        if "proposal samples" in msg and "accepted" in msg:
-            self.saw_stall_warning = True
-
-
 def _coverage_batch_unscaled(
     y_cov_nb: list[np.ndarray],
     start: int,
@@ -404,11 +394,6 @@ def _eval_batch_worker(
     n_samples: int,
 ) -> None:
     os.environ.setdefault("OMP_NUM_THREADS", "1")
-    h = _RejectionStallWarningHandler()
-    root = logging.getLogger()
-    root.addHandler(h)
-    prev_level = root.level
-    root.setLevel(logging.INFO)
     try:
         model = sbi_model.SBIModel(
             tag_sbi=tag_sbi,
@@ -421,21 +406,22 @@ def _eval_batch_worker(
         t0 = time.perf_counter()
         model.evaluate(y_batch, n_samples=n_samples)
         dt = time.perf_counter() - t0
+        # Per-obs fraction of flow draws inside the prior support; obs the sampler abandoned
+        # (acceptance < its min_acceptance) are always below STALL_MIN_ACCEPTANCE.
+        min_acc = float(np.min(model.last_acceptance))
         q.put(
             (
                 "ok",
                 {
                     "ok": True,
                     "seconds": float(dt),
-                    "stall_warning": bool(h.saw_stall_warning),
+                    "min_acceptance": min_acc,
+                    "stall_warning": min_acc < STALL_MIN_ACCEPTANCE,
                 },
             )
         )
     except Exception as ex:
         q.put(("error", {"ok": False, "error": repr(ex)}))
-    finally:
-        root.removeHandler(h)
-        root.setLevel(prev_level)
 
 
 def _build_y_batch(
@@ -510,7 +496,7 @@ def run_smoke_eval(
             if pl.get("stall_warning"):
                 return {
                     "status": "stall_warning",
-                    "reason": "low proposal acceptance",
+                    "reason": f"min acceptance {pl['min_acceptance']:.3g} < {STALL_MIN_ACCEPTANCE}",
                     **pl,
                 }
             return {"status": "ok", **pl}
@@ -584,7 +570,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--data-mode", default="muchisimocks")
     p.add_argument("--tag-params-train", default="_p5_n10000")
-    p.add_argument("--tag-params-cov", default="_coverage_p5_n1000")
+    p.add_argument("--tag-params-cov", default=TAG_PARAMS_COVERAGE)
     p.add_argument("--tag-sweep", default=TAG_SWEEP)
     p.add_argument(
         "--reparameterize",

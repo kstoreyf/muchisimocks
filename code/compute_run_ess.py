@@ -42,6 +42,7 @@ from generate_config_inference import (  # noqa: E402
     NOISE_MODES,
     resolve_test_scenario_tags,
     resolve_train_tag_bundle,
+    TAG_PARAMS_COVERAGE,
     TAG_SWEEP,
 )
 # Match ``2026-04-08_inference_scaling_diagnosis.ipynb`` W&B extras.
@@ -602,7 +603,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--data-mode", default="muchisimocks")
     p.add_argument("--tag-params-train", default="_p5_n10000")
-    p.add_argument("--tag-params-cov", default="_coverage_p5_n1000")
+    p.add_argument("--tag-params-cov", default=TAG_PARAMS_COVERAGE)
     p.add_argument("--tag-sweep", default=TAG_SWEEP, help="Sweep suffix (default: generate_config_inference.TAG_SWEEP)")
     p.add_argument(
         "--reparameterize",

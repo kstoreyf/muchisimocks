@@ -1168,7 +1168,7 @@ class SBIModel():
                 y_test_i = scaler_y.scale(self.y_test_unscaled[i])
                 self.y_test = np.concatenate((self.y_test, y_test_i), axis=1)
             
-            print(f"min and max after scaling (func={func_scaler_y}): {np.min(scaler_y.scale(self.y_train_unscaled[i])):3f}, {np.max(scaler_y.scale(self.y_train_unscaled[i])):3f}")
+            print(f"min and max after scaling (func={func_scaler_y}): {np.min(y_train_i):3f}, {np.max(y_train_i):3f}")
             
             # save scaler - need pickle for custom object!!
             fn_scaler_y = f'{self.dir_sbi}/scaler_y_{statistic}.p'
@@ -1470,10 +1470,14 @@ class SBIModel():
 
         # Build a full-width canvas so we can fill arbitrary NaN / missing slots.
         n_params = len(self.param_names)
-        if existing_samples is not None:
-            n_draws = existing_samples.shape[0]
-        else:
-            n_draws = int(n_samples)
+        n_draws = int(n_samples)
+        if existing_samples is not None and existing_samples.shape[0] != n_draws:
+            # Resizing would truncate finished obs or pad them with NaN rows that still
+            # count as "usable"; make the caller choose (rerun with overwrite, or same n_samples).
+            raise ValueError(
+                f"Existing samples for {tag_test_eval!r} have {existing_samples.shape[0]} draws "
+                f"per obs but n_samples={n_draws}; rerun with the same n_samples or overwrite."
+            )
         canvas = self._ensure_samples_canvas(
             existing_samples, samples_total, n_draws, n_params,
         )
@@ -1535,19 +1539,6 @@ class SBIModel():
                     batch_timeout_seconds=batch_timeout_seconds,
                 )
                 batch_end = time.time()
-
-                # Worker may return a different n_draws; resize canvas if needed.
-                batch_samples = np.asarray(batch_samples)
-                n_draws_batch = batch_samples.shape[0]
-                if n_draws_batch != canvas.shape[0]:
-                    new_canvas = np.full(
-                        (n_draws_batch, samples_total, n_params),
-                        np.nan,
-                        dtype=np.float64,
-                    )
-                    n_copy = min(canvas.shape[0], n_draws_batch)
-                    new_canvas[:n_copy] = canvas[:n_copy]
-                    canvas = new_canvas
 
                 self._write_batch_into_canvas(canvas, batch_indices, batch_samples)
                 acceptance[np.asarray(batch_indices)] = np.asarray(batch_acceptance, dtype=float)

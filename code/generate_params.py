@@ -209,6 +209,16 @@ PARAM_SETS_LH = {
         fiducial_dict=None,
         seed=54,
     ),
+    # v2 bias+noise coverage test set: Anmult bounds as of 2026-11-15 (same as biasnoisenestv2)
+    "biasnoisecoveragev2_p9_n1000": dict(
+        bounds_type="biasnoise",
+        anoise_option="Anmult",
+        n_params_vary=9,
+        n_samples=1000,
+        tag_bounds="_biasnoisecoveragev2",
+        fiducial_dict=None,
+        seed=58  # unused by any other set,
+    ),
     # Bias + second-order noise (m2p3) coverage test set: 4 bias + 3 noise = 7 params
     "biasnoisem2coverage_p7_n1000": dict(
         bounds_type="biasnoise",

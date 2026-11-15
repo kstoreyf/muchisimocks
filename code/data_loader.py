@@ -93,7 +93,7 @@ def load_data_ood(data_mode, statistics, tag_mock, tags_mask=None, kwargs=None):
 
 
 def load_data_shame(statistic, tag_mock):
-    dir_statistics = f'../data/data_shame/data{tag_mock}/{statistic}s'
+    dir_statistics = paths.PROJECT_ROOT / 'data' / 'data_shame' / f'data{tag_mock}' / f'{statistic}s'
     fn_statistics = f'{dir_statistics}/{statistic}.npy'
     if not os.path.exists(fn_statistics):
         raise ValueError(f"File {fn_statistics} does not exist!")
