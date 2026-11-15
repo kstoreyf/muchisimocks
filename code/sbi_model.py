@@ -38,30 +38,6 @@ _WANDB_SWEEP_PARAMETER_KEYS = (
 _WANDB_RUN_ID_DIR_RE = re.compile(r"^[a-z0-9]{8,}$")
 
 
-def wandb_sweep_best_run(sweep, *, minimize: str):
-    """
-    ``wandb.apis.public.Sweep.best_run`` only accepts ``order=``, not ``minimize=``.
-    Minimizing a summary metric is ``order='+<name>'`` (see ``QueryGenerator``).
-
-    Raises ``ValueError`` if the selected run has no ``minimize`` value in summary
-    (metric never logged); do not treat an unlogged metric as a comparable best.
-    """
-    run = sweep.best_run(order=f"+{minimize}")
-    if run is None:
-        raise ValueError(
-            "No run returned for sweep id=%r (empty sweep or filter)."
-            % (getattr(sweep, "id", None),)
-        )
-    sm = dict(run.summary)
-    val = sm.get(minimize)
-    if val is None:
-        raise ValueError(
-            "Best run %s has no summary[%r] logged; cannot select best without that metric."
-            % (run.id, minimize)
-        )
-    return run
-
-
 def _read_best_run_id_from_dir_sbi(dir_sbi):
     """
     W&B run id from ``best_run.txt`` in the given results directory (written by

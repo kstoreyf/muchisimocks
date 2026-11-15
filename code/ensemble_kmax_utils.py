@@ -18,12 +18,11 @@ import numpy as np
 
 import paths
 import utils_plot
-from choose_best_run import build_sweep_tag_inf, sweep_root_for_tag_inf
+from choose_best_run import build_sweep_tag_inf
 from generate_config_inference import (
     build_tag_data,
     resolve_test_scenario_tags,
     resolve_train_tag_bundle,
-    tags_mask_for_sweep,
     TAG_PARAMS_COVERAGE,
     TAG_PARAMS_SHAME,
     TAG_SWEEP,
@@ -223,24 +222,6 @@ def sweep_name_for_tags_mask(statistics: list[str], tags_mask: list[str]) -> str
 
 def _train_bundle():
     return _TRAIN_TAGS
-
-
-def sweep_tag_inf_for_statistics(statistics: list[str]) -> str:
-    train = _train_bundle()
-    return build_sweep_tag_inf(
-        data_mode=DATA_MODE,
-        statistics=statistics,
-        tags_mask=tags_mask_for_sweep(statistics),
-        tag_params=train["tag_params"],
-        tag_biasparams=train["tag_biasparams"],
-        tag_noise=train["tag_noise"],
-        reparameterize=True,
-        tag_sweep=TAG_SWEEP,
-    )
-
-
-def sweep_root_for_statistics(statistics: list[str]) -> Path:
-    return sweep_root_for_tag_inf(sweep_tag_inf_for_statistics(statistics))
 
 
 def parse_mask_to_tags_mask(statistics: list[str], mask: str) -> list[str]:

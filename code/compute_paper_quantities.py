@@ -79,14 +79,10 @@ from ensemble_kmax_utils import (  # noqa: E402
     model_dir,
     TAG_PARAMS_TRAIN,
     TAG_BIASPARAMS_TRAIN,
-    TAG_NOISE_TRAIN,
     TAG_PARAMS_TEST_COV,
     TAG_BIASPARAMS_TEST_COV,
-    TAG_NOISE_TEST_COV,
     TAG_PARAMS_TEST_FIXED,
     TAG_BIASPARAMS_TEST_FIXED,
-    TAG_NOISE_TEST_FIXED,
-    TAG_DATAGEN_TEST_MEAN,
 )
 import utils_inference  # noqa: E402
 import utils_model  # noqa: E402

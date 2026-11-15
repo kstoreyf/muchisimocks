@@ -119,47 +119,14 @@ def generate_randints(n_samples, fn_rands, rng=None, overwrite=False):
     return random_ints
 
 
-def idxs_train_val_test(random_ints, frac_train=0.8, frac_val=0.1, frac_test=0.1,
-                        N_tot=None):
-    """Split indices into train/val/test from random_ints (e.g. from generate_randints)."""
-    print(frac_train, frac_val, frac_test)
-    tol = 1e-6
-    assert abs((frac_train+frac_val+frac_test) - 1.0) < tol, "Fractions must add to 1!"
-    if N_tot is None:
-        print("Assuming N_tot is the length of random_ints")
-        N_tot = len(random_ints)
-    int_train = int(frac_train*N_tot)
-    int_test = int((1-frac_test)*N_tot)
-    print(int_train, int_test)
-
-    idxs_train = np.where(random_ints < int_train)[0]
-    idxs_test = np.where(random_ints >= int_test)[0]
-    idxs_val = np.where((random_ints >= int_train) & (random_ints < int_test))[0]
-
-    return idxs_train, idxs_val, idxs_test
-
-
-def split_train_val_test(arr, idxs_train, idxs_val, idxs_test):
-    """Split array into train/val/test using given index arrays."""
-    arr_train = arr[idxs_train]
-    arr_val = arr[idxs_val]
-    arr_test = arr[idxs_test]
-    return arr_train, arr_val, arr_test
-
-
 def get_samples(idx_obs, inf_method, tag_inf, tag_test='', tag_obs=None):
-    """Load posterior samples for observation idx_obs (mn, sbi, emcee, dynesty, or fisher)."""
+    """Load posterior samples for observation idx_obs (sbi only; emcee/dynesty/fisher loaders
+    live in code_auxiliary/utils_inference_aux.py)."""
     try:
         if inf_method == 'sbi':
             return get_samples_sbi(idx_obs, tag_inf, tag_test=tag_test)
-        elif inf_method == 'emcee':
-            return get_samples_emcee(idx_obs, tag_inf, tag_obs=tag_obs)
-        elif inf_method == 'dynesty':
-            return get_samples_dynesty(idx_obs, tag_inf, tag_obs=tag_obs)
-        elif inf_method == 'fisher':
-            return get_samples_fisher(idx_obs, tag_inf, tag_test=tag_test)
         else:
-            raise ValueError(f'Method {inf_method} not recognized!')
+            raise ValueError(f'Method {inf_method} not supported (sbi only)')
     except FileNotFoundError as e:
         fn = getattr(e, "filename", None)
         fn_part = f": {fn}" if fn else f": {e}"
@@ -211,56 +178,6 @@ def get_samples_sbi(idx_obs, tag_inf, tag_test=''):
     print(f"fn_samples = {fn_samples_test_pred}")
     samples_arr = np.load(fn_samples_test_pred)
     param_names = np.loadtxt(f'{dir_sbi}/param_names.txt', dtype=str)
-    if samples_arr.ndim == 2:
-        return samples_arr, param_names
-    elif samples_arr.ndim == 3:
-        return samples_arr[:,idx_obs,:], param_names
-    else:
-        raise ValueError(f"Samples shape {samples_arr.shape} is weird!")
-
-
-def get_samples_emcee(idx_obs, tag_inf, tag_obs=None):
-    import emcee
-    dir_emcee =  f'../results/results_emcee/samplers{tag_inf}'
-    if tag_obs is None:
-        tag_obs = f'_idx{idx_obs}'
-    fn_emcee = f'{dir_emcee}/sampler{tag_obs}.npy'
-    if not os.path.exists(fn_emcee):
-        print(f'File {fn_emcee} not found')
-        return
-    reader = emcee.backends.HDFBackend(fn_emcee)
-
-    tau = reader.get_autocorr_time()
-    n_burn = int(2 * np.max(tau))
-    thin = int(0.5 * np.min(tau))
-    samples = reader.get_chain(discard=n_burn, flat=True, thin=thin)
-
-    param_names = np.loadtxt(f'{dir_emcee}/param_names.txt', dtype=str)
-    return samples, param_names
-
-
-def get_samples_dynesty(idx_obs, tag_inf, tag_obs=None):
-    dir_dynesty =  f'../results/results_dynesty/samplers{tag_inf}'
-    if tag_obs is None:
-        tag_obs = f'_idx{idx_obs}'
-    fn_dynesty = f'{dir_dynesty}/sampler_results{tag_obs}.npy'
-    results_dynesty = np.load(fn_dynesty, allow_pickle=True).item()
-
-    from dynesty.utils import resample_equal
-    weights = np.exp(results_dynesty['logwt'] - results_dynesty['logz'][-1])
-    samples = resample_equal(results_dynesty.samples, weights)
-
-    param_names = np.loadtxt(f'{dir_dynesty}/param_names.txt', dtype=str)
-    return samples, param_names
-
-
-def get_samples_fisher(idx_obs, tag_inf, tag_test=''):
-    dir_fisher = f'../results/results_fisher/fisher{tag_inf}'
-    fn_samples_test_pred = f'{dir_fisher}/samples_test{tag_test}_pred.npy'
-    print(f"fn_samples = {fn_samples_test_pred}")
-    samples_arr = np.load(fn_samples_test_pred)
-    print(samples_arr.shape)
-    param_names = np.loadtxt(f'{dir_fisher}/param_names.txt', dtype=str)
     if samples_arr.ndim == 2:
         return samples_arr, param_names
     elif samples_arr.ndim == 3:
@@ -573,18 +490,6 @@ def reparameterize_bounds(dict_bounds):
     return {pn: bounds_map[pn] for pn in names_reparam}
 
 
-def compute_fisher_matrix(derivatives, covariance_matrix, param_names):
-    """Compute Fisher matrix F_ij = d_i^T C^{-1} d_j for parameter derivatives."""
-    n_params = len(param_names)
-    fisher_matrix = np.zeros((n_params, n_params))
-    cov_inv = np.linalg.inv(covariance_matrix)
-    for i, param_i in enumerate(param_names):
-        for j, param_j in enumerate(param_names):
-            fisher_matrix[i, j] = np.dot(derivatives[param_i],
-                                         np.dot(cov_inv, derivatives[param_j]))
-    return fisher_matrix
-
-
 def chi2(theta_true, theta_pred, covs_pred):
     chi2s = []
     if covs_pred.ndim == 3:
@@ -603,10 +508,6 @@ def chi2(theta_true, theta_pred, covs_pred):
     return chi2s if len(chi2s) > 1 else chi2s[0]
 
 
-def mse(theta_true, theta_pred):
-    return np.mean((theta_true - theta_pred) ** 2, axis=-1)
-
-
 def figure_of_merit(covs_pred):
     foms = []
     if covs_pred.ndim == 3:
@@ -619,16 +520,11 @@ def figure_of_merit(covs_pred):
     return foms
 
 __all__ = [
-    "idxs_train_val_test",
-    "split_train_val_test",
     "get_posterior_maxes",
     "get_samples",
     "get_chain_statistics",
     "get_moments_test_sbi",
     "get_samples_sbi",
-    "get_samples_emcee",
-    "get_samples_dynesty",
-    "get_samples_fisher",
     "repeat_arr_rlzs",
     "PARAMS_SIGMA8_MULT",
     "PARAMS_SIGMA8_SQUARED_MULT",
@@ -643,9 +539,7 @@ __all__ = [
     "reparameterize_theta",
     "unreparameterize_theta",
     "reparameterize_bounds",
-    "compute_fisher_matrix",
     "chi2",
-    "mse",
     "figure_of_merit",
     "statistics_scaler_funcs",
     "generate_randints",

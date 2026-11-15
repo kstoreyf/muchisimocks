@@ -53,8 +53,6 @@ import data_loader  # noqa: E402
 import paths  # noqa: E402
 import sbi_model  # noqa: E402
 from generate_config_inference import (  # noqa: E402
-    BX_SWEEP,
-    N_TRAIN_SWEEP,
     NOISE_MODES,
     resolve_test_scenario_tags,
     resolve_train_tag_bundle,
@@ -366,18 +364,6 @@ def merge_rows_for_write(
         else:
             rows.append((rid, mv, "", "", ""))
     return rows
-
-
-def _coverage_batch_unscaled(
-    y_cov_nb: list[np.ndarray],
-    start: int,
-    batch: int,
-) -> list[np.ndarray]:
-    out = []
-    for block in y_cov_nb:
-        end = min(start + batch, block.shape[0])
-        out.append(np.asarray(block[start:end], dtype=np.float64))
-    return out
 
 
 def _eval_batch_worker(
