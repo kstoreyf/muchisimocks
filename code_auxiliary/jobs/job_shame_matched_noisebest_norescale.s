@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks=16
 #SBATCH --mem=40G
-#SBATCH --output=logs/%x.out
+#SBATCH --output=/scratch/kstoreyf/muchisimocks/logs_v2/%x.out
 echo "Running on node ${SLURMD_NODENAME}, $(date)"
 . ~/load_modules.sh
 source /scicomp/builds/Rocky/8.7/Common/software/Anaconda3/2023.03-1/etc/profile.d/conda.sh

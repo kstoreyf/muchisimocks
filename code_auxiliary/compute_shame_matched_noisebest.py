@@ -6,8 +6,9 @@ way the fixed-SHAMe-cosmology cosmic-variance test set is populated in the paper
   tag_biasparams = '_biasshame_noisebest_p0_n1'   (SHAMe biases for nbar=2.2e-4 + best-fit
                                                    multiplicative noise amplitudes)
   noise fields   = unit Gaussian, multiplicative model (utils_model.get_tracer_field)
-then compute P, P_gm, B with the production estimators, for N_REAL noise realizations
-per phase.
+then compute P, P_gm, B (and P, P_gm Gaussian errors) with the production estimators, for
+N_REAL noise realizations per phase. make_shame_matched_testset.py turns the output into a
+muchisimocks-layout test set (_shamematched_p0_n10).
 
 Differences from the library pipeline, forced by the matched 1024 / 132^3 grid:
   - unit noise fields are drawn at 132^3 (fresh seeds, SEED_NOISE_BASE + i)
@@ -84,7 +85,7 @@ def main():
         matter = {'nbody': (dens / np.sum(dens)).astype(np.float32),
                   'm2m': (fields[0] / NG_DEP**3).astype(np.float32),
                   'delta_op': (fields[1] / NG_DEP**3).astype(np.float32)}
-        res = dict(pk=[], pgm={m: [] for m in matter}, bk=[])
+        res = dict(pk=[], pk_err=[], pgm={m: [] for m in matter}, pgm_err={m: [] for m in matter}, bk=[])
         for i in range(N_REAL):
             t0 = time.time()
             # same seed for a given i in both phases, as in the paired library
@@ -94,8 +95,11 @@ def main():
             pk = cs.compute_pk(tf, cosmo, L, n_threads=N_THREADS)
             res['k'] = pk['k']
             res['pk'].append(pk['pk'])
+            res['pk_err'].append(pk['pk_gaussian_error'])
             for m in matter:
-                res['pgm'][m].append(cs.compute_pgm(tf, matter[m], cosmo, L, n_threads=N_THREADS)['pk'])
+                pgm = cs.compute_pgm(tf, matter[m], cosmo, L, n_threads=N_THREADS)
+                res['pgm'][m].append(pgm['pk'])
+                res['pgm_err'][m].append(pgm['pk_gaussian_error'])
             res['bk'].append(bspec.Bk_ideal(tf, discreteness_correction=True)['b0'])
             print(f'phase={phase} real={i}: {time.time() - t0:.0f} s', flush=True)
         out[phase] = {k: (np.array(v) if not isinstance(v, dict) else {m: np.array(x) for m, x in v.items()})
