@@ -9,8 +9,11 @@ from __future__ import annotations
 # =============================================================================
 # Bootstrap (REPO_ROOT) + Imports
 # =============================================================================
+import os
 import pickle
+import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 try:
@@ -1664,6 +1667,16 @@ def _load_ensemble_coverage_for_combo(statistics, mask):
 # Fig 2 — Statistics: training-set ranges
 # =============================================================================
 
+def complete_train_cosmologies(statistic):
+    """Training cosmology indices with all bx bias files present for this statistic."""
+    d = data_loader.get_dir_statistics(
+        statistic, TAG_PARAMS_TRAIN, TAG_BIASPARAMS_TRAIN, tag_noise=TAG_NOISE_TRAIN,
+    )
+    pat = re.compile(rf"{statistic}_(\d+)_b\d+\.npy$")
+    counts = Counter(int(m.group(1)) for fn in os.listdir(d) if (m := pat.match(fn)))
+    return np.sort([i for i, c in counts.items() if c >= bx])
+
+
 def plot_fig2_statistics_ranges(save_name="fig2_statistics_ranges"):
     def _build_fig2_arrays():
         """Load training bands + SHAMe overlays (slow I/O); cache the plot arrays."""
@@ -1679,9 +1692,12 @@ def plot_fig2_statistics_ranges(save_name="fig2_statistics_ranges"):
             }
         train = {}
         for statistic in ("pk", "pgm", "bispec"):
+            idxs = complete[statistic]
+            rng = np.random.default_rng(seed=42)
+            sub = np.sort(rng.choice(idxs, size=min(n_cosmo_max_stats, len(idxs)), replace=False))
             k, ys, _, _ = data_loader.load_data_muchisimocks(
                 statistic, TAG_PARAMS_TRAIN, TAG_BIASPARAMS_TRAIN,
-                tag_noise=TAG_NOISE_TRAIN, bx=bx, n_cosmo_max=n_cosmo_max_stats,
+                tag_noise=TAG_NOISE_TRAIN, bx=bx, cosmo_indices=sub,
             )
             median, p1, p16, p84, p99 = stats_summary(ys)
             x = np.arange(len(median)) if statistic == "bispec" else np.asarray(k)
@@ -1690,11 +1706,19 @@ def plot_fig2_statistics_ranges(save_name="fig2_statistics_ranges"):
             )
         return {"train": train, "shame": shame_stats}
 
+    # Subsample only cosmologies with all bx bias files (training stats may still be running).
+    complete = {s: complete_train_cosmologies(s) for s in ("pk", "pgm", "bispec")}
+    n_cosmo_train = int(TAG_PARAMS_TRAIN.split("_n")[-1])
+    partial = {s: len(v) for s, v in complete.items() if len(v) < n_cosmo_train}
     cache_name = (
         f"fig2_stat_ranges_{TAG_PARAMS_TRAIN}{TAG_BIASPARAMS_TRAIN}"
         f"{TAG_NOISE_TRAIN}_bx{bx}_n{n_cosmo_max_stats}"
     )
-    arrays = load_or_build(cache_name, _build_fig2_arrays)
+    if partial:
+        print(f"Training stats incomplete (complete cosmologies: {partial} of {n_cosmo_train}); not caching")
+        arrays = _build_fig2_arrays()
+    else:
+        arrays = load_or_build(cache_name, _build_fig2_arrays)
     train, shame_stats = arrays["train"], arrays["shame"]
 
     def plot_shame_nbars(ax, statistic, *, with_labels=False):
@@ -1745,7 +1769,7 @@ def plot_fig2_statistics_ranges(save_name="fig2_statistics_ranges"):
     plot_shame_nbars(axes[0], "pk", with_labels=True)
     axes[0].set_xscale("log"); axes[0].set_yscale("log")
     axes[0].set_xlabel(r"$k\,[h/\mathrm{Mpc}]$", fontsize=LABELSIZE)
-    axes[0].set_ylabel(r"$P(k)$", fontsize=LABELSIZE)
+    axes[0].set_ylabel(r"$P(k)\;[h^{-3}\,\mathrm{Mpc}^{3}]$", fontsize=LABELSIZE)
     add_split_legends(axes[0])
 
     # P_gm(k)
@@ -1757,7 +1781,7 @@ def plot_fig2_statistics_ranges(save_name="fig2_statistics_ranges"):
     plot_shame_nbars(axes[1], "pgm", with_labels=False)
     axes[1].set_xscale("log"); axes[1].set_yscale("log")
     axes[1].set_xlabel(r"$k\,[h/\mathrm{Mpc}]$", fontsize=LABELSIZE)
-    axes[1].set_ylabel(r"$P_{gm}(k)$", fontsize=LABELSIZE)
+    axes[1].set_ylabel(r"$P_{gm}(k)\;[h^{-3}\,\mathrm{Mpc}^{3}]$", fontsize=LABELSIZE)
 
     # Bispectrum (triangle bin index; matches 2026-03-10_load_statistics)
     t = train["bispec"]
@@ -1768,7 +1792,7 @@ def plot_fig2_statistics_ranges(save_name="fig2_statistics_ranges"):
     plot_shame_nbars(axes[2], "bispec", with_labels=False)
     axes[2].set_yscale("log")
     axes[2].set_xlabel("triangle bin index", fontsize=LABELSIZE)
-    axes[2].set_ylabel(r"$k_1k_2k_3\,B(k_1,k_2,k_3)$", fontsize=LABELSIZE)
+    axes[2].set_ylabel(r"$k_1k_2k_3\,B(k_1,k_2,k_3)\;[h^{-3}\,\mathrm{Mpc}^{3}]$", fontsize=LABELSIZE)
 
     for ax in axes:
         ax.tick_params(labelsize=TICKSIZE)

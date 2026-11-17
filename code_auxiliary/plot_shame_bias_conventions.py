@@ -28,20 +28,20 @@ import compute_shame_matched_noisepoly as cp     # loaders, FFT P(k) estimator (
 TAG = cp.TAG_MOCK                                 # '_nbar0.00022'
 assert TAG == '_nbar0.00022'
 
-# probabilistic-bias values as delivered (undo the x2 that utils_model.bias_dict_shame applies to b2, bs2)
+# probabilistic-bias values as delivered (undo the /2 that utils_model.bias_dict_shame applies to b2, bs2)
 d = utils_model.bias_dict_shame[TAG]
-prob = dict(b1=d['b1'], b2=d['b2'] / 2, bs2=d['bs2'] / 2, bl=d['bl'])
+prob = dict(b1=d['b1'], b2=d['b2'] * 2, bs2=d['bs2'] * 2, bl=d['bl'])
 fit = dict(zip(['b1', 'b2', 'bs2', 'bl'], cp.fit_biases()))     # phase mean, k <= 0.2
 
 P = r'^\mathrm{prob}'
 SETS = [
-    (rf'$b_2 = 2\,b_2{P},\ b_{{s^2}} = 2\,b_{{s^2}}{P}$  (current code)',
+    (rf'$b_2 = 2\,b_2{P},\ b_{{s^2}} = 2\,b_{{s^2}}{P}$  (old code)',
      [prob['b1'], 2 * prob['b2'], 2 * prob['bs2'], prob['bl']], 'C3', '-'),
     (rf'$b_2 = b_2{P},\ b_{{s^2}} = b_{{s^2}}{P}$  (as delivered)',
      [prob['b1'], prob['b2'], prob['bs2'], prob['bl']], 'C1', '--'),
     (rf'$b_2 = b_2{P}/2,\ b_{{s^2}} = b_{{s^2}}{P}$  (Stücker+24 conv., $b_{{K^2}}$)',
      [prob['b1'], prob['b2'] / 2, prob['bs2'], prob['bl']], 'C0', '-'),
-    (rf'$b_2 = b_2{P}/2,\ b_{{s^2}} = b_{{s^2}}{P}/2$  (Stücker+24 conv., $b_J$)',
+    (rf'$b_2 = b_2{P}/2,\ b_{{s^2}} = b_{{s^2}}{P}/2$  (Stücker+24 conv., $b_J$; code)',
      [prob['b1'], prob['b2'] / 2, prob['bs2'] / 2, prob['bl']], 'C2', '--'),
     (r'field-level fit to SHAMe ($k\leq0.2$), all four $b$',
      [fit['b1'], fit['b2'], fit['bs2'], fit['bl']], 'k', ':'),

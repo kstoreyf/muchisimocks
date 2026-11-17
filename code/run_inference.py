@@ -219,10 +219,9 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
     
     # Reparameterize if requested
     reparameterize = config.get("reparameterize", False)
-    plite = config.get("plite", False)
-    if reparameterize:
-        print("For now setting plite=True whenever reparameterize is true")
-        plite = True
+    # plite (drop hubble, omega_baryon, ns) defaults to on with reparameterize; `plite: false` keeps all
+    # cosmo params (2026-11 test of whether predicting more params changes the posteriors)
+    plite = config.get("plite", reparameterize)
 
     # Physical bounds define the posterior support even when training on reparameterized columns.
     dict_bounds_physical = dict(dict_bounds)
@@ -236,10 +235,16 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
         print('Updated bounds:', dict_bounds)
     
     # If plite is true, exclude hubble, omega_baryon, ns from training
-    if plite:
-        print("plite=True: Excluding hubble, omega_baryon, ns from training")
-        params_to_exclude = ['hubble', 'omega_baryon', 'ns']
-        
+    # exclude_noise (temporary, for the 2026-11 with/without-noise comparison): also drop the noise
+    # amplitudes, so the network learns the posterior marginalized over them (their training prior)
+    exclude_noise = config.get("exclude_noise", False)
+    if plite or exclude_noise:
+        params_to_exclude = ['hubble', 'omega_baryon', 'ns'] if plite else []
+        if exclude_noise:
+            noise_names = list(utils_model.noiseparam_names_ordered)
+            params_to_exclude += noise_names + [utils_inference.reparameterized_sample_name(n) for n in noise_names]
+        print(f"Excluding from training (plite={plite}, exclude_noise={exclude_noise}): {params_to_exclude}")
+
         # Find indices of parameters to exclude
         idxs_to_exclude = [i for i, pn in enumerate(param_names) if pn in params_to_exclude]
         

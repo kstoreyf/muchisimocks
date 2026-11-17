@@ -29,9 +29,8 @@ Usage (Slurm jobs in code_auxiliary/jobs/):
   python select_shame_noisebest.py emulate TASK   # TASK = 0..7 -> (phase, eps); job_select_shame_noisebest.s
   python select_shame_noisebest.py targets        # SHAMe P, B + Gaussian errors, all 3 nbar; job_select_shame_noisebest_targets.s
   python select_shame_noisebest.py fit            # ~1 min; fits every (nbar, bias setting), writes params_fixed; job_select_shame_noisebest_fit.s
-Fits: for each SHAMe density, A fit with biases fixed to bias_dict_shame (code convention, b2/bs2 = 2 x raw),
-fixed to raw/2 (Stuecker+24 -> our basis), and free; A_homog >= 0, other amplitudes unbounded.
-The test-set selection is nbar = 2.2e-4 with the code-convention biases.
+Fits: for each SHAMe density, A fit with biases fixed to bias_dict_shame, and with free biases;
+A_homog >= 0, other amplitudes unbounded. The test-set selection is nbar = 2.2e-4 with fixed biases.
 Output: data/data_shame/matched_seed-406168/noisebest_select/{task*.npy, targets.npy, fit.npy}
         data/params/params_fixed_biasshame_noisebest_p0_n1.txt
 """
@@ -169,11 +168,10 @@ def make_stats(expo):
 
 
 def bias_settings(tag):
-    # fixed biases: bias_dict_shame as in the code (b2, bs2 = 2 x raw), and raw / 2 (Stuecker+24 -> our basis)
+    # fixed: the SHAMe biases (utils_model.bias_dict_shame); free: fit together with A
     import utils_model
-    b_code = np.array([utils_model.bias_dict_shame[tag][n] for n in BIAS_NAMES])
-    b_half = b_code * np.array([1, 0.25, 0.25, 1])
-    return {'fixed b (code, x2)': b_code, 'fixed b (raw/2)': b_half, 'free b': None}
+    b_shame = np.array([utils_model.bias_dict_shame[tag][n] for n in BIAS_NAMES])
+    return {'fixed b': b_shame, 'free b': None}
 
 
 def fit():
@@ -209,7 +207,7 @@ def fit():
 
         for setting, b in bias_settings(tag).items():
             if b is None:
-                b0 = bias_settings(tag)['fixed b (raw/2)']
+                b0 = bias_settings(tag)['fixed b']
                 f = lambda z: loss(z)
                 starts, bnds = [np.concatenate([b0, a]) for a in starts_A], [(None, None)] * 4 + bnds_A
             else:
@@ -219,11 +217,11 @@ def fit():
             x = best.x if b is None else np.concatenate([b, best.x])
             c = chi2_red(x)
             out['fits'][(tag, setting)] = dict(b=x[:4], A_lib=x[4:] / V_SCALE, chi2_red=c, loss=loss(x), stats=stats(x, C))
-            print(f'{tag} {setting:18s} loss={loss(x):6.2f} chi2r P={c["pk"]:5.2f} B={c["bk"]:5.2f} Pgm={c["pgm"]:6.2f}  '
+            print(f'{tag} {setting:8s} loss={loss(x):6.2f} chi2r P={c["pk"]:5.2f} B={c["bk"]:5.2f} Pgm={c["pgm"]:6.2f}  '
                   f'b={np.round(x[:4], 3)}  A_lib={np.round(x[4:] / V_SCALE, 3)}', flush=True)
 
-    # the test-set selection: nbar = 2.2e-4 with the biases the test set uses (code convention)
-    sel = out['fits'][(TAG_MOCK, 'fixed b (code, x2)')]
+    # the test-set selection: nbar = 2.2e-4 with the biases the test set uses
+    sel = out['fits'][(TAG_MOCK, 'fixed b')]
     out_of_prior = [n for n, a in zip(NOISE_NAMES, sel['A_lib']) if not (out['bounds_A'][n][0] <= a <= out['bounds_A'][n][1])]
     if out_of_prior:
         print('WARNING: selected amplitudes outside the current priors:', out_of_prior)

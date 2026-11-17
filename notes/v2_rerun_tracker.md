@@ -18,8 +18,8 @@ Outputs: `source code_auxiliary/env_v2.sh` → `/scratch/kstoreyf/muchisimocks/{
 ## Phase 2 — Test sets and SHAMe truths
 - [~] **M1 v2 test sets with independent IC phases** — `_coveragev2_p5_n1000` (base 100000), `_shamev2_p0_n1000` (base 200000). Jobs 7973620 / 7973621 (resubmitted 09:45, logs in /scratch/kstoreyf/muchisimocks/logs_v2/); ~11 min/mock
 - [ ] Sync v2 test libs scratch → `/data/kstoreyf/muchisimocks/`
-- [ ] **M5 SHAMe bias truth** — field-level fit on phase-matched mock vs `bias_dict_shame` (×2 convention, bl)
-- [ ] Rebuild CV set bias params + redo noisebest selection with the chosen biases and noise model
+- [x] **M5 SHAMe bias truth** — ÷2 on b2, bs2 confirmed with colleague (2026-11-15); `bias_dict_shame` now stores raw/2; fixed bias param files rewritten
+- [x] Redo noisebest selection with ÷2 biases (fit 7982679; matched stats 7982680-2; matched test set rebuilt; 11-12 nb updated)
 
 ## Phase 3 — Recompute statistics (v2 tree)
 - [~] Training `_p5_n10000` × `_biasnoisenestv2_p9_n320000` × `_noisefly` (v2 noise priors: An_homog ±5, An_b1 ±5, An_b2 ±3, An_bs2 ±5, An_bl ±20): params job 7975563 → pgm 7975564 → pk 7975565 (aftercorr); bispec 7975566 (200 × 50 cosmologies, linear binning). The earlier `_biasnoisenest` pk/pgm (old priors) are superseded.
@@ -33,13 +33,21 @@ Outputs: `source code_auxiliary/env_v2.sh` → `/scratch/kstoreyf/muchisimocks/{
 - [ ] **M7** `choose_best_run` resume logic; drop SHAMe from pass/fail filter (or disclose)
 - [ ] **M8/M9** config generation: mask mismatch, filename collisions, sweep-name mismatch
 - [ ] K-selection on genuinely held-out cosmologies
+- [ ] **Training/sweep plan (agreed 2026-11-16)**, to implement on `cleanup-v2`:
+  - [ ] **Batch size fixed at 128**, removed from the sweep grid. In v1, batch 32–256 showed no trend, so a fixed size keeps one training setup across the convergence grid. 128 is about 1.7× faster than 64 (benchmark below), and the smallest convergence models (500 rows) still get about 4 steps per epoch.
+  - [ ] **Sweep grid:** learning rate {1e-3, 3e-4, 1e-4, 3e-5} × hidden {128, 256, 512} × transforms {6, 8, 10}, which is 36 combinations. rand16 covers 44% of them.
+  - [ ] **Training jobs:** 1 core (more threads are slower, see `code_auxiliary/bench_train_threads.py`), regular queue, 24 h.
+  - [ ] **Resume after timeout** (sbi `resume_training`), so slow trials (hidden 512 with learning rate 3e-5, about 525 epochs fit in 24 h) continue in a follow-up job instead of being lost.
+  - [ ] **Ensembles = the best sweep setting retrained with 3 seeds**, replacing top-3 sweep trials. In the v1 rand30 sweeps the 3rd-best trial was 0.2–0.7 nats of validation loss worse than the best (0.73 for full P+B+P_gm), so the v1 top-3 ensembles mixed in noticeably worse models, and going to rand20 barely helps. Identical-settings ensembles follow Alvey, Contaldi & Pieroni 2025 (arXiv:2507.13495), which makes the spread between members pure seed noise.
+  - [ ] **Ensemble disagreement diagnostic (Alvey+25):** compute the pairwise KL between seed members on the SHAMe mocks and compare with in-distribution test sets, as a misspecification check. Optional: pairwise KL vs N_train in the convergence grid (expected to fall like 1/N), but that needs seed ensembles at every N, about 3× the convergence-grid training.
+  - Benchmark (CPU, one thread, minutes per 320k-row epoch, batch 64 → 128): hidden 128: 1.30 → 0.76; hidden 256: 2.07 → 1.24; hidden 512: 5.15 → 2.74. Batch 1024 is another ~2× faster but is untested for quality. Node speed varies by about 25%.
 
 ## Phase 5 — k_max scan and fiducial cuts
 - [ ] Rerun Fig 8/9 grids with fixed FoB/FoM; re-choose kb / kpgm fiducial cuts
 - [ ] **M10** pick one name for the P_gg cut (0.35 vs 0.37); define kmax as bin-centre cut
 
 ## Phase 6 — Train fiducial ensembles and convergence grid
-- [ ] Fiducial K=3 ensembles (4 stat combos)
+- [ ] Fiducial K=3 ensembles (4 stat combos): best setting × 3 seeds (see Phase 4 plan)
 - [ ] Noiseless model for Fig 7 as an ensemble too
 - [ ] Convergence grid (N_cosmo × N_bias)
 
@@ -64,4 +72,11 @@ Outputs: `source code_auxiliary/env_v2.sh` → `/scratch/kstoreyf/muchisimocks/{
 - 2026-11-15: per-row noise + P_gm fix in compute_statistics.py; also loads each cosmology's fields once (was per row). Training pgm→pk arrays submitted (100 tasks, %40). Script: code_auxiliary/jobs/job_stats_v2.s
 - 2026-11-15: audit done; v2 conventions set (`env_v2.sh`, `SEED_BASE_IC`, seed.json); v2 test-set datagen submitted (20 GPUs). First coverage mock OK (seed 100000).
 - 2026-11-15: renamed on-the-fly noise tag `_noise_unit_perrow{tag_params}` → `_noisefly` (code + job script); mv'd the two finished training dirs (pks/pgms, 320k files each).
+- 2026-11-15 evening: SHAMe bias convention → ÷2 (was ×2). `select_shame_noisebest.py` settings now 'fixed b' / 'free b'; noisebest re-picked with fixed ÷2 biases (2.2e-4). `params_fixed_biasshame_noisem2best_p0_n1.txt` still ×2 (stale, m2 model only).
 - 2026-11-15: noise priors widened from the phase-matched fits (notebook §2.5); new param set `_biasnoisenestv2_p9_n320000`; noisebest re-selected on the matched mock (`code_auxiliary/select_shame_noisebest.py`, params_fixed_biasshame_noisebest_p0_n1 overwritten).
+
+## Phase-matched muchisimocks test set (`_shamematched_p0_n10`), set up 2026-11-15, not run yet
+SHAMe Rings ICs populated like the CV set (bias_dict_shame + noisebest), 10 noise realizations; obs = 0/π pair mean; P_gm vs the '1' operator; B rescaled to the loader's n_grid=128 convention. Truth: `_biasshame_noisebest_p0_n1`.
+1. ~~`sbatch jobs/job_shame_matched_noisebest.s`~~ submitted 7982680 (after the ÷2 noisebest fit)
+2. `source env_v2.sh && python make_shame_matched_testset.py`  (seconds; writes data_v2 test-set dirs + params_fixed_shamematched_p0_n10.txt)
+3. once the models exist: `sbatch --array=0-5 jobs/job_train_v2.s jobs/lists/noise_ab_v2_matched.txt`  (test only: individual + `_mean` for the 6 with/without-noise models)
