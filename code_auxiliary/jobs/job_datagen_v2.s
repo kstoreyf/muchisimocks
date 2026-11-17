@@ -2,7 +2,7 @@
 # v2 test-set field generation (independent IC phases; seed bases in data_creation_pipeline.SEED_BASE_IC).
 # Submit from code_auxiliary/ (logs -> /scratch/kstoreyf/muchisimocks/logs_v2/):
 #   sbatch --job-name=datagen_coveragev2_p5_n1000 jobs/job_datagen_v2.s lh _coveragev2_p5_n1000
-#   sbatch --job-name=datagen_shamev2_p0_n1000   jobs/job_datagen_v2.s fixed _shamev2_p0_n1000
+#   sbatch --job-name=datagen_cvshamev2_p0_n1000   jobs/job_datagen_v2.s fixed _cvshamev2_p0_n1000
 # 10 tasks x 100 mocks, 1 GPU each (same layout as jobarr_datagen.s).
 #SBATCH --qos=regular
 #SBATCH --time=24:00:00

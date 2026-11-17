@@ -29,10 +29,12 @@ Usage (Slurm jobs in code_auxiliary/jobs/):
   python select_shame_noisebest.py emulate TASK   # TASK = 0..7 -> (phase, eps); job_select_shame_noisebest.s
   python select_shame_noisebest.py targets        # SHAMe P, B + Gaussian errors, all 3 nbar; job_select_shame_noisebest_targets.s
   python select_shame_noisebest.py fit            # ~1 min; fits every (nbar, bias setting), writes params_fixed; job_select_shame_noisebest_fit.s
+  python select_shame_noisebest.py write          # seconds; per-density params_fixed_biasshame{nbar}_noisebest_p0_n1 from fit.npy
 Fits: for each SHAMe density, A fit with biases fixed to bias_dict_shame, and with free biases;
 A_homog >= 0, other amplitudes unbounded. The test-set selection is nbar = 2.2e-4 with fixed biases.
 Output: data/data_shame/matched_seed-406168/noisebest_select/{task*.npy, targets.npy, fit.npy}
-        data/params/params_fixed_biasshame_noisebest_p0_n1.txt
+        data/params/params_fixed_biasshame_noisebest_p0_n1.txt (2.2e-4)
+        data/params/params_fixed_biasshame{nbar}_noisebest_p0_n1.txt (each density, fixed biases; phase-matched set truths)
 """
 import os
 import sys
@@ -229,7 +231,26 @@ def fit():
     np.save(DIR_OUT / 'fit.npy', out)
     genp.write_authored_params_fixed(TAG_PARAMS_OUT, out['selected'], param_names=BIAS_NAMES + NOISE_NAMES)
     print(f'Saved {DIR_OUT / "fit.npy"}')
+    write_per_density(out)
+
+
+def tag_biasparams_nbar(tag_mock):
+    # '_nbar0.00011' -> '_biasshame0.00011_noisebest_p0_n1' (truth of the phase-matched set at that density)
+    return f'_biasshame{tag_mock[len("_nbar"):]}_noisebest_p0_n1'
+
+
+def write_per_density(out=None):
+    """params_fixed_biasshame{nbar}_noisebest_p0_n1.txt for every density: bias_dict_shame biases + fixed-b noise fit."""
+    import generate_params as genp
+    out = out if out is not None else np.load(DIR_OUT / 'fit.npy', allow_pickle=True).item()
+    for tag in TAGS_SHAME:
+        sel = out['fits'][(tag, 'fixed b')]
+        bad = [n for n, a in zip(NOISE_NAMES, sel['A_lib']) if not (out['bounds_A'][n][0] <= a <= out['bounds_A'][n][1])]
+        assert not bad, f'{tag}: amplitudes outside the priors: {bad}'
+        vals = dict(zip(BIAS_NAMES + NOISE_NAMES, map(float, np.concatenate([sel['b'], sel['A_lib']]))))
+        fn = genp.write_authored_params_fixed(tag_biasparams_nbar(tag), vals, param_names=BIAS_NAMES + NOISE_NAMES)
+        print(f'{tag}: wrote {fn}: {vals}')
 
 
 if __name__ == '__main__':
-    {'emulate': lambda: emulate(int(sys.argv[2])), 'targets': targets, 'fit': fit}[sys.argv[1]]()
+    {'emulate': lambda: emulate(int(sys.argv[2])), 'targets': targets, 'fit': fit, 'write': write_per_density}[sys.argv[1]]()

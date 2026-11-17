@@ -15,8 +15,11 @@ Differences from the library pipeline, forced by the matched 1024 / 132^3 grid:
   - A_noise is rescaled by (V_cell,lib / V_cell,matched)^(1/2) = 1.0107 so the physical
     noise power (A^2 V_cell for white noise) matches the library's 1000/128 cells
 
-Output: data/data_shame/matched_seed-406168/stats_noisebest.npy
-Run on a compute node:  python compute_shame_matched_noisebest.py
+Output: data/data_shame/matched_seed-406168/stats_noisebest.npy (2.2e-4, no --nbar)
+        data/data_shame/matched_seed-406168/stats_noisebest{nbar}.npy with --nbar (any SHAMe density; truth
+        _biasshame{nbar}_noisebest_p0_n1 = bias_dict_shame['_nbar{nbar}'] + that density's fixed-b noise fit,
+        written by select_shame_noisebest.py write)
+Run on a compute node:  python compute_shame_matched_noisebest.py [--nbar 0.00011]
   --no-rescale : use the library A_noise unchanged (all 5 amplitudes), saved to
                  stats_noisebest_norescale.npy (check of the V_cell rescaling)
   --noise-m2   : second-order multiplicative noise instead (_biasshame_noisem2best_p0_n1,
@@ -43,10 +46,13 @@ import make_shame_matched_mock as msm
 SEED = -406168
 L, NG, NG_DEP = msm.BOX_SIZE, msm.N_GRID_TARGET, msm.N_GRID
 NOISE_M2 = '--noise-m2' in sys.argv
-TAG_BIASPARAMS = '_biasshame_noisem2best_p0_n1' if NOISE_M2 else '_biasshame_noisebest_p0_n1'
+NBAR = sys.argv[sys.argv.index('--nbar') + 1] if '--nbar' in sys.argv else None
+assert not (NBAR and NOISE_M2), '--nbar is for the linear multiplicative noise model only'
+TAG_BIASPARAMS = ('_biasshame_noisem2best_p0_n1' if NOISE_M2 else
+                  f'_biasshame{NBAR}_noisebest_p0_n1' if NBAR else '_biasshame_noisebest_p0_n1')
 NOISE_MODEL = 'multiplicative_m2p3' if NOISE_M2 else 'multiplicative'
 NOISE_NAMES = utils_model.noiseparam_names_ordered_m2p3 if NOISE_M2 else utils_model.noiseparam_names_ordered
-TAG_MOCK = '_nbar0.00022'          # the density the bias + noise best fit was made for
+TAG_MOCK = f'_nbar{NBAR}' if NBAR else '_nbar0.00022'   # the density the bias + noise best fit was made for
 PHASES = ['0', 'pi']
 N_REAL = 10
 SEED_NOISE_BASE = 40000
@@ -55,13 +61,16 @@ NO_RESCALE = ('--no-rescale' in sys.argv) or NOISE_M2
 V_SCALE = 1.0 if NO_RESCALE else ((1000. / 128) / (L / NG))**1.5
 FN_OUT = msm.DIR_DATA_SHAME / f'matched_seed{SEED}' / (
     'stats_noisem2best.npy' if NOISE_M2 else
-    'stats_noisebest_norescale.npy' if NO_RESCALE else 'stats_noisebest.npy')
+    'stats_noisebest_norescale.npy' if NO_RESCALE else
+    f'stats_noisebest{NBAR}.npy' if NBAR else 'stats_noisebest.npy')
 
 
 def main():
     cosmo = utils_model.get_cosmo(utils_model.cosmo_dict_shame)
     _, pdict = data_loader.load_bias_params(TAG_BIASPARAMS)
     b = [pdict[n] for n in utils_model.biasparam_names_ordered]
+    if NBAR:   # the truth file must carry this density's fiducial SHAMe biases
+        assert np.allclose(b, [utils_model.bias_dict_shame[TAG_MOCK][n] for n in utils_model.biasparam_names_ordered]), b
     A = [pdict[n] * V_SCALE for n in NOISE_NAMES]
     print(f'{TAG_BIASPARAMS}: b={b}, A_noise (rescaled x{V_SCALE:.4f})={A}', flush=True)
 

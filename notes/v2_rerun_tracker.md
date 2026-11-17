@@ -16,15 +16,15 @@ Outputs: `source code_auxiliary/env_v2.sh` → `/scratch/kstoreyf/muchisimocks/{
 - [ ] Row-alignment assert across statistics (`data_loader.py:46-66`); size checks on cached pgm/bispec masks
 
 ## Phase 2 — Test sets and SHAMe truths
-- [~] **M1 v2 test sets with independent IC phases** — `_coveragev2_p5_n1000` (base 100000), `_shamev2_p0_n1000` (base 200000). Jobs 7973620 / 7973621 (resubmitted 09:45, logs in /scratch/kstoreyf/muchisimocks/logs_v2/); ~11 min/mock
+- [x] **M1 v2 test sets with independent IC phases** — `_coveragev2_p5_n1000` (base 100000), `_cvshamev2_p0_n1000` (base 200000; SHAMe-cosmology cosmic-variance set, renamed from `_shamev2_p0_n1000` on 2026-11-17: lib dir, seed.json, params file, SEED_BASE_IC). Jobs 7973620 / 7973621, all 1000 + 1000 mocks done
 - [ ] Sync v2 test libs scratch → `/data/kstoreyf/muchisimocks/`
 - [x] **M5 SHAMe bias truth** — ÷2 on b2, bs2 confirmed with colleague (2026-11-15); `bias_dict_shame` now stores raw/2; fixed bias param files rewritten
 - [x] Redo noisebest selection with ÷2 biases (fit 7982679; matched stats 7982680-2; matched test set rebuilt; 11-12 nb updated)
 
 ## Phase 3 — Recompute statistics (v2 tree)
 - [~] Training `_p5_n10000` × `_biasnoisenestv2_p9_n320000` × `_noisefly` (v2 noise priors: An_homog ±5, An_b1 ±5, An_b2 ±3, An_bs2 ±5, An_bl ±20): params job 7975563 → pgm 7975564 → pk 7975565 (aftercorr); bispec 7975566 (200 × 50 cosmologies, linear binning). The earlier `_biasnoisenest` pk/pgm (old priors) are superseded.
-- [ ] Coverage v2: pk, pgm, bispec
-- [ ] CV v2 (shamev2): pk, pgm, bispec
+- [~] Coverage v2: pk, pgm, bispec. pgm 7996092 → pk 7996093 (aftercorr; `_coveragev2_p5_n1000` × `_biasnoisecoveragev2_p9_n1000` × `_noisefly`, 100 tasks × 10 mocks, submitted 2026-11-16 20:35), done 1000/1000. Bispec 7999329 (`bispec_v2_cov`, submitted 2026-11-17)
+- [~] CV v2 (cvshamev2): pk, pgm, bispec. `_cvshamev2_p0_n1000` × `_biasshame_noisebest_p0_n1` (nbar 2.2e-4) × `_noisefly`: pgm 7999316 → pk 7999317 (aftercorr), bispec 7999318 (100 tasks × 10 mocks, submitted 2026-11-17)
 - [ ] SHAMe mock P_gm/B consistent with any noise-model / shot-noise choice
 - [ ] Spot-check: v2 vs old statistics (pk should be ~unchanged in mean; pgm shifted)
 
@@ -76,6 +76,7 @@ Outputs: `source code_auxiliary/env_v2.sh` → `/scratch/kstoreyf/muchisimocks/{
 - 2026-11-15: noise priors widened from the phase-matched fits (notebook §2.5); new param set `_biasnoisenestv2_p9_n320000`; noisebest re-selected on the matched mock (`code_auxiliary/select_shame_noisebest.py`, params_fixed_biasshame_noisebest_p0_n1 overwritten).
 
 ## Phase-matched muchisimocks test set (`_shamematched_p0_n10`), set up 2026-11-15, not run yet
+**Other densities (2026-11-17):** `_shamematched{nbar}_p0_n10` × `_biasshame{nbar}_noisebest_p0_n1` for nbar 0.00011, 0.00054 (truth = `bias_dict_shame['_nbar{nbar}']` + that density's fixed-b noise fit, `select_shame_noisebest.py write`). Stats 7999662 / 7999663 (`matched_noisebest_nbar*`) → test-set write 7999666. `params_fixed_biasshame0.00022_noisebest_p0_n1.txt` also written (identical to `_biasshame_noisebest_p0_n1`); renaming the 2.2e-4 tags to the nbar form is pending a decision (touches the v1 pipeline + ~1700 result files).
 SHAMe Rings ICs populated like the CV set (bias_dict_shame + noisebest), 10 noise realizations; obs = 0/π pair mean; P_gm vs the '1' operator; B rescaled to the loader's n_grid=128 convention. Truth: `_biasshame_noisebest_p0_n1`.
 1. ~~`sbatch jobs/job_shame_matched_noisebest.s`~~ submitted 7982680 (after the ÷2 noisebest fit)
 2. `source env_v2.sh && python make_shame_matched_testset.py`  (seconds; writes data_v2 test-set dirs + params_fixed_shamematched_p0_n10.txt)
