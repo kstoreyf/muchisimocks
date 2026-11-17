@@ -357,6 +357,7 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
                 sweep_num_runs=sweep_num_runs,
                 wandb_config_yaml_path=config_yaml_path,
                 nth_best_run=config.get("nth_best_run"),
+                sweep_run_id=config.get("sweep_run_id"),
                 groups_train=idxs_params[idxs_train, 0],  # cosmology index per row -> grouped val split
                 seed=int(config.get("seed", 0)),
                 )
@@ -383,8 +384,11 @@ def test_likefree_inference(
     tag_noise = config.get("tag_noise", None)  
     evaluate_mean = config["evaluate_mean"]
     idxs_obs = config["idxs_obs"]
-    #idxs_obs = np.arange(10)
-    #idxs_obs = [0,1,2]
+    # Named subset of test rows: data/params/idxs_obs{tag_params_test}_{idxs_obs_subset}.npy holds
+    # param-set indices (e.g. code_auxiliary/select_coverage_subset.py); samples get tag _{subset}.
+    idxs_obs_subset = config.get("idxs_obs_subset", None)
+    assert idxs_obs is None or idxs_obs_subset is not None, \
+        "idxs_obs without idxs_obs_subset would write the full-set samples filename"
     tag_params_test = config["tag_params_test"]
     tag_biasparams_test = config["tag_biasparams_test"]
     tag_noise_test = config.get("tag_noise_test", None) 
@@ -405,16 +409,19 @@ def test_likefree_inference(
         tag_test = f'{tag_data_test}_mean'
     else:
         tag_test = tag_data_test
-    
+    if idxs_obs_subset is not None:
+        assert not evaluate_mean, "idxs_obs_subset with evaluate_mean is not supported"
+        tag_test = f'{tag_test}_{idxs_obs_subset}'
+
     # Construct tag_test_eval with _N{n_test_eval} suffix if n_test_eval is specified
     if n_test_eval is not None:
         tag_n_eval = f"_neval{n_test_eval}"
         tag_test_eval = f"{tag_test}{tag_n_eval}"
     else:
         tag_test_eval = tag_test
-    
+
     dir_sbi = f'{dir_results}/results_sbi/sbi{tag_inf_train}'
-    
+
     # Skip only when the FINAL samples file exists, is fully usable (no NaN
     # placeholders), and there is no in-progress file. NaN holes / short
     # in-progress arrays are retried by evaluate_test_set.
@@ -441,9 +448,10 @@ def test_likefree_inference(
             f"Found existing samples {fn_samples_test_pred} with {n_pending}/{n_stored} "
             f"NaN/unusable obs slot(s) (shape {existing_arr.shape}) — will retry those."
         )
-    
+
     print(statistics, tag_params, tag_biasparams)
     print(tag_params_test, tag_biasparams_test)
+    print(f"tag_test_eval: {tag_test_eval}")
     ### Load data and parameters
     # our setup is such that that the test set is a separate dataset, so no need to split
     # don't need theta either - just predicting, not comparing
@@ -466,6 +474,16 @@ def test_likefree_inference(
                 )
     sbi_network.run() #need this to do the loading
     # TODO make this work for both emu and muchisimocks # ?? not sure what this means rn
+    if idxs_obs_subset is not None:
+        fn_idxs = paths.PROJECT_ROOT / "data" / "params" / f"idxs_obs{tag_params_test}_{idxs_obs_subset}.npy"
+        idxs_subset = np.load(fn_idxs)
+        # param-set index -> data row (rows can differ from param indices if any mock is missing)
+        rows_by_param = {int(ic): r for r, ic in enumerate(idxs_params[:, 0])}
+        assert len(rows_by_param) == len(idxs_params), "subset selection assumes one row per cosmology"
+        missing = [int(i) for i in idxs_subset if int(i) not in rows_by_param]
+        assert not missing, f"subset rows missing from the loaded test data: {missing}"
+        idxs_obs = [rows_by_param[int(i)] for i in idxs_subset]
+        print(f"idxs_obs_subset={idxs_obs_subset}: {len(idxs_obs)} rows from {fn_idxs}")
     if idxs_obs is None:
         y_obs = y
     else:

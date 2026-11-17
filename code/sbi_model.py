@@ -619,6 +619,7 @@ class SBIModel():
                      sweep_num_runs=None,
                      wandb_config_yaml_path=None,
                      nth_best_run=None,
+                     sweep_run_id=None,
                      groups_train=None,
                      seed=0,
                      ):
@@ -679,6 +680,9 @@ class SBIModel():
             else None
         )
         self.nth_best_run = None if nth_best_run is None else int(nth_best_run)
+        # Explicit sweep trial id (any rank, e.g. to retrain a mid-ranked trial); overrides nth_best_run
+        self.sweep_run_id = sweep_run_id
+        assert sweep_run_id is None or nth_best_run is None, "set only one of sweep_run_id / nth_best_run"
 
     def _sweep_results_dir_for_best_run_txt(self):
         """
@@ -848,7 +852,10 @@ class SBIModel():
                 % (sweep_dir, self.dir_sbi, self.sweep_name, self.nth_best_run),
                 flush=True,
             )
-            if self.nth_best_run is not None:
+            if self.sweep_run_id is not None:
+                best_run_id = str(self.sweep_run_id)
+                print("run_mode=best: sweep_run_id=%r (explicit trial)" % best_run_id, flush=True)
+            elif self.nth_best_run is not None:
                 from generate_config_inference import nth_passing_run_id
                 try:
                     best_run_id = nth_passing_run_id(

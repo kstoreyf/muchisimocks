@@ -68,7 +68,7 @@ SEED_BASE_IC = {
     '_quijote_p0_n1000': 0,
     # v2 test sets (independent phases)
     '_coveragev2_p5_n1000': 100000,
-    '_shamev2_p0_n1000': 200000,
+    '_cvshamev2_p0_n1000': 200000,   # SHAMe-cosmology cosmic-variance set
 }
 
 
