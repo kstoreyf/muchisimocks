@@ -261,7 +261,7 @@ PARAM_SETS_LH = {
         _authored=True,
         source="notebooks/2026-06-03_shame_noise_params.ipynb",
     ),
-    "biasshame_noisebest_p0_n1": dict(
+    "biasshame0.00022_noisebest_p0_n1": dict(
         bounds_type="biasnoise",
         anoise_option="Anmult",
         n_params_vary=0,

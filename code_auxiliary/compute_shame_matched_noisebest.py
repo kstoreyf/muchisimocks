@@ -3,22 +3,21 @@
 Populate the phase-matched muchisimocks fields (make_shame_matched_mock.py) the same
 way the fixed-SHAMe-cosmology cosmic-variance test set is populated in the paper's
 "noisy" scenario (generate_config_inference._TEST_SCENARIO_TAGS):
-  tag_biasparams = '_biasshame_noisebest_p0_n1'   (SHAMe biases for nbar=2.2e-4 + best-fit
-                                                   multiplicative noise amplitudes)
+  tag_biasparams = '_biasshame{nbar}_noisebest_p0_n1'   (SHAMe biases for that density + best-fit
+                                                         multiplicative noise amplitudes)
   noise fields   = unit Gaussian, multiplicative model (utils_model.get_tracer_field)
 then compute P, P_gm, B (and P, P_gm Gaussian errors) with the production estimators, for
 N_REAL noise realizations per phase. make_shame_matched_testset.py turns the output into a
-muchisimocks-layout test set (_shamematched_p0_n10).
+muchisimocks-layout test set (_shamematched{nbar}_p0_n10).
 
 Differences from the library pipeline, forced by the matched 1024 / 132^3 grid:
   - unit noise fields are drawn at 132^3 (fresh seeds, SEED_NOISE_BASE + i)
   - A_noise is rescaled by (V_cell,lib / V_cell,matched)^(1/2) = 1.0107 so the physical
     noise power (A^2 V_cell for white noise) matches the library's 1000/128 cells
 
-Output: data/data_shame/matched_seed-406168/stats_noisebest.npy (2.2e-4, no --nbar)
-        data/data_shame/matched_seed-406168/stats_noisebest{nbar}.npy with --nbar (any SHAMe density; truth
-        _biasshame{nbar}_noisebest_p0_n1 = bias_dict_shame['_nbar{nbar}'] + that density's fixed-b noise fit,
-        written by select_shame_noisebest.py write)
+Output: data/data_shame/matched_seed-406168/stats_noisebest{nbar}.npy (--nbar, default the fiducial
+        0.00022; truth _biasshame{nbar}_noisebest_p0_n1 = bias_dict_shame['_nbar{nbar}'] + that density's
+        fixed-b noise fit, written by select_shame_noisebest.py write)
 Run on a compute node:  python compute_shame_matched_noisebest.py [--nbar 0.00011]
   --no-rescale : use the library A_noise unchanged (all 5 amplitudes), saved to
                  stats_noisebest_norescale.npy (check of the V_cell rescaling)
@@ -46,13 +45,13 @@ import make_shame_matched_mock as msm
 SEED = -406168
 L, NG, NG_DEP = msm.BOX_SIZE, msm.N_GRID_TARGET, msm.N_GRID
 NOISE_M2 = '--noise-m2' in sys.argv
-NBAR = sys.argv[sys.argv.index('--nbar') + 1] if '--nbar' in sys.argv else None
-assert not (NBAR and NOISE_M2), '--nbar is for the linear multiplicative noise model only'
+assert not ('--nbar' in sys.argv and NOISE_M2), '--nbar is for the linear multiplicative noise model only'
+NBAR = sys.argv[sys.argv.index('--nbar') + 1] if '--nbar' in sys.argv else '0.00022'  # fiducial density
 TAG_BIASPARAMS = ('_biasshame_noisem2best_p0_n1' if NOISE_M2 else
-                  f'_biasshame{NBAR}_noisebest_p0_n1' if NBAR else '_biasshame_noisebest_p0_n1')
+                  f'_biasshame{NBAR}_noisebest_p0_n1')
 NOISE_MODEL = 'multiplicative_m2p3' if NOISE_M2 else 'multiplicative'
 NOISE_NAMES = utils_model.noiseparam_names_ordered_m2p3 if NOISE_M2 else utils_model.noiseparam_names_ordered
-TAG_MOCK = f'_nbar{NBAR}' if NBAR else '_nbar0.00022'   # the density the bias + noise best fit was made for
+TAG_MOCK = f'_nbar{NBAR}'   # the density the bias + noise best fit was made for
 PHASES = ['0', 'pi']
 N_REAL = 10
 SEED_NOISE_BASE = 40000
@@ -62,7 +61,7 @@ V_SCALE = 1.0 if NO_RESCALE else ((1000. / 128) / (L / NG))**1.5
 FN_OUT = msm.DIR_DATA_SHAME / f'matched_seed{SEED}' / (
     'stats_noisem2best.npy' if NOISE_M2 else
     'stats_noisebest_norescale.npy' if NO_RESCALE else
-    f'stats_noisebest{NBAR}.npy' if NBAR else 'stats_noisebest.npy')
+    f'stats_noisebest{NBAR}.npy')
 
 
 def main():

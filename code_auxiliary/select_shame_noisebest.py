@@ -1,7 +1,7 @@
 """select_shame_noisebest.py
 
 Choose the best-fit multiplicative noise amplitudes for the fixed-SHAMe-cosmology test set
-(`_biasshame_noisebest_p0_n1`) on the phase-matched muchisimocks fields, instead of picking
+(`_biasshame{nbar}_noisebest_p0_n1`, fiducial nbar 0.00022) on the phase-matched muchisimocks fields, instead of picking
 the best of 1000 library mocks with different ICs (which partly selected a lucky
 cosmic-variance draw; notebooks/2026-06-03_shame_noise_params.ipynb).
 
@@ -33,7 +33,6 @@ Usage (Slurm jobs in code_auxiliary/jobs/):
 Fits: for each SHAMe density, A fit with biases fixed to bias_dict_shame, and with free biases;
 A_homog >= 0, other amplitudes unbounded. The test-set selection is nbar = 2.2e-4 with fixed biases.
 Output: data/data_shame/matched_seed-406168/noisebest_select/{task*.npy, targets.npy, fit.npy}
-        data/params/params_fixed_biasshame_noisebest_p0_n1.txt (2.2e-4)
         data/params/params_fixed_biasshame{nbar}_noisebest_p0_n1.txt (each density, fixed biases; phase-matched set truths)
 """
 import os
@@ -70,7 +69,6 @@ NOISE_NAMES = ['An_homog', 'An_b1', 'An_b2', 'An_bs2', 'An_bl']
 X0 = np.zeros(9)
 XS = np.array([0.5, 0.5, 0.5, 2.0, 1.5, 1.5, 1.5, 3.0, 8.0])
 DIR_OUT = cnp.msm.DIR_DATA_SHAME / f'matched_seed{SEED}' / 'noisebest_select'
-TAG_PARAMS_OUT = '_biasshame_noisebest_p0_n1'
 # the 2026-06-03 pick (best of the 1000-mock LH, library units), kept for comparison
 A_OLD_LIB = np.array([2.346482608623328, -1.3433619456637138, -0.226130277108882, 0.5266325796844749, 1.6813773681515105])
 
@@ -229,7 +227,6 @@ def fit():
         print('WARNING: selected amplitudes outside the current priors:', out_of_prior)
     out['selected'] = dict(zip(BIAS_NAMES + NOISE_NAMES, map(float, np.concatenate([sel['b'], sel['A_lib']]))))
     np.save(DIR_OUT / 'fit.npy', out)
-    genp.write_authored_params_fixed(TAG_PARAMS_OUT, out['selected'], param_names=BIAS_NAMES + NOISE_NAMES)
     print(f'Saved {DIR_OUT / "fit.npy"}')
     write_per_density(out)
 

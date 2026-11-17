@@ -5,8 +5,8 @@ test set: bias_dict_shame + noisebest, 10 noise realizations) as an ordinary muc
 so run_inference.py's in-distribution test path loads it (individual realizations, or their mean
 with evaluate_mean: true).
 
-  tag_params_test     = _shamematched_p0_n10          (SHAMe cosmology, fixed)
-  tag_biasparams_test = _biasshame_noisebest_p0_n1    (truth: SHAMe biases + noisebest, library units)
+  tag_params_test     = _shamematched{nbar}_p0_n10          (SHAMe cosmology, fixed)
+  tag_biasparams_test = _biasshame{nbar}_noisebest_p0_n1    (truth: SHAMe biases + noisebest, library units)
   tag_noise_test      = _noisematched                 (eps seeds 40000 + i, same for both phases)
 
 Observation i = pair mean over the 0/pi phases of noise realization i, as the SHAMe test uses the
@@ -14,12 +14,10 @@ pair mean. P_gm is against the '1' operator (map2map matter), as in v2 training.
 132^3 matched grid; the loader normalizes muchisimocks B with n_grid = 128 (load_bispec), so b0 is
 stored times (132/128)^9 to give the same physical B.
 
-Input:  data/data_shame/matched_seed-406168/stats_noisebest.npy (compute_shame_matched_noisebest.py)
-Output: $MUCHISIMOCKS_DATA/{pks,pgms,bispecs}_mlib/..._shamematched_p0_n10_biasshame_noisebest_p0_n1_noisematched/
-        data/params/params_fixed_shamematched_p0_n10.txt
-With --nbar <nbar> (other SHAMe densities): tag_params_test = _shamematched{nbar}_p0_n10,
-tag_biasparams_test = _biasshame{nbar}_noisebest_p0_n1, input stats_noisebest{nbar}.npy
-(compute_shame_matched_noisebest.py --nbar <nbar>).
+{nbar} = --nbar, default the fiducial 0.00022.
+Input:  data/data_shame/matched_seed-406168/stats_noisebest{nbar}.npy (compute_shame_matched_noisebest.py --nbar)
+Output: $MUCHISIMOCKS_DATA/{pks,pgms,bispecs}_mlib/..._shamematched{nbar}_p0_n10_biasshame{nbar}_noisebest_p0_n1_noisematched/
+        data/params/params_fixed_shamematched{nbar}_p0_n10.txt
 Run with code_auxiliary/env_v2.sh sourced (seconds; login node is fine):  python make_shame_matched_testset.py [--nbar 0.00011]
 """
 import os
@@ -37,12 +35,12 @@ import data_loader
 import make_shame_matched_mock as msm
 
 SEED = -406168
-NBAR = sys.argv[sys.argv.index('--nbar') + 1] if '--nbar' in sys.argv else None
-TAG_PARAMS = f'_shamematched{NBAR}_p0_n10' if NBAR else '_shamematched_p0_n10'
-TAG_BIASPARAMS = f'_biasshame{NBAR}_noisebest_p0_n1' if NBAR else '_biasshame_noisebest_p0_n1'
+NBAR = sys.argv[sys.argv.index('--nbar') + 1] if '--nbar' in sys.argv else '0.00022'  # fiducial density
+TAG_PARAMS = f'_shamematched{NBAR}_p0_n10'
+TAG_BIASPARAMS = f'_biasshame{NBAR}_noisebest_p0_n1'
 TAG_NOISE = '_noisematched'
 N_GRID_LOADER = 128            # data_loader.load_bispec(..., n_grid=128) for muchisimocks
-FN_IN = msm.DIR_DATA_SHAME / f'matched_seed{SEED}' / (f'stats_noisebest{NBAR}.npy' if NBAR else 'stats_noisebest.npy')
+FN_IN = msm.DIR_DATA_SHAME / f'matched_seed{SEED}' / f'stats_noisebest{NBAR}.npy'
 DIR_PARAMS = HERE.parent / 'data' / 'params'
 
 

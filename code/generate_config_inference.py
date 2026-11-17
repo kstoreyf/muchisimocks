@@ -25,9 +25,11 @@ SWEEP_MASKS = {"pk": "_kp0.37", "bispec": "_kb0.24", "pgm": "_kpgm0.24"}
 FIDUCIAL_MASKS = dict(SWEEP_MASKS)
 # v2 test cosmology/IC sets (own IC seeds; v1 _coverage/_shame shared phases with training).
 TAG_PARAMS_COVERAGE = "_coveragev2_p5_n1000"
-TAG_PARAMS_SHAME = "_shamev2_p0_n1000"
+TAG_PARAMS_SHAME = "_cvshamev2_p0_n1000"  # SHAMe-cosmology cosmic-variance set
 NBAR_TAGS_SHAME = ["_nbar0.00011", "_nbar0.00022", "_nbar0.00054"]  # SHAMe OOD mocks
 TAG_MOCK_SHAME_FIDUCIAL = "_nbar0.00022"
+# truth (SHAMe biases + best-fit noise amplitudes) of the CV set, at the fiducial density
+TAG_BIASPARAMS_SHAME_NOISY = f"_biasshame{TAG_MOCK_SHAME_FIDUCIAL[len('_nbar'):]}_noisebest_p0_n1"
 
 
 def tags_mask_for_sweep(statistics):
@@ -224,11 +226,11 @@ _TEST_SCENARIO_TAGS = {
     },
     "fixed_cosmo_shame_mean": {
         "noiseless": ("_biasshame_p0_n1", None),
-        "noisy": ("_biasshame_noisebest_p0_n1", "_noisefly"),
+        "noisy": (TAG_BIASPARAMS_SHAME_NOISY, "_noisefly"),
     },
     "fixed_cosmo_shame_sample": {
         "noiseless": ("_biasshame_p0_n1", None),
-        "noisy": ("_biasshame_noisebest_p0_n1", "_noisefly"),
+        "noisy": (TAG_BIASPARAMS_SHAME_NOISY, "_noisefly"),
     },
 }
 
