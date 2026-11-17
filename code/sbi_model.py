@@ -190,10 +190,94 @@ def _release_sweep_lock(lock_dir):
         print("wandb: could not remove sweep lock %s: %s" % (lock_dir, e), flush=True)
 
 
+# --- Resumable training: checkpoint every few epochs, stop cleanly before a job deadline -------
+# fit_model trains in chunks of TRAIN_CHUNK_EPOCHS and pickles the sbi inference object (network,
+# optimizer, epoch, best-val state, train/val split) to <out_dir>/TRAIN_CHECKPOINT after each one.
+# If MUCHISIMOCKS_TRAIN_DEADLINE (unix seconds) would be passed by another chunk, it stops and
+# sets SBIModel.training_incomplete; run_inference then exits with EXIT_TRAINING_INCOMPLETE and
+# the job requeues itself. A rerun with the same out_dir continues from the checkpoint; in sweep
+# mode the stopped W&B run (state failed/crashed + checkpoint) is resumed under the same run id.
+TRAIN_CHUNK_EPOCHS = 5
+TRAIN_CHECKPOINT = "checkpoint_inference.p"
+TRAIN_INCOMPLETE_MARKER = "training_incomplete.txt"
+TRAIN_CLAIM = "resume_claim.txt"
+TRAIN_MAX_RESUMES = 20
+EXIT_TRAINING_INCOMPLETE = 3
+_RESUMABLE_STATES = {"crashed", "failed", "killed", "preempted", "preempting"}
+
+
+def _train_deadline():
+    raw = os.environ.get("MUCHISIMOCKS_TRAIN_DEADLINE", "").strip()
+    return float(raw) if raw else None
+
+
+def _atomic_pickle(obj, fn):
+    fn_tmp = f"{fn}.tmp{os.getpid()}"
+    with open(fn_tmp, "wb") as f:
+        pickle.dump(obj, f)
+    os.replace(fn_tmp, fn)
+
+
+def _job_id():
+    jid = os.environ.get("SLURM_ARRAY_JOB_ID")
+    if jid and os.environ.get("SLURM_ARRAY_TASK_ID"):
+        return f"{jid}_{os.environ['SLURM_ARRAY_TASK_ID']}"
+    return os.environ.get("SLURM_JOB_ID", f"pid{os.getpid()}")
+
+
+def _claim_is_live(fn_claim):
+    """A resume claim is live if it names another Slurm job that is still queued/running."""
+    try:
+        owner = pathlib.Path(fn_claim).read_text().strip()
+    except OSError:
+        return False
+    if not owner or owner == _job_id() or owner.startswith("pid"):
+        return False
+    try:
+        import subprocess
+        out = subprocess.run(["squeue", "-h", "-j", owner, "-o", "%T"],
+                             capture_output=True, text=True, timeout=60).stdout.strip()
+    except Exception:
+        return True  # can't tell: don't steal it
+    return bool(out)
+
+
+def _is_resumable_run_dir(run_dir):
+    """Run dir holds a training checkpoint, isn't claimed by a live job, and has resumes left."""
+    run_dir = pathlib.Path(run_dir)
+    if not (run_dir / TRAIN_CHECKPOINT).is_file() or (run_dir / "inference.p").is_file():
+        return False
+    if _claim_is_live(run_dir / TRAIN_CLAIM):
+        return False
+    try:
+        with open(run_dir / TRAIN_CHECKPOINT, "rb") as f:
+            n_resumes = int(pickle.load(f).get("n_resumes", 0))
+    except Exception as e:
+        print("checkpoint %s unreadable (%s); not resumable" % (run_dir, e), flush=True)
+        return False
+    return n_resumes < TRAIN_MAX_RESUMES
+
+
+def _claim_resumable_run(sweep_api_path, dir_sbi):
+    """Pick a stopped sweep run with a usable checkpoint and claim it for this job (call under the
+    sweep lock). Returns the run id or None."""
+    api = wandb.Api()
+    sweep = api.sweep(sweep_api_path)
+    for run in sweep.runs:
+        if str(getattr(run, "state", "")).lower() not in _RESUMABLE_STATES:
+            continue
+        run_dir = pathlib.Path(dir_sbi) / str(run.id)
+        if _is_resumable_run_dir(run_dir):
+            (run_dir / TRAIN_CLAIM).write_text(_job_id() + "\n")
+            return str(run.id)
+    return None
+
+
 def _retire_crashed_runs_in_sweep(sweep_api_path, dir_sbi):
     """
-    Record, then remove from the sweep, runs that crashed/failed/were killed (e.g. hit the job
-    wall time), so the sweep can draw a replacement (crashed runs count against ``run_cap``).
+    Record, then remove from the sweep, runs that crashed/failed/were killed WITHOUT a training
+    checkpoint (those with one are resumed instead), so the sweep can draw a replacement (crashed
+    runs count against ``run_cap``).
 
     Each one is appended to ``dir_sbi/killed_trials.csv`` (hyperparameters, state, runtime) and its
     local run dir moved to ``dir_sbi/killed_trials/<run_id>/``, so trials that were too slow to
@@ -201,14 +285,17 @@ def _retire_crashed_runs_in_sweep(sweep_api_path, dir_sbi):
     """
     api = wandb.Api()
     sweep = api.sweep(sweep_api_path)
+    root = pathlib.Path(dir_sbi)
     to_remove = [
         r
         for r in sweep.runs
-        if str(getattr(r, "state", "")).lower() in {"crashed", "failed", "killed"}
+        if str(getattr(r, "state", "")).lower() in _RESUMABLE_STATES
+        # a stopped run with a checkpoint is resumed, not retired (unless claimed by a live job,
+        # in which case it is being resumed right now)
+        and not (root / str(r.id) / TRAIN_CHECKPOINT).is_file()
     ]
     if not to_remove:
         return
-    root = pathlib.Path(dir_sbi)
     killed_dir = root / "killed_trials"
     fn_log = root / "killed_trials.csv"
     cols = ["run_id", "state", "created_at", "runtime_h", *_WANDB_SWEEP_PARAMETER_KEYS, "sweep"]
@@ -685,7 +772,8 @@ class SBIModel():
         print("sweep name:", self.sweep_name)
         print("dir_sbi:", self.dir_sbi)
         
-        project_name = 'muchisimocks-sbi'
+        project_name = os.environ.get("MUCHISIMOCKS_WANDB_PROJECT", "muchisimocks-sbi")
+        self.training_incomplete = False
         
         if self.run_mode == 'sweep':
             if self.sweep_num_runs is None:
@@ -731,12 +819,14 @@ class SBIModel():
                         sweep_api_path
                     )
                     _retire_crashed_runs_in_sweep(sweep_api_path, self.dir_sbi)
+                    resume_run_id = _claim_resumable_run(sweep_api_path, self.dir_sbi)
                     print(
                         "wandb sweep resume: path=%s target_total_finished_runs=%s"
                         % (sweep_api_path, self.sweep_num_runs),
                         flush=True,
                     )
                 else:
+                    resume_run_id = None
                     sweep_id = wandb.sweep(sweep_config, project=project_name)
                     api = wandb.Api()
                     agent_entity = api.default_entity
@@ -766,7 +856,23 @@ class SBIModel():
             else:
                 _delete_orphaned_local_sweep_run_dirs(self.dir_sbi, sweep_api_path)
 
+            if resume_run_id is not None:
+                # Continue a trial that stopped before its job deadline (or was killed) from its
+                # checkpoint, under the same W&B run id, instead of drawing a new trial.
+                print("wandb: resuming stopped sweep run %s from its checkpoint" % resume_run_id,
+                      flush=True)
+                run_dir = os.path.join(self.dir_sbi, resume_run_id)
+                wandb.init(project=agent_project, entity=agent_entity, id=resume_run_id,
+                           resume="must")
+                self._fit_and_log_wandb_trial(wandb.config, run_dir)
+                return
+
             n_finished = _wandb_count_finished_success_runs(sweep_api_path)
+            n_total = len(wandb.Api().sweep(sweep_api_path).runs)
+            if n_total >= int(self.sweep_num_runs):
+                print("wandb: sweep already has %d/%d runs (%d finished) and none to resume; "
+                      "nothing to do" % (n_total, self.sweep_num_runs, n_finished), flush=True)
+                return
             remaining = max(0, int(self.sweep_num_runs) - n_finished)
             per_agent = _env_int("MUCHISIMOCKS_SWEEP_RUNS_PER_AGENT")
             if per_agent is not None:
@@ -801,11 +907,7 @@ class SBIModel():
                     'model_type': 'maf',
                     'validation_fraction': validation_fraction,
                 })
-                run_dir = os.path.join(self.dir_sbi, wandb.run.id)
-                self.fit_model(wandb.config, save_model=True, save_dir=run_dir)
-                artifact = wandb.Artifact(name=f"sbi-posterior-{wandb.run.id}", type="model")
-                artifact.add_dir(local_path=run_dir)
-                wandb.run.log_artifact(artifact)
+                self._fit_and_log_wandb_trial(wandb.config, os.path.join(self.dir_sbi, wandb.run.id))
 
             wandb.agent(
                 sweep_id,
@@ -899,7 +1001,7 @@ class SBIModel():
                     name="retrain-besthp-%s" % best_run_id,
                 )
                 self.fit_model(cfg, save_model=True)
-                wandb.finish()
+                wandb.finish(exit_code=EXIT_TRAINING_INCOMPLETE if self.training_incomplete else 0)
 
         elif self.run_mode == 'single':
             print(
@@ -920,7 +1022,7 @@ class SBIModel():
             }
             wandb.init(project=project_name, config=config)
             self.fit_model(wandb.config, save_model=True)
-            wandb.finish()
+            wandb.finish(exit_code=EXIT_TRAINING_INCOMPLETE if self.training_incomplete else 0)
 
         elif self.run_mode == 'load':
             self.load_posterior()
@@ -928,6 +1030,24 @@ class SBIModel():
         else:
             raise ValueError(f"run_mode {self.run_mode} not recognized")
             
+    def _fit_and_log_wandb_trial(self, config, run_dir):
+        """Train one sweep trial into ``run_dir`` (resuming its checkpoint if there is one). If it
+        stops before the job deadline, end the W&B run as failed (exit code
+        EXIT_TRAINING_INCOMPLETE) so the next job resumes it; else log the model artifact."""
+        try:
+            self.fit_model(config, save_model=True, save_dir=run_dir)
+        finally:
+            fn_claim = os.path.join(run_dir, TRAIN_CLAIM)
+            if os.path.exists(fn_claim):
+                os.remove(fn_claim)
+        if self.training_incomplete:
+            wandb.finish(exit_code=EXIT_TRAINING_INCOMPLETE)
+            return
+        artifact = wandb.Artifact(name=f"sbi-posterior-{wandb.run.id}", type="model")
+        artifact.add_dir(local_path=run_dir)
+        wandb.run.log_artifact(artifact)
+        wandb.finish()
+
     def fit_model(self, config, save_model=True, save_dir=None):
         """
         Fit the SBI model using the specified configuration.
@@ -935,7 +1055,7 @@ class SBIModel():
         If save_dir is provided, save to that directory instead of self.dir_sbi
         (used for sweep runs so each run gets its own subdirectory).
         """
-        
+
         print(f"Fitting model for dir_sbi={self.dir_sbi}, run_mode={self.run_mode}, sweep_name={self.sweep_name}")
         print("wandb.config:", config)
 
@@ -946,7 +1066,7 @@ class SBIModel():
             torch.set_num_threads(self.n_threads)  # Use multiple CPU threads
         elif device == "cuda":
             print(f"Using GPU with {torch.cuda.device_count()} devices")
-        
+
         # get prior
         l_bounds = np.array([self.dict_bounds[pn][0] for pn in self.param_names])
         u_bounds = np.array([self.dict_bounds[pn][1] for pn in self.param_names])
@@ -962,7 +1082,7 @@ class SBIModel():
 
         print(self.dict_bounds)
         print("Setting up inference")
-        
+
         # Pull hyperparameters from config
         learning_rate = config.learning_rate
         training_batch_size = config.training_batch_size
@@ -980,10 +1100,28 @@ class SBIModel():
         validation_fraction = float(getattr(config, "validation_fraction", 0.1))
         print("theta_train shape:", self.theta_train.shape)
         print(f"validation_fraction (sbi internal split): {validation_fraction}")
-        
+
+        out_dir = save_dir if save_dir is not None else self.dir_sbi
+        os.makedirs(out_dir, exist_ok=True)
+        fn_ckpt = f"{out_dir}/{TRAIN_CHECKPOINT}"
+        config_dict = _training_config_to_plain_dict(config)
+        self.training_incomplete = False
+        ckpt = None
+        if os.path.exists(fn_ckpt):
+            with open(fn_ckpt, "rb") as f:
+                ckpt = pickle.load(f)
+            hp_ckpt = {k: ckpt["config"].get(k) for k in _WANDB_SWEEP_PARAMETER_KEYS}
+            hp_now = {k: config_dict.get(k) for k in _WANDB_SWEEP_PARAMETER_KEYS}
+            assert hp_ckpt == hp_now, f"checkpoint {fn_ckpt} has hyperparameters {hp_ckpt}, not {hp_now}"
+            assert int(ckpt.get("seed", 0)) == self.seed, f"checkpoint {fn_ckpt} seed != {self.seed}"
+            print(f"Resuming training from {fn_ckpt}: epoch {ckpt['inference'].epoch}, "
+                  f"resume #{ckpt['n_resumes'] + 1}", flush=True)
+
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
-        if self.groups_train is not None:
+        if ckpt is not None:
+            inference = ckpt["inference"]
+        elif self.groups_train is not None:
             assert len(self.groups_train) == len(self.theta_train), "groups_train must match theta_train rows"
             val_indices = grouped_val_indices(self.groups_train, validation_fraction)
             print(f"Validation split by cosmology: {len(np.unique(self.groups_train[val_indices]))} of "
@@ -994,21 +1132,48 @@ class SBIModel():
             print("WARNING: no groups_train given; sbi splits validation by random rows "
                   "(rows of one cosmology can land in both train and val)")
             inference = NPE(prior=prior, density_estimator=density_estimator_build_fun)
-        inference = inference.append_simulations(
-            torch.tensor(self.theta_train, dtype=torch.float32),
-            torch.tensor(self.y_train, dtype=torch.float32),
-            )
-        
+        if ckpt is None:
+            inference = inference.append_simulations(
+                torch.tensor(self.theta_train, dtype=torch.float32),
+                torch.tensor(self.y_train, dtype=torch.float32),
+                )
+
         print(f"Training with {self.n_threads} threads")
         start = time.time()
 
-        density_estimator = inference.train(
-            max_num_epochs=max_epochs,
-            training_batch_size=training_batch_size,
-            validation_fraction=validation_fraction,
-            learning_rate=learning_rate,
-            show_train_summary=True,
-        )
+        # Train in chunks; checkpoint after each; stop before the job deadline (see TRAIN_CHECKPOINT).
+        deadline = _train_deadline()
+        n_resumes = 0 if ckpt is None else int(ckpt["n_resumes"]) + 1
+        resume = ckpt is not None
+        while True:
+            t_chunk = time.time()
+            epoch_target = min(max_epochs, (inference.epoch if resume else 0) + TRAIN_CHUNK_EPOCHS)
+            density_estimator = inference.train(
+                max_num_epochs=epoch_target,
+                training_batch_size=training_batch_size,
+                validation_fraction=validation_fraction,
+                learning_rate=learning_rate,
+                show_train_summary=False,
+                resume_training=resume,
+            )
+            resume = True
+            # train() exits with epoch == epoch_target + 1 unless it converged (early stopping)
+            done = inference.epoch <= epoch_target or epoch_target >= max_epochs
+            dt_chunk = time.time() - t_chunk
+            print(f"epoch {inference.epoch}: val loss {inference._val_loss:.4f} (best "
+                  f"{inference._best_val_loss:.4f}, {inference._epochs_since_last_improvement} since "
+                  f"improvement), chunk {dt_chunk / 60:.1f} min", flush=True)
+            if done:
+                break
+            _atomic_pickle({"inference": inference, "config": config_dict, "seed": self.seed,
+                            "n_resumes": n_resumes}, fn_ckpt)
+            if deadline is not None and time.time() + 1.5 * dt_chunk + 600 > deadline:
+                with open(f"{out_dir}/{TRAIN_INCOMPLETE_MARKER}", "w") as f:
+                    f.write(f"stopped at epoch {inference.epoch} before deadline {deadline:.0f}\n")
+                print(f"Stopping before the job deadline at epoch {inference.epoch}; checkpoint "
+                      f"{fn_ckpt} (rerun to resume)", flush=True)
+                self.training_incomplete = True
+                return
         # sbi reloads best-val weights inside the training loop only when early stopping
         # triggers; if we stop because max_num_epochs is hit first, weights can still be
         # from the last epoch. Always restore the best checkpoint (no-op if already loaded).
@@ -1017,6 +1182,9 @@ class SBIModel():
             inference._neural_net.load_state_dict(best_sd)
             # train() returns a deepcopy made before this reload; build_posterior uses that copy
             density_estimator.load_state_dict(best_sd)
+        for fn in (fn_ckpt, f"{out_dir}/{TRAIN_INCOMPLETE_MARKER}", f"{out_dir}/{TRAIN_CLAIM}"):
+            if os.path.exists(fn):
+                os.remove(fn)
         print("Trained!")
         end = time.time()
         print(f"Training time: {end - start:.2f}s = {(end - start) / 60:.2f} min (max_epochs={max_epochs}, n_threads={self.n_threads})")
@@ -1033,12 +1201,10 @@ class SBIModel():
             val_series = train_log.get("validation_loss")
             if val_series:
                 wandb.log({"best_validation_loss": float(min(val_series))})
-        
+
         print("Building posterior")
         self.posterior = inference.build_posterior(density_estimator)
         print(self.posterior)
-
-        out_dir = save_dir if save_dir is not None else self.dir_sbi
 
         # save model if requested (e.g., for best model from sweep or single run)
         if save_model:
@@ -1055,12 +1221,11 @@ class SBIModel():
                 pickle.dump(inference, f)
             with open(f"{out_dir}/param_names.txt", "w") as f:
                 np.savetxt(f, self.param_names, fmt="%s")
-            config_dict = _training_config_to_plain_dict(config)
             with open(f"{out_dir}/config.pkl", "wb") as f:
                 pickle.dump(config_dict, f)
             print(f"Saved model to {out_dir}")
 
-            
+
     def load_posterior(self):
         fn_posterior = f'{self.dir_sbi}/posterior.p'
         assert os.path.exists(fn_posterior), f"posterior.p not found in {self.dir_sbi}"

@@ -331,6 +331,10 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
                 seed=int(config.get("seed", 0)),
                 )
     sbi_network.run(max_epochs=2000)
+    if sbi_network.training_incomplete:
+        # stopped before MUCHISIMOCKS_TRAIN_DEADLINE with a checkpoint; the job requeues itself
+        print(f"Training incomplete (checkpointed); exiting with code {sbi_model.EXIT_TRAINING_INCOMPLETE}")
+        sys.exit(sbi_model.EXIT_TRAINING_INCOMPLETE)
     #sbi_network.run(max_epochs=10)
 
 
