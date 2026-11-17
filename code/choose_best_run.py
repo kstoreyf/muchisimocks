@@ -7,17 +7,18 @@ is exhausted.
 
 Each candidate run must pass **both** smoke tests (same ``--batch-timeout-seconds``):
 
-1. **Coverage** — first ``--stall-batch-size`` rows; ``--n-samples`` (default 20).
-2. **SHAMe OOD** — single mock at ``--shame-tag-mock`` (default ``_nbar0.00022``); ``--n-samples-shame`` (default 100).
-   Pass ``--n-samples-shame 0`` to skip SHAMe entirely (coverage-only stall test).
+1. **Coverage** — first ``--stall-batch-size`` rows; ``--n-samples`` (default 30).
+2. **SHAMe OOD** — single mock at ``--shame-tag-mock`` (default ``_nbar0.00022``); ``--n-samples-shame``
+   (default 0 = skip SHAMe, coverage-only stall test).
 
 ``pass_stall_test`` in the log is ``true`` only when all enabled component columns are ``true``.
 
-Use ``--tags_stat`` like ``_pk_bispec`` (leading ``_`` optional). Masking is chosen
-automatically: fiducial empty ``''`` per statistic, except ``_kb0.25`` on ``bispec``
-when that statistic is present.
+Use ``--tags_stat`` like ``_pk_bispec`` (leading ``_`` optional). Masks default to
+``generate_config_inference.FIDUCIAL_MASKS`` (override with ``--tags-mask``).
 
 Use ``--overwrite`` to discard resume data in ``best_run_log.csv`` and re-run stall tests.
+Always pass it once the sweep has finished: without it, picks made mid-sweep are kept even
+when later trials rank higher.
 
 Requires PyTorch and sbi. Run from repo root: ``python code/choose_best_run.py``.
 """
@@ -213,6 +214,8 @@ def _rank_run_dirs(
         ls = loss_summary(losses) if losses else {}
         m = ls.get("min_validation_loss")
         m_float = float(m) if m is not None else None
+        if m_float is not None and not np.isfinite(m_float):
+            m_float = None  # diverged run: rank last (NaN would make the sort order arbitrary)
         scored.append((rd, m_float, ls))
     scored.sort(
         key=lambda t: (
@@ -577,7 +580,7 @@ def parse_args() -> argparse.Namespace:
         "--n-samples-shame",
         type=int,
         default=0,
-        help="Posterior samples for the SHAMe OOD stall test (default 1000; 0 = skip SHAMe)",
+        help="Posterior samples for the SHAMe OOD stall test (default 0 = skip SHAMe)",
     )
     p.add_argument(
         "--n-passing",
@@ -599,7 +602,7 @@ def parse_args() -> argparse.Namespace:
         "--tags_stat",
         required=True,
         metavar="TAGS",
-        help="Statistics tag, e.g. _pk_bispec or _pk (masks set automatically; bispec → _kb0.25)",
+        help="Statistics tag, e.g. _pk_bispec or _pk (masks default to FIDUCIAL_MASKS)",
     )
     p.add_argument(
         "--tags-mask",
@@ -663,8 +666,10 @@ def process_one_combo(
     print("%s | %s | %s" % (noise_mode, tags_stat_display, sweep_root), flush=True)
 
     if not ranked:
-        print("  No runs with inference.p — skip.", flush=True)
-        return
+        # Loud: a wrong DIR_RESULTS (e.g. env_v2.sh not sourced) would otherwise exit 0 silently.
+        raise FileNotFoundError(
+            "No sweep runs with inference.p under %s (is MUCHISIMOCKS_RESULTS set, e.g. via "
+            "code_auxiliary/env_v2.sh, and has the sweep finished any trial?)" % sweep_root)
 
     if args.overwrite:
         saved = {}

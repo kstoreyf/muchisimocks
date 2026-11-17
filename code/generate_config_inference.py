@@ -126,15 +126,24 @@ def _tag_inf_train_for_test(
     tag_sweep: str | None,
     nth_best_run: int | None,
     use_retrained_nbest: bool = False,
+    seed: int = 0,
 ) -> str:
+    """``tag_inf`` of the trained model a test config evaluates (matches generate_train_config)."""
     if tag_sweep is None:
-        return base_inf_train
+        return base_inf_train + _seed_suffix(seed)
     if nth_best_run is None:
-        return base_inf_train + f"_best{tag_sweep}"
+        return base_inf_train + f"_best{tag_sweep}" + _seed_suffix(seed)
     if use_retrained_nbest:
-        return base_inf_train + f"_best{tag_sweep}_nbest{nth_best_run}"
+        return base_inf_train + f"_best{tag_sweep}_nbest{nth_best_run}" + _seed_suffix(seed)
+    # the sweep trial's own checkpoint, which was trained with seed 0
+    assert int(seed) == 0, "seed != 0 needs a retrained model (use_retrained_nbest=True)"
     d = paths.DIR_RESULTS / "results_sbi" / ("sbi" + sweep_name)
     return f"{sweep_name}/{nth_passing_run_id(d, nth_best_run)}"
+
+
+def _seed_suffix(seed: int) -> str:
+    """Tag suffix for a retrain with a non-default training seed (seed 0 = the sweep's seed)."""
+    return f"_seed{int(seed)}" if int(seed) != 0 else ""
 
 
 def build_config_tag_test(
@@ -250,7 +259,8 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
                           reparameterize=True,
                           run_mode="single",
                           tag_sweep=None,
-                          nth_best_run: int | None = None):
+                          nth_best_run: int | None = None,
+                          seed: int = 0):
     """
     Generates a YAML configuration file for training.
 
@@ -265,7 +275,11 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
 
     ``nth_best_run``: if set, ``tag_inf`` is ``_best{tag_sweep}_nbest{n}`` and
     training uses line ``n`` of the sweep's ``best_runs.txt`` (not ``best_run.txt``).
+
+    ``seed``: training seed; non-zero appends ``_seed{seed}`` to ``tag_inf`` (and always retrains
+    in best mode, since sweep trials use seed 0).
     """
+    assert not (run_mode == "sweep" and int(seed) != 0), "sweep trials use seed 0"
     # bx is bias parameters per cosmo (1x, 2x, 4x, 8x, 16x, 32x)
     tags_mask = [""] * len(statistics) if tags_mask is None else list(tags_mask)
     assert len(tags_mask) == len(statistics), (
@@ -292,10 +306,11 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
         tag_inf = base_inf + f'_best{tag_sweep}'
         if nth_best_run is not None:
             tag_inf = f'{tag_inf}_nbest{int(nth_best_run)}'
+        tag_inf += _seed_suffix(seed)
         sweep_name = build_sweep_name(data_mode, statistics, tag_params, tag_biasparams, tag_noise,
                                       reparameterize, tag_sweep)
     else:  # single
-        tag_inf = base_inf
+        tag_inf = base_inf + _seed_suffix(seed)
         sweep_name = None
 
     config = {
@@ -316,6 +331,8 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
     }
     if nth_best_run is not None:
         config["nth_best_run"] = int(nth_best_run)
+    if int(seed) != 0:
+        config["seed"] = int(seed)
     if run_mode == "sweep":
         config["wandb_sweep_id"] = None
         config["sweep_num_runs"] = SWEEP_NUM_RUNS
@@ -354,7 +371,8 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                          tag_params_test=TAG_PARAMS_SHAME,
                          tag_biasparams_test="_biasshame_p0_n1",
                          tag_noise_test=None,
-                         use_retrained_nbest: bool = False):
+                         use_retrained_nbest: bool = False,
+                         seed: int = 0):
     """
     Generates a YAML configuration file for testing.
 
@@ -393,7 +411,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     )
     tag_inf_train = _tag_inf_train_for_test(
         base_inf_train, sweep_name, tag_sweep, nth_best_run,
-        use_retrained_nbest=use_retrained_nbest,
+        use_retrained_nbest=use_retrained_nbest, seed=seed,
     )
 
     tag_test = build_config_tag_test(
@@ -423,6 +441,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         "tag_sweep": tag_sweep,
         "nth_best_run": nth_best_run,
         "use_retrained_nbest": use_retrained_nbest,
+        "seed": int(seed),
         "evaluate_mean": evaluate_mean,
         "idxs_obs": idxs_obs,
         "tag_data_train": tag_data_train,
@@ -465,7 +484,8 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
                              evaluate_mean=False,
                              data_mode_test="shame",
                              tag_mock="_nbar0.00022",
-                             use_retrained_nbest: bool = False):
+                             use_retrained_nbest: bool = False,
+                             seed: int = 0):
     """
     Generates a YAML configuration file for OOD testing.
     """
@@ -489,7 +509,7 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
     )
     tag_inf_train = _tag_inf_train_for_test(
         base_inf_train, sweep_name, tag_sweep, nth_best_run,
-        use_retrained_nbest=use_retrained_nbest,
+        use_retrained_nbest=use_retrained_nbest, seed=seed,
     )
 
     ### test tags
@@ -519,6 +539,7 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         "tag_sweep": tag_sweep,
         "nth_best_run": nth_best_run,
         "use_retrained_nbest": use_retrained_nbest,
+        "seed": int(seed),
         "evaluate_mean": evaluate_mean,
         "idxs_obs": idxs_obs,
         "tag_data_train": tag_data_train,
@@ -617,6 +638,8 @@ def main():
     mode = "train"  # "train" | "test"
     run_mode = "sweep"  # train only: "sweep" | "best"
     nth_best_run = None  # best / test: line of the sweep's best_runs.txt (None = top run)
+    seed = 0  # best / test: training seed of the retrain (0 = the sweep's seed; tests then need
+              # use_retrained_nbest when nth_best_run is set)
     test_names = ["coverage", "fixed_cosmo_shame_mean", "ood"]
     n_train, bx = N_TRAIN_SWEEP, BX_SWEEP
 
@@ -627,7 +650,7 @@ def main():
             generate_train_config(
                 overwrite=overwrite, statistics=list(statistics), tags_mask=tags_mask,
                 n_train=n_train, bx=bx, run_mode=run_mode, tag_sweep=TAG_SWEEP,
-                nth_best_run=nth_best_run, **train_kw,
+                nth_best_run=nth_best_run, seed=seed, **train_kw,
             )
         elif mode == "test":
             for test_name in test_names:
@@ -635,6 +658,7 @@ def main():
                     test_name, tag_params=tag_params_train, noise_mode=noise_mode,
                     overwrite=overwrite, statistics=list(statistics), n_train=n_train, bx=bx,
                     tags_mask=tags_mask, tag_sweep=TAG_SWEEP, nth_best_run=nth_best_run,
+                    seed=seed,
                 )
         else:
             raise ValueError(f"mode={mode!r}")

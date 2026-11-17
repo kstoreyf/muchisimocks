@@ -39,17 +39,25 @@ def load_data(data_mode, statistics, tag_params, tag_biasparams,
     if len(tags_mask) != len(statistics):
         raise ValueError(f"Expected tags_mask length {len(statistics)}, got {len(tags_mask)}.")
 
+    idxs_params = None
     for i_stat, statistic in enumerate(statistics):
-        # idxs_params should be the same for all so will just grab last one
         if data_mode == 'muchisimocks':
-            k_i, y_i, y_err_i, idxs_params = load_data_muchisimocks(statistic,
-                                            tag_params, tag_biasparams, 
+            k_i, y_i, y_err_i, idxs_params_i = load_data_muchisimocks(statistic,
+                                            tag_params, tag_biasparams,
                                             tag_noise=tag_noise,
                                             bx=bx, n_cosmo_max=n_cosmo_max,
                                             cosmo_indices=cosmo_indices,
                                             **kwargs)
         else:
             raise ValueError(f"Data mode {data_mode} not recognized!")
+        # Every statistic must have the same (cosmology, bias) rows in the same order; otherwise
+        # e.g. a cosmology missing from bispec only would pair pk and bispec across cosmologies.
+        if idxs_params is None:
+            idxs_params = idxs_params_i
+        elif not np.array_equal(idxs_params_i, idxs_params):
+            raise ValueError(
+                f"{statistic} rows don't match {statistics[0]} rows ({len(idxs_params_i)} vs "
+                f"{len(idxs_params)}); is a statistic still being computed / missing mocks?")
         print(f"Loaded {statistic} data with shape {y_i.shape}")
         k_i, y_i, y_err_i = mask_data(statistic, tags_mask[i_stat], k_i, y_i, y_err_i)
         print(k_i.shape, y_i.shape, y_err_i.shape)

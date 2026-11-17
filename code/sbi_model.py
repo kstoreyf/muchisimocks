@@ -124,7 +124,7 @@ def _write_wandb_sweep_id_to_yaml(yaml_path, sweep_api_path):
 
 
 _SWEEP_LOCK_STALE_S = 300.0
-_SWEEP_LOCK_WAIT_S = 180.0
+_SWEEP_LOCK_WAIT_S = 900.0  # > stale time, so waiters outlast a dead holder's lock
 
 
 def _env_flag(name):
@@ -190,11 +190,14 @@ def _release_sweep_lock(lock_dir):
         print("wandb: could not remove sweep lock %s: %s" % (lock_dir, e), flush=True)
 
 
-def _delete_crashed_runs_in_sweep(sweep_api_path, dir_sbi=None):
+def _retire_crashed_runs_in_sweep(sweep_api_path, dir_sbi):
     """
-    Delete non-running failed runs in an existing sweep before resuming.
+    Record, then remove from the sweep, runs that crashed/failed/were killed (e.g. hit the job
+    wall time), so the sweep can draw a replacement (crashed runs count against ``run_cap``).
 
-    If ``dir_sbi`` is set, also remove ``dir_sbi/<run_id>/`` for each deleted run.
+    Each one is appended to ``dir_sbi/killed_trials.csv`` (hyperparameters, state, runtime) and its
+    local run dir moved to ``dir_sbi/killed_trials/<run_id>/``, so trials that were too slow to
+    finish stay visible instead of silently dropping out of the sweep.
     """
     api = wandb.Api()
     sweep = api.sweep(sweep_api_path)
@@ -203,26 +206,41 @@ def _delete_crashed_runs_in_sweep(sweep_api_path, dir_sbi=None):
         for r in sweep.runs
         if str(getattr(r, "state", "")).lower() in {"crashed", "failed", "killed"}
     ]
-    n_deleted = 0
-    n_local = 0
-    root = pathlib.Path(dir_sbi) if dir_sbi else None
-    for run in to_remove:
-        rid = run.id
-        try:
-            run.delete()
-        except Exception as e:
-            print("wandb: could not delete crashed run %s: %s" % (rid, e), flush=True)
-            continue
-        n_deleted += 1
-        if root is not None and _WANDB_RUN_ID_DIR_RE.match(str(rid)):
+    if not to_remove:
+        return
+    root = pathlib.Path(dir_sbi)
+    killed_dir = root / "killed_trials"
+    fn_log = root / "killed_trials.csv"
+    cols = ["run_id", "state", "created_at", "runtime_h", *_WANDB_SWEEP_PARAMETER_KEYS, "sweep"]
+    root.mkdir(parents=True, exist_ok=True)
+    new_file = not fn_log.is_file()
+    n_retired = 0
+    with open(fn_log, "a", encoding="utf-8") as f:
+        if new_file:
+            f.write(",".join(cols) + "\n")
+        for run in to_remove:
+            rid = str(run.id)
+            runtime = run.summary.get("_runtime")
+            row = [rid, str(run.state), str(getattr(run, "created_at", "")),
+                   "" if runtime is None else "%.2f" % (float(runtime) / 3600.0),
+                   *[str(run.config.get(k, "")) for k in _WANDB_SWEEP_PARAMETER_KEYS],
+                   sweep_api_path]
+            f.write(",".join(row) + "\n")
+            f.flush()
             p = root / rid
-            if p.is_dir():
-                shutil.rmtree(p)
-                n_local += 1
-    print(
-        "wandb: deleted %s crashed/failed/killed runs from %s (local run dirs removed: %s)"
-        % (n_deleted, sweep_api_path, n_local if root is not None else "n/a")
-    )
+            if _WANDB_RUN_ID_DIR_RE.match(rid) and p.is_dir():
+                killed_dir.mkdir(exist_ok=True)
+                shutil.move(str(p), str(killed_dir / rid))
+            try:
+                run.delete()
+            except Exception as e:
+                print("wandb: could not delete crashed run %s: %s" % (rid, e), flush=True)
+                continue
+            n_retired += 1
+            print("wandb: retired %s run %s (%s) -> %s" % (run.state, rid, dict(
+                (k, run.config.get(k)) for k in _WANDB_SWEEP_PARAMETER_KEYS), fn_log), flush=True)
+    print("wandb: retired %d crashed/failed/killed runs from %s (logged in %s)"
+          % (n_retired, sweep_api_path, fn_log), flush=True)
 
 
 def _delete_orphaned_local_sweep_run_dirs(dir_sbi, sweep_api_path):
@@ -712,7 +730,7 @@ class SBIModel():
                     agent_entity, agent_project, sweep_id = _parse_wandb_sweep_api_path(
                         sweep_api_path
                     )
-                    _delete_crashed_runs_in_sweep(sweep_api_path, self.dir_sbi)
+                    _retire_crashed_runs_in_sweep(sweep_api_path, self.dir_sbi)
                     print(
                         "wandb sweep resume: path=%s target_total_finished_runs=%s"
                         % (sweep_api_path, self.sweep_num_runs),
@@ -1086,9 +1104,12 @@ class SBIModel():
             print(f"min and max after scaling (func={func_scaler_y}): {np.min(y_train_i):3f}, {np.max(y_train_i):3f}")
             
             # save scaler - need pickle for custom object!!
+            # atomic: parallel sweep agents rewrite these while finished trials copy them
             fn_scaler_y = f'{self.dir_sbi}/scaler_y_{statistic}.p'
-            with open(fn_scaler_y, "wb") as f:
+            fn_tmp = f'{fn_scaler_y}.tmp{os.getpid()}'
+            with open(fn_tmp, "wb") as f:
                 pickle.dump(scaler_y, f)
+            os.replace(fn_tmp, fn_scaler_y)
                 
         if self.y_test_unscaled is not None:
             print(f"y_test shape: {self.y_test.shape}")

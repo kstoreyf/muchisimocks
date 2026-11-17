@@ -23,6 +23,7 @@ from generate_config_inference import (
     BX_SWEEP,
     N_TRAIN_SWEEP,
     SWEEP_NUM_RUNS,
+    build_sweep_name,
     tags_mask_for_sweep,
 )
 
@@ -284,30 +285,27 @@ def train_likefree_inference(config, overwrite=False, config_yaml_path=None):
         
     ### Run inference (now only sbi)
     print("tag_inf (SBI):", tag_inf)
-    # run_mode best: copy the sweep trial's posterior only if bx/n_train AND tags_mask match the
-    # (fiducial) sweep; otherwise retrain with its hyperparameters on this config's data.
+    # run_mode best: copy the sweep trial's posterior only if this config would train exactly the
+    # model the sweep trained (same data, cuts, bx/n_train, seed 0, default parameter set);
+    # otherwise retrain with its hyperparameters on this config's data.
+    seed = int(config.get("seed", 0))
     sweep_tags_mask = tags_mask_for_sweep(statistics)
-    mask_matches_sweep = list(tags_mask) == list(sweep_tags_mask)
-    matches_sweep_model = (
-        bx is not None
-        and int(bx) == BX_SWEEP
-        and int(n_train) == N_TRAIN_SWEEP
-        and mask_matches_sweep
-    )
+    own_sweep_name = build_sweep_name(data_mode, statistics, tag_params, tag_biasparams, tag_noise,
+                                      reparameterize, config.get("tag_sweep"))
+    copy_checks = {
+        "bx": bx is not None and int(bx) == BX_SWEEP,
+        "n_train": int(n_train) == N_TRAIN_SWEEP,
+        "tags_mask": list(tags_mask) == list(sweep_tags_mask),
+        "sweep_data": sweep_name == own_sweep_name,  # sweep was trained on this config's data
+        "seed": seed == 0,  # sweep trials use seed 0
+        "params": plite == reparameterize and not exclude_noise,  # sweep's default parameter set
+    }
+    matches_sweep_model = all(copy_checks.values())
     if run_mode == "best":
         print(
-            "run_mode=best: tags_mask=%s | fiducial sweep masks=%s | mask_matches_sweep=%s"
-            % (tags_mask, sweep_tags_mask, mask_matches_sweep),
-            flush=True,
-        )
-        print(
-            "run_mode=best: matches_sweep_model=%s (if True: copy sweep posterior; if False: retrain with best hparams)"
-            % matches_sweep_model,
-            flush=True,
-        )
-        print(
-            "run_mode=best: bx/n_train=%s/%s (sweep fiducial %s/%s)"
-            % (bx, n_train, BX_SWEEP, N_TRAIN_SWEEP),
+            "run_mode=best: matches_sweep_model=%s (True: copy sweep posterior; False: retrain with "
+            "best hparams); checks=%s; sweep_name=%s; own sweep name=%s"
+            % (matches_sweep_model, copy_checks, sweep_name, own_sweep_name),
             flush=True,
         )
 
