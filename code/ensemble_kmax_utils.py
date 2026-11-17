@@ -22,6 +22,7 @@ import utils_plot
 from choose_best_run import build_sweep_tag_inf
 from generate_config_inference import (
     FIDUCIAL_MASKS,
+    NBAR_TAGS_SHAME,
     build_tag_data,
     resolve_test_scenario_tags,
     resolve_train_tag_bundle,
@@ -66,7 +67,6 @@ K_OVERALL = list(data_loader.K_CUTS) + [data_loader.K_NO_CUT]
 K_PK_FIXED_SCALE = [0.31, 0.34, 0.37]
 STAT_ROWS = [["pk"], ["pk", "pgm"], ["pk", "bispec"], ["pk", "bispec", "pgm"]]
 STAT_ROWS_SCALE = [["pk", "pgm"], ["pk", "bispec"], ["pk", "bispec", "pgm"]]
-NBAR_TAGS_SHAME = ["_nbar0.00011", "_nbar0.00022", "_nbar0.00054"]
 N_ENSEMBLE_K = 3
 
 # Fiducial cut for each statistic combo (also where the HP sweep is run, see SWEEP_MASKS).
