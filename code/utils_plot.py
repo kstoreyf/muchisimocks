@@ -51,7 +51,7 @@ color_dict_methods = {'mn': 'blue', 'sbi': 'green', 'emcee': 'purple', 'dynesty'
 label_dict_methods = {'mn': 'Moment Network', 'sbi': 'SBI', 'emcee': 'MCMC (emcee)', 'dynesty': 'MCMC (dynesty)', 'fisher': 'Fisher'}
 labels_pnn = ['$1 1$', '$1 \\delta$', '$1 \\delta^2$', '$1 s^2$', '$ 1 \\nabla^2\\delta$', '$\\delta \\delta$', '$\\delta \\delta^2$', '$\\delta s^2$', '$\\delta \\nabla^2\\delta$', '$\\delta^2 \\delta^2$', '$\\delta^2 s^2$', '$\\delta^2 \\nabla^2\\delta$', '$s^2 s^2$', '$s^2 \\nabla^2\\delta$', '$\\nabla^2\\delta \\nabla^2\\delta$']
 labels_statistics = {'pk': '$P_\\mathrm{gg}(k)$', 'bispec': '$B(k_1,k_2,k_3)$', 'pgm': '$P_\\mathrm{gm}(k)$'}
-color_dict_statistics = {('pk',): '#54afd6', ('bispec',): '#e14e4e', ('pgm',): '#d18b13', ('pk', 'bispec'): '#b0198f', ('pk', 'pgm'): '#327a3c', ('pk', 'bispec', 'pgm'): '#5e2e1f'}
+color_dict_statistics = {('pk',): '#54afd6', ('bispec',): '#e14e4e', ('pgm',): '#d18b13', ('pk', 'bispec'): '#b0198f', ('pk', 'pgm'): '#327a3c', ('pk', 'pgm', 'bispec'): '#5e2e1f'}
 labels_biasparams = {
     '_biaszen_p4_n10000': r'1x $\{b\}$ per cosmo',
     '_biaszen_p4_n50000': r'5x $\{b\}$ per cosmo',

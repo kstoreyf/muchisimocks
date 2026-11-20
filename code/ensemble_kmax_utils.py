@@ -5,8 +5,9 @@ Hyperparameters come from the fiducial sweep (``TAG_SWEEP``) for each statistic 
 top-N hyperparameters are retrained at that mask (``nth_best_run`` from the
 fiducial sweep).
 
-Ensemble member 0 uses the existing ``_best{TAG_SWEEP}`` directory when present;
-members 1..K-1 use ``_best{TAG_SWEEP}_nbest{n}``.
+Ensemble members are ``_best{TAG_SWEEP}{suffix}`` for the suffixes of ``ENSEMBLE_SCHEME``
+(``set_ensemble_scheme``): top-3 hyperparameter settings (``"", _nbest1, _nbest2``) or 3 seeds
+of the top setting (``"", _seed1, _seed2``). Member 0 (top setting, seed 0) is shared.
 """
 
 from __future__ import annotations
@@ -65,9 +66,31 @@ TAGS_KMAX_KB = TAGS_CUTS_KB + [""]
 TAGS_KMAX_KPGM = TAGS_CUTS_KPGM + [""]
 K_OVERALL = list(data_loader.K_CUTS) + [data_loader.K_NO_CUT]
 K_PK_FIXED_SCALE = [0.31, 0.34, 0.37]
-STAT_ROWS = [["pk"], ["pk", "pgm"], ["pk", "bispec"], ["pk", "bispec", "pgm"]]
-STAT_ROWS_SCALE = [["pk", "pgm"], ["pk", "bispec"], ["pk", "bispec", "pgm"]]
+STAT_ROWS = [["pk"], ["pk", "pgm"], ["pk", "bispec"], ["pk", "pgm", "bispec"]]
+STAT_ROWS_SCALE = [["pk", "pgm"], ["pk", "bispec"], ["pk", "pgm", "bispec"]]
 N_ENSEMBLE_K = 3
+# Fiducial ensemble: which K networks are mixed. Switch with set_ensemble_scheme(name).
+ENSEMBLE_SCHEMES = {
+    "top3_settings": ["", "_nbest1", "_nbest2"],   # best_runs.txt lines 0-2, seed 0 each
+    "seeds": ["", "_seed1", "_seed2"],             # top setting, seeds 0-2
+}
+ENSEMBLE_SCHEME = "top3_settings"
+
+
+def set_ensemble_scheme(name: str) -> None:
+    """Choose the fiducial ensemble (a key of ENSEMBLE_SCHEMES); figure caches are keyed on it."""
+    global ENSEMBLE_SCHEME
+    if name not in ENSEMBLE_SCHEMES:
+        raise ValueError(f"unknown ensemble scheme {name!r}; options {list(ENSEMBLE_SCHEMES)}")
+    ENSEMBLE_SCHEME = name
+
+
+def member_suffix(nth: int) -> str:
+    return ENSEMBLE_SCHEMES[ENSEMBLE_SCHEME][nth]
+
+
+def ensemble_cache_tag(k_members: int = N_ENSEMBLE_K) -> str:
+    return f"_ensK{k_members}_{ENSEMBLE_SCHEME}"
 
 # Fiducial cut for each statistic combo (also where the HP sweep is run, see SWEEP_MASKS).
 FIDUCIAL_CONFIGS: list[tuple[list[str], str]] = [
@@ -115,9 +138,9 @@ def iter_scale_bin_configs(
             tags_mask_fixed_kp_scale_sweep(["pk", "bispec"], kp, tag_kb=tag_kb),
         )
         add(
-            ["pk", "bispec", "pgm"],
+            ["pk", "pgm", "bispec"],
             tags_mask_fixed_kp_scale_sweep(
-                ["pk", "bispec", "pgm"], kp, tag_kb=tag_kb,
+                ["pk", "pgm", "bispec"], kp, tag_kb=tag_kb,
             ),
         )
     for tag_kpgm in tags_kpgm:
@@ -126,9 +149,9 @@ def iter_scale_bin_configs(
             tags_mask_fixed_kp_scale_sweep(["pk", "pgm"], kp, tag_kpgm=tag_kpgm),
         )
         add(
-            ["pk", "bispec", "pgm"],
+            ["pk", "pgm", "bispec"],
             tags_mask_fixed_kp_scale_sweep(
-                ["pk", "bispec", "pgm"], kp, tag_kpgm=tag_kpgm,
+                ["pk", "pgm", "bispec"], kp, tag_kpgm=tag_kpgm,
             ),
         )
     return out
@@ -142,7 +165,7 @@ def tags_mask_kp_kb_kpgm(
     """Per-statistic masks for joint ``pk+bispec+pgm`` at fixed ``kp`` with both cuts."""
     if not tag_kb or not tag_kpgm:
         raise ValueError("tag_kb and tag_kpgm must be non-empty for the Cartesian grid")
-    return [data_loader.kcut_tag("pk", kp), tag_kb, tag_kpgm]
+    return [data_loader.kcut_tag("pk", kp), tag_kpgm, tag_kb]
 
 
 def iter_cartesian_bipgm_configs(
@@ -158,7 +181,7 @@ def iter_cartesian_bipgm_configs(
     """
     tags_kb = list(tags_kb if tags_kb is not None else TAGS_CUTS_KB)
     tags_kpgm = list(tags_kpgm if tags_kpgm is not None else TAGS_CUTS_KPGM)
-    statistics = ["pk", "bispec", "pgm"]
+    statistics = ["pk", "pgm", "bispec"]
     out: list[tuple[list[str], str, list[str]]] = []
     for tag_kb in tags_kb:
         for tag_kpgm in tags_kpgm:
@@ -213,7 +236,7 @@ def mask_for_bispec_sweep(
 ) -> str:
     if "bispec" in statistics_row:
         if "pgm" in statistics_row:
-            return f"{tag_kb}{tag_kpgm_fixed}"
+            return f"{tag_kpgm_fixed}{tag_kb}"
         return tag_kb
     return tag_kpgm_fixed
 
@@ -226,7 +249,7 @@ def mask_for_pgm_sweep(
 ) -> str:
     if "pgm" in statistics_row:
         if "bispec" in statistics_row:
-            return f"{tag_kb_fixed}{tag_kpgm}"
+            return f"{tag_kpgm}{tag_kb_fixed}"
         return tag_kpgm
     return tag_kb_fixed
 
@@ -315,9 +338,9 @@ def iter_scale_sweep_fixed_kp_configs(
                 tags_mask_fixed_kp_scale_sweep(["pk", "bispec"], kp, tag_kb=tag_kb),
             )
             add(
-                ["pk", "bispec", "pgm"],
+                ["pk", "pgm", "bispec"],
                 tags_mask_fixed_kp_scale_sweep(
-                    ["pk", "bispec", "pgm"], kp, tag_kb=tag_kb,
+                    ["pk", "pgm", "bispec"], kp, tag_kb=tag_kb,
                 ),
             )
         for tag_kpgm in TAGS_KMAX_KPGM:
@@ -326,9 +349,9 @@ def iter_scale_sweep_fixed_kp_configs(
                 tags_mask_fixed_kp_scale_sweep(["pk", "pgm"], kp, tag_kpgm=tag_kpgm),
             )
             add(
-                ["pk", "bispec", "pgm"],
+                ["pk", "pgm", "bispec"],
                 tags_mask_fixed_kp_scale_sweep(
-                    ["pk", "bispec", "pgm"], kp, tag_kpgm=tag_kpgm,
+                    ["pk", "pgm", "bispec"], kp, tag_kpgm=tag_kpgm,
                 ),
             )
 
@@ -345,10 +368,7 @@ def tag_inf_train(statistics: list[str], tags_mask: list[str], nth: int) -> str:
         train["tag_biasparams"],
         train["tag_noise"],
     )
-    base = f"{tag_data}{TAG_REPARAM}_bx{BX}_ntrain{N_TRAIN}_best{TAG_SWEEP}"
-    if nth == 0:
-        return base
-    return f"{base}_nbest{nth}"
+    return f"{tag_data}{TAG_REPARAM}_bx{BX}_ntrain{N_TRAIN}_best{TAG_SWEEP}{member_suffix(nth)}"
 
 
 def model_dir(statistics: list[str], mask: str, nth: int) -> Path:
@@ -394,6 +414,14 @@ def cvindiv_test_tag(statistics: list[str], mask: str) -> str:
     )[0]
 
 
+def matchedmean_test_tag(statistics: list[str], mask: str, tag_mock: str) -> str:
+    """Phase-matched mock (SHAMe ICs + our forward model) at the n̄ of ``tag_mock``, mean of its 10 noise
+    realizations; bias/noise truth = the SHAMe noise-best fit at that n̄."""
+    nbar = tag_mock[len("_nbar"):]
+    return (f"_{DATA_MODE}_{'_'.join(statistics)}{mask}_shamematched{nbar}_p0_n10"
+            f"_biasshame{nbar}_noisebest_p0_n1_noisematched_mean")
+
+
 def coverage_test_tag(statistics: list[str], mask: str) -> str:
     tag_stats = f"_{'_'.join(statistics)}"
     return utils_plot.setup_test_tags(
@@ -424,6 +452,9 @@ def member_samples_path(
         return d / f"samples_test{tag_test}_pred.npy"
     if test_mode == "cvindiv":
         tag_test = cvindiv_test_tag(statistics, mask)
+        return d / f"samples_test{tag_test}_pred.npy"
+    if test_mode == "matchedmean":
+        tag_test = matchedmean_test_tag(statistics, mask, tag_mock)
         return d / f"samples_test{tag_test}_pred.npy"
     if test_mode == "coverage":
         tag_test = coverage_test_tag(statistics, mask)
@@ -517,7 +548,7 @@ def load_ensemble_member_samples(
 ) -> tuple[np.ndarray | None, list[str]]:
     """Load and mix top-K member sample files. Returns (samples, missing_reasons).
 
-    For 2D / single-obs tests (shame, cvmean): equal-weight 2D mixture of size n_total.
+    For 2D / single-obs tests (shame, cvmean, matchedmean): equal-weight 2D mixture of size n_total.
     For multi-obs 3D tests (coverage, cvindiv): concatenate along the draw axis.
 
     Coverage defaults to ``allow_inprogress=True`` so partial ``*_pred_inprogress.npy``
@@ -538,11 +569,11 @@ def load_ensemble_member_samples(
             miss = member_samples_path(
                 statistics, mask, nth, test_mode=test_mode, tag_mock=tag_mock,
             )
-            missing.append(f"nbest{nth}: missing {miss} (+ inprogress)" if allow_inprogress else f"nbest{nth}: missing {miss}")
+            missing.append(f"member {nth}: missing {miss} (+ inprogress)" if allow_inprogress else f"member {nth}: missing {miss}")
             continue
         arr = np.load(path)
         if not np.isfinite(arr).any():
-            missing.append(f"nbest{nth}: all-NaN at {path}")
+            missing.append(f"member {nth}: all-NaN at {path}")
             continue
         arrays.append(arr)
         kinds.append(kind or "done")

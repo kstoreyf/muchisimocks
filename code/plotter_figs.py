@@ -43,6 +43,7 @@ import utils_model  # noqa: F401  (kept for notebook parity / downstream use)
 import utils_inference
 import utils_inference as ui
 
+import ensemble_kmax_utils as eku
 from ensemble_kmax_utils import (
     FIDUCIAL_CONFIGS,
     KCUT_FID_PK,
@@ -207,9 +208,10 @@ NBAR_LABELS = {
     "_nbar0.00054": r"$\bar{n}=5.4\times10^{-4}$",
 }
 COLOR_NOISY = COLORS_FID[3]
-STATISTICS_FULL_ROW = ["pk", "bispec", "pgm"]
+COLOR_MATCHED = "#E8743B"   # orange: phase-matched mock (Fig 7, shaded by n̄ like COLOR_NOISY)
+STATISTICS_FULL_ROW = ["pk", "pgm", "bispec"]
 TAG_MASK_FULL = fiducial_mask_for_statistics(STATISTICS_FULL_ROW)
-TAG_STATS_FULL = "_pk_bispec_pgm"
+TAG_STATS_FULL = "_pk_pgm_bispec"
 
 # --- FoB / FoM ---
 PARAM_NAMES_FOB = ["omega_cold", "sigma8_cold", "b1"]
@@ -245,7 +247,7 @@ TAGS_KMAX_KB = TAGS_CUTS_KB
 STAT_COMBOS_SCALE = [
     (["pk", "pgm"], COLORS_FID[1]),
     (["pk", "bispec"], COLORS_FID[2]),
-    (["pk", "bispec", "pgm"], COLORS_FID[3]),
+    (["pk", "pgm", "bispec"], COLORS_FID[3]),
 ]
 
 # --- Fig 9 overall k_max (x = cut label, as in fig 8; no-cut point not plotted) ---
@@ -266,7 +268,7 @@ bx_arr = [1, 2, 4, 8, 16, 32]
 N_COVERAGE = 1000
 NCOSMO_ALPHA_LO, NCOSMO_ALPHA_HI = 0.15, 1.0
 XLABEL_NSIMS = r"$N_\mathrm{train}$ ($= N_\mathrm{cosmo} \times N_\mathrm{bias}$)"
-STATISTICS_FULL_CONV = ["pk", "bispec", "pgm"]
+STATISTICS_FULL_CONV = ["pk", "pgm", "bispec"]
 TAG_MASKS_FULL_CONV = fiducial_mask_for_statistics(STATISTICS_FULL_CONV)
 
 # --- Appendix A (9-8 A1 style) ---
@@ -733,7 +735,7 @@ def _mask_candidates_kb(tag_kb):
 
 
 def _joined_kb_kpgm(tag_kb, tag_kpgm):
-    return _with_fixed_kp(f"{tag_kb}{tag_kpgm}")
+    return _with_fixed_kp(f"{tag_kpgm}{tag_kb}")   # mask order follows pk, pgm, bispec
 
 
 def _joint_mask_candidates(tag_kb, tag_kpgm):
@@ -975,9 +977,7 @@ def build_tag_inf_conv(bx_val, n_cosmo_val, statistics, tag_masks, *, nth=0):
         f"{TAG_BIASPARAMS_TRAIN}{TAG_NOISE_TRAIN}{tag_reparam}"
         f"_bx{bx_val}_ntrain{n_cosmo_val}{TAG_INF_BEST_SUFFIX}"
     )
-    if nth == 0:
-        return base
-    return f"{base}_nbest{nth}"
+    return f"{base}{eku.member_suffix(nth)}"
 
 
 def build_tag_test_conv(statistics, tag_masks):
@@ -1837,6 +1837,9 @@ def plot_fig4_coverage_binned_diff(save_name="fig4_coverage_binned_diff"):
     cosmo_vary = cov["cosmo_vary"]
     bias_vary = cov["bias_vary"]
     param_vary = cov["param_vary"]
+    if not stats_ok:
+        print(f"Fig 4: no statistic combo has all {N_ENSEMBLE_K} coverage members yet; skipping")
+        return None
 
     def _build_fig4_coverage_arrays():
         names_show = list(param_names_key_rp)
@@ -1870,7 +1873,7 @@ def plot_fig4_coverage_binned_diff(save_name="fig4_coverage_binned_diff"):
             "names_u": list(names_u),
         }
 
-    _fig4 = load_or_build("fig4_coverage_arrays_fid_ensK3_ip", _build_fig4_coverage_arrays)
+    _fig4 = load_or_build("fig4_coverage_arrays_fid" + eku.ensemble_cache_tag() + "_ip", _build_fig4_coverage_arrays)
     theta_pred_u = _fig4["theta_pred_u"]
     theta_true_u = _fig4["theta_true_u"]
     names_u = _fig4["names_u"]
@@ -1964,6 +1967,9 @@ def plot_fig5_coverage_pp_center(save_name=None, n_center_pts=None):
     cosmo_vary = cov["cosmo_vary"]
     bias_vary = cov["bias_vary"]
     param_vary = cov["param_vary"]
+    if not stats_ok:
+        print(f"Fig 5: no statistic combo has all {N_ENSEMBLE_K} coverage members yet; skipping")
+        return None
     n_rows = len(stats_ok)
     n_cols = len(param_names_plot)
     cred_levels = np.linspace(0.0, 1.0, 51)
@@ -2011,7 +2017,7 @@ def plot_fig5_coverage_pp_center(save_name=None, n_center_pts=None):
         return pp
 
     pp_emp_center = load_or_build(
-        f"fig5_pp_emp_arr_fid_ensK3_ip_center{n_center_pts}", _build_fig5_pp_emp_center,
+        "fig5_pp_emp_arr_fid" + eku.ensemble_cache_tag() + f"_ip_center{n_center_pts}", _build_fig5_pp_emp_center,
     )
     _plot_pp_overlay(
         pp_emp_center, save_name,
@@ -2044,13 +2050,19 @@ def plot_fig6_shame_contours(save_name="fig6_shame_contours"):
 # Fig 7 — Training noise and number density
 # =============================================================================
 
-def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_nbars"):
-    """Noisy OOD SHAMe × n̄ + noisy/noiseless CV-mean overlays; noisy uses K=3 ensemble."""
+def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_nbars", *, k_members=None):
+    """SHAMe × 3 n̄ (filled) + phase-matched mock (mean of 10 noise realizations) × 3 n̄ (unfilled, orange
+    shades matched by n̄); K-member ensemble mixtures (default N_ENSEMBLE_K; k_members=1 = top model only).
+    Matched and SHAMe share ICs and the bias/noise truth."""
+    if k_members is None:
+        k_members = N_ENSEMBLE_K
     statistics_full = list(STATISTICS_FULL_ROW)
     tag_mask_full = TAG_MASK_FULL
     nbar_tags = NBAR_TAGS_SCALE
     shades_noisy = _nbar_shades(COLOR_NOISY)
-    color_nbar_fid = shades_noisy[nbar_tags.index(TAG_MOCK_SHAME)]
+    shades_matched = _nbar_shades(COLOR_MATCHED)
+    fn_pn = model_dir(statistics_full, tag_mask_full, 0) / "param_names.txt"
+    names = list(np.loadtxt(fn_pn, dtype=str))
 
     samples_list, colors_b, labels_b, shades_b = [], [], [], []
     linestyles_b, linewidths_b = [], []
@@ -2058,96 +2070,39 @@ def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_
     # Dummy tags for plot_contours_inf labeling (samples_list path).
     tags_inf_b, tags_test_b = [], []
 
-    # Noisy OOD SHAMe × 3 nbars (K=3 ensemble mixtures).
-    for i, tag_mock in enumerate(nbar_tags):
-        samples, missing = load_ensemble_member_samples(
-            statistics_full, tag_mask_full,
-            test_mode="shame", tag_mock=tag_mock, k_members=N_ENSEMBLE_K,
-            n_total=N_ENSEMBLE_DRAWS,
-        )
-        label = f"noisy × {NBAR_LABELS[tag_mock]}"
-        if samples is None:
-            missing_b.append((label, "; ".join(missing)))
-            continue
-        existing_b.append(label)
-        fn_pn = model_dir(statistics_full, tag_mask_full, 0) / "param_names.txt"
-        names = list(np.loadtxt(fn_pn, dtype=str))
-        arr = samples if samples.ndim == 2 else samples[:, 0, :]
-        samples_list.append((arr, names))
-        colors_b.append(shades_noisy[i])
-        labels_b.append(f"SHAMe high-fidelity mock, {NBAR_LABELS[tag_mock]}")
-        shades_b.append(True)
-        linestyles_b.append("-")
-        linewidths_b.append(1.0)
-        tags_inf_b.append(f"_ensK{N_ENSEMBLE_K}_noisy_{tag_mock}")
-        tags_test_b.append("")
-
-    # Noisy fixed-cosmo mean (K=3 ensemble).
-    samples_nm, missing_nm = load_ensemble_member_samples(
-        statistics_full, tag_mask_full,
-        test_mode="cvmean", k_members=N_ENSEMBLE_K, n_total=N_ENSEMBLE_DRAWS,
-    )
-    if samples_nm is not None:
-        fn_pn = model_dir(statistics_full, tag_mask_full, 0) / "param_names.txt"
-        names = list(np.loadtxt(fn_pn, dtype=str))
-        arr = samples_nm if samples_nm.ndim == 2 else samples_nm[:, 0, :]
-        samples_list.append((arr, names))
-        colors_b.append(color_nbar_fid)
-        labels_b.append("mean-CV, noisy (matched to $\\bar{n}=2.2\\times10^{-4}$ mock)")
-        shades_b.append(False)
-        linestyles_b.append(":")
-        linewidths_b.append(1.0)
-        tags_inf_b.append(f"_ensK{N_ENSEMBLE_K}_noisy_cvmean")
-        tags_test_b.append("")
-        existing_b.append("noisy × shame mean-CV")
-    else:
-        missing_b.append(("noisy × shame mean-CV", "; ".join(missing_nm)))
-
-    # Noiseless fixed-cosmo mean — top-1 if present.
-    tags_inf_noiseless, _, _, _ = utils_plot.setup_inference_tags(
-        data_mode=data_mode, tag_params=TAG_PARAMS_TRAIN,
-        tag_biasparams="_biasnest_p4_n320000", statistics_arr=[statistics_full],
-        bx=bx, tag_noise=None, tag_reparam=tag_reparam, n_train=n_train,
-        tags_mask=[tag_mask_full],
-    )
-    tag_inf_noiseless = tags_inf_noiseless[0] + TAG_INF_BEST_SUFFIX
-    tag_test_noiseless_mean = utils_plot.setup_test_tags(
-        data_mode=data_mode, tag_params_test=TAG_PARAMS_TEST_FIXED,
-        tags_biasparams_test="_biasshame_p0_n1", tag_stats_arr=[TAG_STATS_FULL],
-        tag_noise_test=None, tag_datagen_test=TAG_DATAGEN_TEST_MEAN,
-        tags_mask_test=[tag_mask_full],
-    )[0]
-    fn_nl = sample_fn(tag_inf_noiseless, tag_test_noiseless_mean)
-    has_noiseless = fn_nl.exists()
-    if has_noiseless:
-        arr = np.load(fn_nl)
-        if arr.ndim == 3:
-            arr = arr[:, 0, :]
-        names = list(np.loadtxt(dir_sbi / f"sbi{tag_inf_noiseless}" / "param_names.txt", dtype=str))
-        samples_list.append((arr, names))
-        colors_b.append(color_nbar_fid)
-        labels_b.append("mean-CV, noiseless (matched to $\\bar{n}=2.2\\times10^{-4}$ mock)")
-        shades_b.append(False)
-        linestyles_b.append("--")
-        linewidths_b.append(1.5)
-        tags_inf_b.append(tag_inf_noiseless)
-        tags_test_b.append("")
-        existing_b.append("noiseless × shame mean")
-    else:
-        missing_b.append(("noiseless × shame mean", str(fn_nl)))
+    for test_mode, shades, filled, lab_mock in (
+        ("shame", shades_noisy, True, "SHAMe"),
+        ("matchedmean", shades_matched, False, "phase-matched"),
+    ):
+        for i, tag_mock in enumerate(nbar_tags):
+            label = f"{lab_mock}, {NBAR_LABELS[tag_mock]}"
+            samples, missing = load_ensemble_member_samples(
+                statistics_full, tag_mask_full,
+                test_mode=test_mode, tag_mock=tag_mock, k_members=k_members,
+                n_total=N_ENSEMBLE_DRAWS,
+            )
+            if samples is None:
+                missing_b.append((label, "; ".join(missing)))
+                continue
+            existing_b.append(label)
+            arr = samples if samples.ndim == 2 else samples[:, 0, :]
+            samples_list.append((arr, names))
+            colors_b.append(shades[i])
+            labels_b.append(label)
+            shades_b.append(filled)
+            linestyles_b.append("-")
+            linewidths_b.append(1.0 if filled else 1.5)
+            tags_inf_b.append(eku.ensemble_cache_tag(k_members) + f"_{test_mode}_{tag_mock}")
+            tags_test_b.append("")
 
     if missing_b:
         print("Missing fig 7 sample files:")
         for label, fn in missing_b:
             print(f"  - {label}: {fn}")
-    print(f"Found {len(existing_b)}/{len(existing_b) + len(missing_b)} (K={N_ENSEMBLE_K} ensemble for noisy).")
-
-    n_noisy_nbar = sum(1 for s, lab in zip(shades_b, labels_b) if s and "SHAMe" in lab)
-    if n_noisy_nbar == 0:
-        print("ERROR: need noisy SHAMe nbar ensemble samples.")
-        return
-    if not has_noiseless:
-        print("WARNING: noiseless CV-mean at the fiducial cut missing — plotting noisy ensemble only.")
+    print(f"Found {len(existing_b)}/{len(existing_b) + len(missing_b)} (K={k_members} ensemble).")
+    if not samples_list:
+        print("Fig 7: no SHAMe or phase-matched ensemble samples yet; skipping")
+        return None
 
     cosmo_vary, bias_vary, param_vary = utils_plot.load_training_params(
         TAG_PARAMS_TRAIN, TAG_BIASPARAMS_TRAIN, bx=bx,
@@ -2176,10 +2131,10 @@ def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_
         title=None,
         extents=extents_b_nbar,
         figsize=FIGSIZE_CORNER, unreparameterize=True,
-        fontsize_legend=9,
+        fontsize_legend=8,
         legend_location=(0, 1),
         legend_loc="upper left",
-        loc_legend=None,
+        loc_legend=(-0.05, 1.12),   # 6 entries: start above the empty top-right axes so they clear the σ8 panel
         samples_list=samples_list,
         add_truth=True,
         truth_locations=truth_locs,
@@ -2404,17 +2359,15 @@ plot_fig8b_scale_dependence_overall_kmax_fom3d_full_nbars = (
 
 def _conv_cache_suffix(k_members):
     """Cache suffix for the coverage grid: K=3 ensemble (paper) or top-1 model."""
-    if k_members is None or k_members == N_ENSEMBLE_K:
-        return f"_ensK{N_ENSEMBLE_K}_ip"
     if k_members == 1:
         return "_top_ip"
-    return f"_ensK{k_members}_ip"
+    return eku.ensemble_cache_tag(k_members or N_ENSEMBLE_K) + "_ip"
 
 
 def plot_fig10_convergence_pgg_b_pgm(save_name="fig10_convergence_pgg_b_pgm", *, k_members=None):
     """k_members=None → K=3 ensemble (paper); k_members=1 → top model only."""
     df_conv_full = load_or_build(
-        f"df_conv_pk_bispec_pgm{TAG_MASKS_FULL_CONV}_b1phys_err" + _conv_cache_suffix(k_members),
+        f"df_conv_pk_pgm_bispec{TAG_MASKS_FULL_CONV}_b1phys_err" + _conv_cache_suffix(k_members),
         lambda: collect_coverage_grid(
             STATISTICS_FULL_CONV, TAG_MASKS_FULL_CONV, n_cosmo_arr, bx_arr,
             k_members=k_members,
@@ -2649,7 +2602,7 @@ def plot_figA_mean_vs_indiv_means_contours(
         )
 
     _a1 = load_or_build(
-        f"figA1_ensK{N_ENSEMBLE_K}_recentered_pk_bispec_pgm_k{K_PER_OBS}",
+        "figA1" + eku.ensemble_cache_tag() + f"_recentered_pk_pgm_bispec_k{K_PER_OBS}",
         _build_a1_ensemble_recentered,
     )
     samples_zoom = _a1["samples_zoom"]

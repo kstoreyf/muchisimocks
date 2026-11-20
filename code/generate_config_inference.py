@@ -611,7 +611,8 @@ def generate_test_config_from_preset(
     return generate_test_config(**common)
 
 
-STAT_COMBOS = (["pk"], ["pk", "pgm"], ["pk", "bispec"], ["pk", "bispec", "pgm"])
+# Full combo is ordered pk, pgm, bispec (file/dir names: pk_pgm_bispec, masks _kp_kpgm_kb).
+STAT_COMBOS = (["pk"], ["pk", "pgm"], ["pk", "bispec"], ["pk", "pgm", "bispec"])
 
 
 def main():

@@ -26,6 +26,11 @@ from generate_config_inference import (
     build_sweep_name,
     tags_mask_for_sweep,
 )
+import torch
+
+# Importing bacco (via generate_params) resets OMP_NUM_THREADS to the node's CPU count (48), so torch would
+# sample with 48 threads on a 1-CPU job (~13x slower). Training sets its own count in SBIModel.fit.
+torch.set_num_threads(1)
 
 # Coverage test-set batching (evaluate_test_set); not written to YAML configs.
 TEST_CHECKPOINT_EVERY = 5

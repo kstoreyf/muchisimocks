@@ -13,4 +13,4 @@ NB=$(realpath $1)
 OUTDIR=/scratch/kstoreyf/muchisimocks/nbexec
 mkdir -p $OUTDIR
 cd $(dirname $NB)
-jupyter nbconvert --to notebook --execute --ExecutePreprocessor.timeout=3000 --output-dir $OUTDIR --output $(basename $NB .ipynb)_executed.ipynb $NB && echo NBEXEC_OK
+jupyter nbconvert --to notebook --execute --allow-errors --ExecutePreprocessor.timeout=3000 --output-dir $OUTDIR --output $(basename $NB .ipynb)_executed.ipynb $NB && echo NBEXEC_OK

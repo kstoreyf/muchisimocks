@@ -1,0 +1,1 @@
+none ../configs/configs_test/config_TRAIN_muchisimocks_pk_pgm_bispec_kp0.37_kpgm0.24_kb0.24_p5_n10000_biasnoisenestv2_p9_n320000_noisefly_rp_bx32_ntrain10000_best-rand16_TEST_cvshamev2_p0_n1000_biasshame0.00022_noisebest_p0_n1_noisefly.yaml
