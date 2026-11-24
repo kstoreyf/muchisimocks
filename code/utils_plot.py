@@ -15,7 +15,7 @@ import numpy as np
 import data_loader
 import utils_inference
 
-param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
+param_label_dict = {'omega_cold': r'$\Omega_\mathrm{m}$',
                 'sigma8_cold': r'$\sigma_{8}$',
                 'sigma_8': r'$\sigma_{8}$',
                 'hubble': r'$h$',
@@ -24,6 +24,7 @@ param_label_dict = {'omega_cold': r'$\Omega_\mathrm{cold}$',
                 'n_s': r'$n_\mathrm{s}$',
                 'omega_baryon': r'$\Omega_\mathrm{b}$',
                 'omega_m': r'$\Omega_\mathrm{m}$',
+                'S8': r'$S_8$',
                 'b1': r'$b_1$',
                 'b2': r'$b_2$',
                 'bs2': r'$b_{s^2}$',

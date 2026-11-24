@@ -5,7 +5,7 @@ Hyperparameters come from the fiducial sweep (``TAG_SWEEP``) for each statistic 
 top-N hyperparameters are retrained at that mask (``nth_best_run`` from the
 fiducial sweep).
 
-Ensemble members are ``_best{TAG_SWEEP}{suffix}`` for the suffixes of ``ENSEMBLE_SCHEME``
+Ensemble members are ``best_tag(TAG_SWEEP, None, statistics) + suffix`` (e.g. ``_best-rand16-topkpgm0.37_nbest1``) for the suffixes of ``ENSEMBLE_SCHEME``
 (``set_ensemble_scheme``): top-3 hyperparameter settings (``"", _nbest1, _nbest2``) or 3 seeds
 of the top setting (``"", _seed1, _seed2``). Member 0 (top setting, seed 0) is shared.
 """
@@ -30,6 +30,10 @@ from generate_config_inference import (
     TAG_PARAMS_COVERAGE,
     TAG_PARAMS_SHAME,
     TAG_SWEEP,
+    BX_SWEEP,
+    N_TRAIN_SWEEP,
+    best_tag,
+    tags_mask_for_sweep,
 )
 
 BX = 32
@@ -58,8 +62,11 @@ TAG_DATAGEN_TEST_MEAN = "_mean"
 # --- Scale-cut grids. Labels are data_loader.K_CUTS, shared by every statistic (a cut keeps
 # bins with top edge <= label); '' = no cut (plotted at K_NO_CUT). ---
 KCUT_FID_PK = data_loader.parse_kcut("pk", FIDUCIAL_MASKS["pk"])
-KCUT_FID_OTHER = data_loader.parse_kcut("bispec", FIDUCIAL_MASKS["bispec"])  # B and P_gm
-assert KCUT_FID_OTHER == data_loader.parse_kcut("pgm", FIDUCIAL_MASKS["pgm"])
+KCUT_FID_B = data_loader.parse_kcut("bispec", FIDUCIAL_MASKS["bispec"])
+KCUT_FID_PGM = data_loader.parse_kcut("pgm", FIDUCIAL_MASKS["pgm"])
+# Overall-k_max figure (Fig 9): each statistic is cut at k up to its own fiducial cut, then stays there
+# (decided 2026-11-23; was a shared B / P_gm cap at 0.24).
+KCUT_FID_OVERALL_CAPS = {"pk": KCUT_FID_PK, "pgm": KCUT_FID_PGM, "bispec": KCUT_FID_B}
 TAGS_CUTS_KB = [data_loader.kcut_tag("bispec", k) for k in data_loader.K_CUTS]
 TAGS_CUTS_KPGM = [data_loader.kcut_tag("pgm", k) for k in data_loader.K_CUTS]
 TAGS_KMAX_KB = TAGS_CUTS_KB + [""]
@@ -73,7 +80,13 @@ N_ENSEMBLE_K = 3
 ENSEMBLE_SCHEMES = {
     "top3_settings": ["", "_nbest1", "_nbest2"],   # best_runs.txt lines 0-2, seed 0 each
     "seeds": ["", "_seed1", "_seed2"],             # top setting, seeds 0-2
+    # top-3 settings, but never the sweep trials themselves: where a member would be a sweep trial (seed 0 at the
+    # sweep cut with the sweep's bx / n_train), use its seed-1 retrain instead. The sweep trials were selected on val
+    # loss, so their posteriors are biased in width (winner's curse; notebooks/2026-11-19_v2_checks.ipynb §6c, §7).
+    # Used for the FoB / FoM vs k_max figures, where the sweep cut must be on the same footing as the other cuts.
+    "top3_fresh": ["", "_nbest1", "_nbest2"],
 }
+FRESH_AT_SWEEP_CUT = {"top3_fresh"}   # schemes that swap sweep trials for their seed-1 retrains
 ENSEMBLE_SCHEME = "top3_settings"
 
 
@@ -85,12 +98,82 @@ def set_ensemble_scheme(name: str) -> None:
     ENSEMBLE_SCHEME = name
 
 
-def member_suffix(nth: int) -> str:
-    return ENSEMBLE_SCHEMES[ENSEMBLE_SCHEME][nth]
+def member_suffix(nth: int, statistics: list[str], tags_mask: list[str], bx: int = BX, n_train: int = N_TRAIN) -> str:
+    """Dir suffix of ensemble member ``nth`` (after the best tag) for a model at ``tags_mask`` / bx / n_train."""
+    suffix = ENSEMBLE_SCHEMES[ENSEMBLE_SCHEME][nth]
+    is_sweep_trial = (list(tags_mask) == tags_mask_for_sweep(statistics) and int(bx) == BX_SWEEP
+                      and int(n_train) == N_TRAIN_SWEEP and "_seed" not in suffix)
+    if ENSEMBLE_SCHEME in FRESH_AT_SWEEP_CUT and is_sweep_trial:
+        suffix += "_seed1"
+    return suffix
 
 
 def ensemble_cache_tag(k_members: int = N_ENSEMBLE_K) -> str:
-    return f"_ensK{k_members}_{ENSEMBLE_SCHEME}"
+    return f"_ensK{k_members}_{ENSEMBLE_SCHEME}" + ("_partial" if ALLOW_PARTIAL_ENSEMBLES else "")
+
+
+# Partial ensembles, for first versions of the figures while members are still training: where fewer than K members
+# have the test output, mix the leading members that do (top 1, or top 1+2; never skip member 0 or a middle member).
+# Every such use is logged in PARTIAL_LOG (print with report_partial_ensembles). Figure caches built in this mode
+# carry "_partial" in their name and are never written or read (plotter_figs.load_or_build), so they cannot leak into
+# the final K-member figures.
+ALLOW_PARTIAL_ENSEMBLES = False
+PARTIAL_LOG: dict[tuple, tuple[int, int]] = {}
+
+
+def set_allow_partial_ensembles(flag: bool) -> None:
+    global ALLOW_PARTIAL_ENSEMBLES
+    ALLOW_PARTIAL_ENSEMBLES = bool(flag)
+
+
+def log_partial(key: tuple, k_used: int, k_wanted: int) -> None:
+    PARTIAL_LOG[key] = (k_used, k_wanted)
+
+
+STATUS_FILES: list = []  # e.g. [FIG_DIR / "FIGURE_STATUS.md"]; report_partial_ensembles appends its report there
+
+
+def start_status_files(paths_out, header: str) -> None:
+    """Start (truncate) the figure-status files that report_partial_ensembles appends to."""
+    STATUS_FILES[:] = [Path(p) for p in paths_out]
+    for p in STATUS_FILES:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(header.rstrip("\n") + "\n")
+
+
+def report_partial_ensembles(title: str = "", *, note: str = "", clear: bool = True) -> None:
+    """Print the points that used fewer than K members since the last report (scheme, stats, cut, test, K used),
+    plus an optional note; also appended to STATUS_FILES."""
+    import builtins
+    lines: list[str] = []
+    print = lambda s="": (lines.append(s), builtins.print(s))  # noqa: E731  (print and keep for the status file)
+    head = f"[{title}] " if title else ""
+    if note:
+        print(f"{head}{note}")
+    if not PARTIAL_LOG:
+        print(f"{head}all ensembles complete (no partial members used)" if not note else
+              f"{head}(no further partial members)")
+    else:
+        print(f"{head}{len(PARTIAL_LOG)} point(s) used a PARTIAL ensemble (will change when the missing members finish):")
+        # grouped by (K used, scheme, stats, test); cuts and mocks / grid points listed
+        groups: dict[tuple, dict[str, set]] = {}
+        for (scheme, stats, mask, test, extra), (k_used, k_wanted) in PARTIAL_LOG.items():
+            g = groups.setdefault((f"K={k_used}/{k_wanted}", scheme, stats, test), {"cuts": set(), "extra": set()})
+            g["cuts"].add(mask)
+            if extra:
+                g["extra"].add(extra)
+        for (k, scheme, stats, test), g in sorted(groups.items()):
+            extra = f" | {', '.join(sorted(g['extra']))}" if g["extra"] and len(g["extra"]) <= 4 else (
+                f" | {len(g['extra'])} grid points/mocks" if g["extra"] else "")
+            print(f"  {k}  {stats:15s} {test:13s} [{scheme}]  cuts: {', '.join(sorted(g['cuts']))}{extra}")
+    for p in STATUS_FILES:
+        if not Path(p).parent.is_dir():   # e.g. the figure folder was renamed under a running kernel
+            builtins.print(f"WARNING: status file folder missing, report not written: {p}")
+            continue
+        with open(p, "a") as f:
+            f.write(f"\n## {title}\n```\n" + "\n".join(lines) + "\n```\n")
+    if clear:
+        PARTIAL_LOG.clear()
 
 # Fiducial cut for each statistic combo (also where the HP sweep is run, see SWEEP_MASKS).
 FIDUCIAL_CONFIGS: list[tuple[list[str], str]] = [
@@ -255,11 +338,10 @@ def mask_for_pgm_sweep(
 
 
 def overall_k_mask(statistics_row: list[str], k: float) -> str:
-    """Joined mask for the overall scale cut at ``k``: every statistic is cut at ``k`` up to
-    the fiducial B / P_gm cut (KCUT_FID_OTHER); above it only P(k) keeps moving."""
-    k_other = min(k, KCUT_FID_OTHER)
+    """Joined mask for the overall scale cut at ``k``: each statistic is cut at min(k, its fiducial cut)
+    (KCUT_FID_OVERALL_CAPS)."""
     return "".join(
-        data_loader.kcut_tag(stat, k if stat == "pk" else k_other) for stat in statistics_row
+        data_loader.kcut_tag(stat, min(k, KCUT_FID_OVERALL_CAPS[stat])) for stat in statistics_row
     )
 
 
@@ -368,7 +450,7 @@ def tag_inf_train(statistics: list[str], tags_mask: list[str], nth: int) -> str:
         train["tag_biasparams"],
         train["tag_noise"],
     )
-    return f"{tag_data}{TAG_REPARAM}_bx{BX}_ntrain{N_TRAIN}_best{TAG_SWEEP}{member_suffix(nth)}"
+    return f"{tag_data}{TAG_REPARAM}_bx{BX}_ntrain{N_TRAIN}{best_tag(TAG_SWEEP, None, statistics)}{member_suffix(nth, statistics, tags_mask)}"
 
 
 def model_dir(statistics: list[str], mask: str, nth: int) -> Path:
@@ -578,7 +660,14 @@ def load_ensemble_member_samples(
         arrays.append(arr)
         kinds.append(kind or "done")
     if len(arrays) < k_members:
-        return None, missing
+        # partial mode: leading members only (top 1, top 1+2), never a gap
+        n_lead = next((nth for nth in range(k_members) if any(m.startswith(f"member {nth}:") for m in missing)),
+                      k_members)
+        if not (ALLOW_PARTIAL_ENSEMBLES and n_lead >= 1):
+            return None, missing
+        arrays, kinds = arrays[:n_lead], kinds[:n_lead]
+        log_partial((ENSEMBLE_SCHEME, "_".join(statistics), mask, test_mode,
+                     tag_mock if test_mode in ("shame", "matchedmean") else ""), n_lead, k_members)
     # Multi-obs 3D: keep all obs; concat draws (coverage / cvindiv).
     if any(np.asarray(a).ndim == 3 and np.asarray(a).shape[1] > 1 for a in arrays):
         # In-progress members can differ in stored n_obs; align to the shortest.
@@ -604,7 +693,9 @@ def ensemble_coverage_members_exist(
     statistics: list[str], mask: str, *, k_members: int = N_ENSEMBLE_K,
     allow_inprogress: bool = True,
 ) -> bool:
-    """True if all K members have coverage ``_pred.npy`` or (optionally) inprogress."""
+    """True if all K members have coverage ``_pred.npy`` or (optionally) inprogress (partial mode: member 0)."""
+    if ALLOW_PARTIAL_ENSEMBLES:
+        k_members = 1
     return all(
         resolve_member_samples_path(
             statistics, mask, nth, test_mode="coverage",

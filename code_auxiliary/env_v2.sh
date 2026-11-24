@@ -6,3 +6,7 @@
 # MUCHISIMOCKS_LIB=/data/kstoreyf/muchisimocks/muchisimocks_lib when computing training stats.
 export MUCHISIMOCKS_DATA=/scratch/kstoreyf/muchisimocks/data_v2
 export MUCHISIMOCKS_RESULTS=/scratch/kstoreyf/muchisimocks/results_v2
+# W&B's local run dirs (wandb/run-*) go to scratch, not code/wandb in home: they filled the home quota on
+# 2026-11-23 (~08:00, EDQUOT killed 14 training tasks). Runs still sync to wandb.ai as before.
+export WANDB_DIR=/scratch/kstoreyf/muchisimocks/wandb_v2
+mkdir -p "${WANDB_DIR}"

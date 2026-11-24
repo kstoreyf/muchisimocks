@@ -9,6 +9,7 @@ from __future__ import annotations
 # =============================================================================
 # Bootstrap (REPO_ROOT) + Imports
 # =============================================================================
+import contextlib
 import os
 import pickle
 import re
@@ -47,7 +48,9 @@ import ensemble_kmax_utils as eku
 from ensemble_kmax_utils import (
     FIDUCIAL_CONFIGS,
     KCUT_FID_PK,
-    KCUT_FID_OTHER,
+    KCUT_FID_B,
+    KCUT_FID_PGM,
+    KCUT_FID_OVERALL_CAPS,
     TAGS_CUTS_KB,
     TAGS_CUTS_KPGM,
     fiducial_mask_for_statistics,
@@ -74,8 +77,8 @@ from ensemble_kmax_utils import (
 # =============================================================================
 bx = 32
 n_train = 10000
-from generate_config_inference import FIDUCIAL_MASKS, TAG_SWEEP  # noqa: E402
-TAG_INF_BEST_SUFFIX = "_best" + TAG_SWEEP
+from generate_config_inference import FIDUCIAL_MASKS, TAG_SWEEP, best_tag  # noqa: E402
+import generate_config_inference as gci  # noqa: E402
 
 data_mode = "muchisimocks"
 tag_reparam = "_rp"
@@ -224,7 +227,7 @@ PARAMS_TRACK = {
     "b1": "b1",
 }
 FOB_LABELS = {
-    "omega_m": r"$\Omega_\mathrm{c}$",
+    "omega_m": r"$\Omega_\mathrm{m}$",
     "sigma8": r"$\sigma_8$",
     "b1": r"$b_1$",
     "sigma8_x_b1": r"$\sigma_8 b_1$",
@@ -236,7 +239,7 @@ FOB3_YLABEL_S8XB1 = r"FoB($\Omega_m$, $\sigma_8$, $\sigma_8 b_1$)"
 FOM3_YLABEL = r"FoM($\Omega_m$, $\sigma_8$, $b_1$)"
 FOM_FULL_YLABEL = r"FoM(all params)"
 FOM_MARG_LABELS = {
-    "omega_m": r"FoM($\Omega_\mathrm{c}$)",
+    "omega_m": r"FoM($\Omega_\mathrm{m}$)",
     "sigma8": r"FoM($\sigma_8$)",
     "b1": r"FoM($b_1$)",
 }
@@ -255,10 +258,12 @@ K_OVERALL = list(data_loader.K_CUTS)
 STAT_COMBOS_OVERALL = [
     (list(stats), COLORS_FID[i]) for i, (stats, _) in enumerate(FIDUCIAL_CONFIGS)
 ]
+# each statistic stops at its own fiducial cut; dashed lines mark the caps that fall inside the plotted range
+KCUTS_OVERALL_CAP_LINES = sorted({c for st, c in KCUT_FID_OVERALL_CAPS.items() if st != "pk" and c < max(K_OVERALL)})
 KMAX_OVERALL_XLABEL = "\n".join([
-    rf"$k_{{\mathrm{{max}}}}^{{\mathrm{{all}}}}\ (\leq {KCUT_FID_OTHER:.2f})\,[h/\mathrm{{Mpc}}]$",
-    rf"$k_{{\mathrm{{max}}}}^{{P_{{\mathrm{{gg}}}}}}\ (>{KCUT_FID_OTHER:.2f};\ "
-    rf"k_{{\mathrm{{max}}}}^{{B}}=k_{{\mathrm{{max}}}}^{{P_{{\mathrm{{gm}}}}}}={KCUT_FID_OTHER:.2f})\,[h/\mathrm{{Mpc}}]$",
+    r"$k_{\mathrm{max}}^{\mathrm{all}}\,[h/\mathrm{Mpc}]$",
+    rf"(each statistic capped at its fiducial: $k_{{\mathrm{{max}}}}^{{B}}\leq {KCUT_FID_OVERALL_CAPS['bispec']:.2f}$, "
+    rf"$k_{{\mathrm{{max}}}}^{{P_{{\mathrm{{gm}}}}}}\leq {KCUT_FID_OVERALL_CAPS['pgm']:.2f}$)",
 ])
 KMAX_XLIM = (0.09, 0.385)  # shared by fig 8 / 9
 
@@ -266,6 +271,9 @@ KMAX_XLIM = (0.09, 0.385)  # shared by fig 8 / 9
 n_cosmo_arr = [500, 1000, 2000, 4000, 6000, 8000, 10000]
 bx_arr = [1, 2, 4, 8, 16, 32]
 N_COVERAGE = 1000
+# Coverage rows used on the convergence grid (2026-11-23: inner500 for every grid point; the full 1000 rows are run
+# only for the fiducial networks). None = all N_COVERAGE rows.
+CONV_COVERAGE_SUBSET = "inner500"
 NCOSMO_ALPHA_LO, NCOSMO_ALPHA_HI = 0.15, 1.0
 XLABEL_NSIMS = r"$N_\mathrm{train}$ ($= N_\mathrm{cosmo} \times N_\mathrm{bias}$)"
 STATISTICS_FULL_CONV = ["pk", "pgm", "bispec"]
@@ -316,6 +324,9 @@ def load_or_build(name, builder, *, overwrite=None):
 
     Set OVERWRITE_CACHE=True (or pass overwrite=True) to force a rebuild.
     """
+    if "_partial" in name:  # built from a partial ensemble (eku.ALLOW_PARTIAL_ENSEMBLES): never cached
+        print(f"Partial-ensemble build, not cached: {name}")
+        return builder()
     if overwrite is None:
         overwrite = OVERWRITE_CACHE
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -362,7 +373,7 @@ def setup_fiducial_inference():
         n_train=n_train,
         tags_mask=TAGS_MASK_FID,
     )
-    tags_inf = [t + TAG_INF_BEST_SUFFIX for t in tags_inf]
+    tags_inf = [t + best_tag(TAG_SWEEP, None, s) for t, s in zip(tags_inf, STATISTICS_ARR_FID)]
     labels = [get_stat_label_short(s) for s in STATISTICS_ARR_FID]
     return tags_inf, labels, list(COLORS_FID)
 
@@ -375,12 +386,13 @@ def samples_exist(tags_inf, tags_test):
     return [sample_fn(ti, tt).exists() for ti, tt in zip(tags_inf, tags_test)]
 
 
-def _ensemble_samples_for(statistics, mask, *, test_mode="shame", tag_mock=TAG_MOCK_SHAME, n_total=N_ENSEMBLE_DRAWS):
-    """Equal-weight K-member mixture + param_names from member 0."""
+def _ensemble_samples_for(statistics, mask, *, test_mode="shame", tag_mock=TAG_MOCK_SHAME, n_total=N_ENSEMBLE_DRAWS,
+                          k_members=None):
+    """Equal-weight K-member mixture + param_names from member 0 (k_members=None → N_ENSEMBLE_K)."""
     samples, missing = load_ensemble_member_samples(
         statistics, mask,
         test_mode=test_mode, tag_mock=tag_mock,
-        k_members=N_ENSEMBLE_K, n_total=n_total,
+        k_members=k_members or N_ENSEMBLE_K, n_total=n_total,
     )
     if samples is None:
         return None, None, "; ".join(missing)
@@ -822,7 +834,7 @@ def _sweep_bispec_fob3(
     report_missing=False,
 ):
     xs, ys = [], []
-    panel_title = f"bispec sweep (PGM kmax={KCUT_FID_OTHER:.2f} fixed)"
+    panel_title = f"bispec sweep (PGM kmax={KCUT_FID_PGM:.2f} fixed)"
     for tag_kb in TAGS_KMAX_KB:
         if "bispec" in statistics_row:
             if "pgm" in statistics_row:
@@ -849,7 +861,7 @@ def _sweep_pgm_fob3(
     report_missing=False,
 ):
     xs, ys = [], []
-    panel_title = f"PGM sweep (bispec kmax={KCUT_FID_OTHER:.2f} fixed)"
+    panel_title = f"PGM sweep (bispec kmax={KCUT_FID_B:.2f} fixed)"
     for tag_kpgm in TAGS_KMAX_KPGM:
         if "pgm" in statistics_row:
             if "bispec" in statistics_row:
@@ -911,11 +923,11 @@ def _constant_fob3_on_sweep(
     if bispec_sweep and statistics_row == ["pk", "pgm"]:
         candidates = [fiducial_mask_for_statistics(["pk", "pgm"])]
         panel_title = "bispec sweep (constant Pgg+Pgm)"
-        kmax = KCUT_FID_OTHER
+        kmax = KCUT_FID_B
     elif not bispec_sweep and statistics_row == ["pk", "bispec"]:
         candidates = [fiducial_mask_for_statistics(["pk", "bispec"])]
         panel_title = "PGM sweep (constant Pgg+Bggg)"
-        kmax = KCUT_FID_OTHER
+        kmax = KCUT_FID_PGM
     else:
         return None
     val, reasons = _try_load_shame_fob3(
@@ -927,11 +939,11 @@ def _constant_fob3_on_sweep(
 
 
 def load_ensemble_fom_marg(
-    statistics_row, tag_mask, param_key, *, test_mode="shame", tag_mock=TAG_MOCK_SHAME,
+    statistics_row, tag_mask, param_key, *, test_mode="shame", tag_mock=TAG_MOCK_SHAME, k_members=None,
 ):
     """Marginal FoM for one key in FOB_KEYS (omega_m / sigma8 / b1)."""
     samples, param_names, path_err = _ensemble_samples_for(
-        statistics_row, tag_mask, test_mode=test_mode, tag_mock=tag_mock,
+        statistics_row, tag_mask, test_mode=test_mode, tag_mock=tag_mock, k_members=k_members,
     )
     if samples is None:
         return None, path_err
@@ -949,12 +961,14 @@ def load_ensemble_fom_marg(
 
 def _overall_kmax_fom_marg_ensemble(
     statistics_row, param_key, *, test_mode="shame", tag_mock=TAG_MOCK_SHAME, report_missing=False,
+    k_members=None,
 ):
     xs, ys = [], []
     for k in K_OVERALL:
         tag_mask = overall_k_mask(statistics_row, k)
         val, reason = load_ensemble_fom_marg(
             statistics_row, tag_mask, param_key, test_mode=test_mode, tag_mock=tag_mock,
+            k_members=k_members,
         )
         if val is None:
             if report_missing:
@@ -975,9 +989,10 @@ def build_tag_inf_conv(bx_val, n_cosmo_val, statistics, tag_masks, *, nth=0):
     base = (
         f"_{data_mode}{tag_stats}{tag_masks}{TAG_PARAMS_TRAIN}"
         f"{TAG_BIASPARAMS_TRAIN}{TAG_NOISE_TRAIN}{tag_reparam}"
-        f"_bx{bx_val}_ntrain{n_cosmo_val}{TAG_INF_BEST_SUFFIX}"
+        f"_bx{bx_val}_ntrain{n_cosmo_val}{best_tag(TAG_SWEEP, None, statistics)}"
     )
-    return f"{base}{eku.member_suffix(nth)}"
+    tags_mask = eku.parse_mask_to_tags_mask(statistics, tag_masks)
+    return f"{base}{eku.member_suffix(nth, statistics, tags_mask, bx=bx_val, n_train=n_cosmo_val)}"
 
 
 def build_tag_test_conv(statistics, tag_masks):
@@ -985,7 +1000,15 @@ def build_tag_test_conv(statistics, tag_masks):
     return (
         f"_{data_mode}{tag_stats}{tag_masks}"
         f"{TAG_PARAMS_TEST_COV}{TAG_BIASPARAMS_TEST_COV}{TAG_NOISE_TEST_COV}"
+        + (f"_{CONV_COVERAGE_SUBSET}" if CONV_COVERAGE_SUBSET else "")
     )
+
+
+def conv_coverage_idxs():
+    """Coverage-set row indices of CONV_COVERAGE_SUBSET (None = all rows)."""
+    if not CONV_COVERAGE_SUBSET:
+        return None
+    return np.load(REPO_ROOT / "data" / "params" / f"idxs_obs{TAG_PARAMS_TEST_COV}_{CONV_COVERAGE_SUBSET}.npy")
 
 
 def _coverage_samples_path(tag_inf, tag_test):
@@ -1001,7 +1024,8 @@ def _coverage_samples_path(tag_inf, tag_test):
 
 
 def _load_ensemble_coverage_3d(statistics, tag_masks, *, bx_val=None, n_cosmo_val=None, k_members=None):
-    """Load coverage chains; prefer K-member mix, else whatever members exist.
+    """Load coverage chains: the K-member mix; with eku.ALLOW_PARTIAL_ENSEMBLES, the leading members that exist
+    (top 1, top 1+2; logged in eku.PARTIAL_LOG).
 
     Uses ``*_pred.npy`` when present, else ``*_pred_inprogress.npy``. Metrics are
     computed on finite (non-NaN) obs only, so partial in-progress runs can be plotted.
@@ -1020,22 +1044,26 @@ def _load_ensemble_coverage_3d(statistics, tag_masks, *, bx_val=None, n_cosmo_va
         tag_inf = build_tag_inf_conv(bx_val, n_cosmo_val, statistics, tag_masks, nth=nth)
         fn, kind = _coverage_samples_path(tag_inf, tag_test)
         if fn is None:
-            continue
+            break  # leading members only
         arr = np.load(fn)
         if arr.ndim == 2:
             arr = arr[:, np.newaxis, :]
         if not np.isfinite(arr).any():
-            continue
+            break
         arrays.append(arr)
         kinds.append(kind)
+    tag_inf0 = build_tag_inf_conv(bx_val, n_cosmo_val, statistics, tag_masks, nth=0)
     if not arrays:
-        tag_inf0 = build_tag_inf_conv(bx_val, n_cosmo_val, statistics, tag_masks, nth=0)
         return None, None, f"no coverage samples for {tag_inf0}"
+    if len(arrays) < k_members:
+        if not eku.ALLOW_PARTIAL_ENSEMBLES:
+            return None, None, f"only {len(arrays)}/{k_members} members have coverage samples ({tag_inf0})"
+        eku.log_partial((eku.ENSEMBLE_SCHEME, "_".join(statistics), tag_masks, "coverage-grid",
+                         f"n{n_cosmo_val}_bx{bx_val}"), len(arrays), k_members)
 
     n_obs = min(a.shape[1] for a in arrays)
     arrays = [a[:, :n_obs, :] for a in arrays]
     mixed = np.concatenate(arrays, axis=0) if len(arrays) > 1 else arrays[0]
-    tag_inf0 = build_tag_inf_conv(bx_val, n_cosmo_val, statistics, tag_masks, nth=0)
     fn_pn = dir_sbi / f"sbi{tag_inf0}" / "param_names.txt"
     names = list(np.loadtxt(fn_pn, dtype=str)) if fn_pn.is_file() else None
     n_mem = len(arrays)
@@ -1109,12 +1137,14 @@ def load_coverage_metrics(
     """
     if tag_test is None:
         tag_test = build_tag_test_conv(statistics, tag_masks)
+    # the convergence-grid coverage test runs on a row subset: truth rows and the expected count follow it
+    idxs_subset = conv_coverage_idxs() if tag_test == build_tag_test_conv(statistics, tag_masks) else None
     if tag_params_test is None:
         tag_params_test = TAG_PARAMS_TEST_COV
     if tag_biasparams_test is None:
         tag_biasparams_test = TAG_BIASPARAMS_TEST_COV
     if n_target is None:
-        n_target = N_COVERAGE
+        n_target = N_COVERAGE if idxs_subset is None else len(idxs_subset)
     tag_inf = build_tag_inf_conv(bx, n_cosmo, statistics, tag_masks)
     label = utils_plot.get_stat_label(statistics)
     base_info = {
@@ -1222,6 +1252,8 @@ def load_coverage_metrics(
     )
     if theta_true_all.ndim == 1:
         theta_true_all = np.tile(theta_true_all, (samples_arr.shape[1], 1))
+    elif idxs_subset is not None:
+        theta_true_all = theta_true_all[idxs_subset]
     theta_true_all = theta_true_all[rows]
 
     fob_lists = {key: [] for key in FOB_KEYS}
@@ -1380,19 +1412,21 @@ def plot_conv_fom3d_fob3_nsims(
     ref3 = fob_chi2_sqrt_limit(3)
     fig, axes = plt.subplots(2, 1, figsize=(6, 5), sharex=True)
     _draw_nsims_curves(axes[0], df, "fom_3d", color, n_cosmo_values=n_cosmo_values)
-    axes[0].set_ylabel(FOM3_YLABEL)
+    axes[0].set_ylabel(FOM3_YLABEL, fontsize=14)
     axes[0].set_yscale("log")
     axes[0].set_xscale("log")
     _draw_nsims_curves(
         axes[1], df, "fob3", color, n_cosmo_values=n_cosmo_values, y_scale=ref3,
     )
     h_ref = axes[1].axhline(1.0, color="gray", ls=":", lw=1, alpha=0.7, label=r"$1\sigma$")
-    axes[1].set_ylabel(FOB3_YLABEL)
+    axes[1].set_ylabel(FOB3_YLABEL, fontsize=14)
     axes[1].set_xscale("log")
-    axes[1].set_xlabel(XLABEL_NSIMS)
+    axes[1].set_xlabel(XLABEL_NSIMS, fontsize=14)
+    for ax in axes:
+        ax.tick_params(which="both", labelsize=12)
     h_nc, l_nc = _n_cosmo_legend_handles(n_cosmo_values)
-    axes[0].legend(h_nc, l_nc, fontsize=8, loc="best", frameon=False, labelcolor="black")
-    axes[1].legend(handles=[h_ref], labels=[r"$1\sigma$"], fontsize=8, loc="best", frameon=False, labelcolor="black")
+    axes[0].legend(h_nc, l_nc, fontsize=8.5, loc="best", frameon=False, labelcolor="black")
+    axes[1].legend(handles=[h_ref], labels=[r"$1\sigma$"], fontsize=11, loc="best", frameon=False, labelcolor="black")
     fig.tight_layout()
     if save_name is not None:
         save_figure(fig, save_name)
@@ -2050,16 +2084,25 @@ def plot_fig6_shame_contours(save_name="fig6_shame_contours"):
 # Fig 7 — Training noise and number density
 # =============================================================================
 
-def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_nbars", *, k_members=None):
+def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_nbars", *, k_members=None,
+                                          all_params=False, param_names=None, statistics=None,
+                                          extents=None):
     """SHAMe × 3 n̄ (filled) + phase-matched mock (mean of 10 noise realizations) × 3 n̄ (unfilled, orange
     shades matched by n̄); K-member ensemble mixtures (default N_ENSEMBLE_K; k_members=1 = top model only).
-    Matched and SHAMe share ICs and the bias/noise truth."""
+    Matched and SHAMe share ICs and the bias/noise truth.
+    all_params=True: every varied cosmological and bias parameter (no noise amplitudes) instead of
+    (Ω_c, σ8, b1); no truth marker for b_lap (as figB2).
+    param_names: explicit list of parameters to plot (overrides all_params), e.g. adding b2 / bs2.
+    statistics: statistic combo at its fiducial cuts (default P + P_gm + B, the paper figure); titled when given,
+    SHAMe contours in that combo's paper color.
+    extents: {param: [lo, hi]} overriding the default axis ranges (full prior for Ω_c / σ8, b1 zoomed to [0.3, 0.6])."""
     if k_members is None:
         k_members = N_ENSEMBLE_K
-    statistics_full = list(STATISTICS_FULL_ROW)
-    tag_mask_full = TAG_MASK_FULL
+    statistics_full = list(statistics or STATISTICS_FULL_ROW)
+    tag_mask_full = fiducial_mask_for_statistics(statistics_full)
     nbar_tags = NBAR_TAGS_SCALE
-    shades_noisy = _nbar_shades(COLOR_NOISY)
+    # SHAMe in the combo's paper color (COLOR_NOISY for the full combo); phase-matched always orange
+    shades_noisy = _nbar_shades(COLORS_FID[STATISTICS_ARR_FID.index(statistics_full)])
     shades_matched = _nbar_shades(COLOR_MATCHED)
     fn_pn = model_dir(statistics_full, tag_mask_full, 0) / "param_names.txt"
     names = list(np.loadtxt(fn_pn, dtype=str))
@@ -2107,6 +2150,15 @@ def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_
     cosmo_vary, bias_vary, param_vary = utils_plot.load_training_params(
         TAG_PARAMS_TRAIN, TAG_BIASPARAMS_TRAIN, bx=bx,
     )
+    _cosmo_bias = set(genp.get_bounds("cosmo")) | set(genp.get_bounds("bias"))
+    # all_params: the inferred cosmological + bias parameters (names in the model, or inside a reparameterized name)
+    if param_names is not None:
+        param_names_plot = list(param_names)
+    elif all_params:
+        param_names_plot = [pn for pn in param_vary if pn in _cosmo_bias and any(n == pn or n.endswith("_x_" + pn) for n in names)]
+    else:
+        param_names_plot = list(PARAM_NAMES_ZOOM)
+    big = len(param_names_plot) > len(PARAM_NAMES_ZOOM)   # more than the paper's 3: bigger corner, legend top right
     truth_locs, truth_cols = [], []
     for i, tag_mock in enumerate(nbar_tags):
         theta_ood = data_loader.load_theta_ood(
@@ -2115,26 +2167,30 @@ def plot_fig7_noise_impact_contours_nbars(save_name="fig7_noise_impact_contours_
             bias_param_names_vary=bias_vary,
         )
         theta_vec = theta_ood[idx_obs] if np.ndim(theta_ood) == 2 else theta_ood
-        truth_locs.append({pn: float(theta_vec[param_vary.index(pn)]) for pn in PARAM_NAMES_ZOOM})
+        truth_locs.append({pn: float(theta_vec[param_vary.index(pn)]) for pn in param_names_plot
+                           if pn != "bl" and np.isfinite(theta_vec[param_vary.index(pn)])})
         truth_cols.append(shades_noisy[i])
 
     extents_b_nbar = extents_contours.copy()
     extents_b_nbar["b1"] = [0.3, 0.60]
+    if big:   # zoom on the key parameters; the other bias parameters use the samples' range
+        extents_b_nbar = {pn: extents_b_nbar[pn] for pn in PARAM_NAMES_ZOOM}
+    extents_b_nbar.update(extents or {})
 
     fig = plotter.plot_contours_inf(
-        param_names=PARAM_NAMES_ZOOM, idx_obs=idx_obs, theta_obs_true=None,
+        param_names=param_names_plot, idx_obs=idx_obs, theta_obs_true=None,
         inf_methods=["sbi"] * len(samples_list),
         tags_inf=tags_inf_b, tags_test=tags_test_b,
         colors=colors_b, labels=labels_b, shades=shades_b,
         linestyles=linestyles_b,
         linewidths=linewidths_b,
-        title=None,
+        title=get_stat_label_short(statistics_full) if statistics else None,
         extents=extents_b_nbar,
-        figsize=FIGSIZE_CORNER, unreparameterize=True,
-        fontsize_legend=8,
-        legend_location=(0, 1),
+        figsize=(1.5 * len(param_names_plot),) * 2 if big else FIGSIZE_CORNER, unreparameterize=True,
+        fontsize_legend=12 if big else 8,
+        legend_location=(0, 2) if big else (0, 1),
         legend_loc="upper left",
-        loc_legend=(-0.05, 1.12),   # 6 entries: start above the empty top-right axes so they clear the σ8 panel
+        loc_legend=(0.0, 1.0) if big else (-0.05, 1.12),   # 6 entries: clear the σ8 panel (zoom)
         samples_list=samples_list,
         add_truth=True,
         truth_locations=truth_locs,
@@ -2165,7 +2221,8 @@ def plot_fig8_scale_dependence_fob3_nbars(
     ref3 = fob_chi2_sqrt_limit(3)
     load_shame_fob3._param_names_fob = param_names_fob
     load_shame_fob3._fob_keys = fob_keys
-    fig, axes = plt.subplots(3, 1, figsize=(7, 9.5), sharey=True)
+    # two panels (B on x, P_gm on x); the joint k_B = k_Pgm panel was dropped (user, 2026-11-24)
+    fig, axes = plt.subplots(2, 1, figsize=(7, 6.6), sharey=True)
     nbar_legend_shades = _nbar_shades("0.25")
 
     panel_specs = [
@@ -2180,13 +2237,6 @@ def plot_fig8_scale_dependence_fob3_nbars(
             _sweep_pgm_fob3,
             r"$k_\mathrm{max}^{P_\mathrm{gm}}\,[h/\mathrm{Mpc}]$",
             False,
-        ),
-        (
-            axes[2],
-            _sweep_joint_fob3,
-            r"$k_\mathrm{max}^{B_\mathrm{ggg}} = k_\mathrm{max}^{P_\mathrm{gm}}\,[h/\mathrm{Mpc}]$"
-            rf" ($k_\mathrm{{max}}^{{P_\mathrm{{gg}}}} = {KMAX_PK:.2f}\,h/\mathrm{{Mpc}}$)",
-            None,  # no constant lines: every combo varies along this axis
         ),
     ]
 
@@ -2232,8 +2282,9 @@ def plot_fig8_scale_dependence_fob3_nbars(
                 )
         ax.set_xlabel(xlabel, fontsize=14)
 
-    for ax in axes:
-        ax.axvline(KCUT_FID_OTHER, color="0.6", ls="--", lw=1.0, zorder=0)
+    for ax, k_fid in zip(axes, (KCUT_FID_B, KCUT_FID_PGM)):
+        if k_fid is not None:
+            ax.axvline(k_fid, color="0.6", ls="--", lw=1.0, zorder=0)
         ax.set_xlim(*KMAX_XLIM)
         ax.tick_params(labelsize=12)
         ax.axhline(1.0, color="0.35", ls=":", lw=1.0, zorder=0)
@@ -2255,13 +2306,13 @@ def plot_fig8_scale_dependence_fob3_nbars(
     # Stats upper-left / n̄ upper-right on bottom panel; slightly smaller & higher.
     leg_stat = axes[1].legend(
         handles_stat, labels_stat,
-        fontsize=9, loc="upper left", bbox_to_anchor=(0.0, 1.02),
+        fontsize=12, loc="upper left", bbox_to_anchor=(0.0, 1.02),
         labelcolor="black", frameon=False,
     )
     axes[1].add_artist(leg_stat)
     axes[1].legend(
         handles_nbar, labels_nbar,
-        fontsize=9, loc="upper right", bbox_to_anchor=(1.0, 1.02),
+        fontsize=12, loc="upper right", bbox_to_anchor=(1.0, 1.02),
         labelcolor="black", frameon=False,
     )
     fig.tight_layout()
@@ -2284,8 +2335,10 @@ def plot_fig9_scale_dependence_overall_kmax_fom3_nbars(
     nbar_tags=None,
     save_name="fig9_scale_dependence_fom_nbars",
     report_missing=False,
+    k_members=None,
 ):
-    """Ensemble overall k_max marginal FoM for Ωc, σ8, b1 — 3-panel (8-19 style)."""
+    """Ensemble overall k_max marginal FoM for Ωc, σ8, b1 — 3-panel (8-19 style).
+    k_members=None → N_ENSEMBLE_K ensemble (paper); k_members=1 → top model only."""
     fig, axes = plt.subplots(3, 1, figsize=(7, 9), sharex=True)
     nbar_tags = nbar_tags or NBAR_TAGS_SCALE
 
@@ -2298,7 +2351,7 @@ def plot_fig9_scale_dependence_overall_kmax_fom3_nbars(
                 line_label = label if tag_mock_iter == TAG_MOCK_SHAME else None
                 xs, ys = _overall_kmax_fom_marg_ensemble(
                     statistics_row, param_key, test_mode=test_mode,
-                    tag_mock=tag_mock_iter, report_missing=report_missing,
+                    tag_mock=tag_mock_iter, report_missing=report_missing, k_members=k_members,
                 )
                 if xs.size == 0:
                     continue
@@ -2308,7 +2361,8 @@ def plot_fig9_scale_dependence_overall_kmax_fom3_nbars(
                     xs, ys, color=c, ls="-", marker="o", lw=1.3, ms=5,
                     label=line_label, zorder=2 + j,
                 )
-        ax.axvline(KCUT_FID_OTHER, color="0.6", ls="--", lw=1.0, zorder=0)
+        for k_cap in KCUTS_OVERALL_CAP_LINES:
+            ax.axvline(k_cap, color="0.6", ls="--", lw=1.0, zorder=0)
         ax.set_ylabel(FOM_MARG_LABELS[param_key], fontsize=14)
         ax.set_yscale("log")
         ax.set_xlim(*KMAX_XLIM)
@@ -2330,15 +2384,15 @@ def plot_fig9_scale_dependence_overall_kmax_fom3_nbars(
     # Stats upper-left / n̄ lower-right on top panel (8-19 ensemble style).
     leg_stat = axes[0].legend(
         handles_stat, labels_stat,
-        fontsize=9, loc="upper left",
+        fontsize=12, loc="upper left",
         labelcolor="black", frameon=False,
     )
     axes[0].add_artist(leg_stat)
     axes[0].legend(
         handles_nbar, labels_nbar,
-        fontsize=9, loc="lower right",
+        fontsize=12, loc="lower right",
         labelcolor="black", frameon=False,
-        title=r"$\bar n$", title_fontsize=9,
+        title=r"$\bar n$", title_fontsize=12,
     )
     fig.tight_layout()
     if save_name is not None:
@@ -2358,10 +2412,12 @@ plot_fig8b_scale_dependence_overall_kmax_fom3d_full_nbars = (
 # =============================================================================
 
 def _conv_cache_suffix(k_members):
-    """Cache suffix for the coverage grid: K=3 ensemble (paper) or top-1 model."""
+    """Cache suffix for the coverage grid: K=3 ensemble (paper) or top-1 model, and the coverage row subset."""
+    sub = f"_{CONV_COVERAGE_SUBSET}" if CONV_COVERAGE_SUBSET else ""
     if k_members == 1:
-        return "_top_ip"
-    return eku.ensemble_cache_tag(k_members or N_ENSEMBLE_K) + "_ip"
+        # first-version mode: grid still filling in, so never cache (see load_or_build)
+        return "_top_ip" + sub + ("_partial" if eku.ALLOW_PARTIAL_ENSEMBLES else "")
+    return eku.ensemble_cache_tag(k_members or N_ENSEMBLE_K) + "_ip" + sub
 
 
 def plot_fig10_convergence_pgg_b_pgm(save_name="fig10_convergence_pgg_b_pgm", *, k_members=None):
@@ -2775,3 +2831,291 @@ def plot_figB2_shame_full_posteriors(save_name="figB2_shame_full_posteriors"):
     if fig is not None:
         save_figure(fig, save_name)
     plt.show()
+
+
+# =============================================================================
+# Fig C — Network scatter: seeds of the top setting vs top-3 hyperparameter settings
+# =============================================================================
+
+SEEDHP_GROUPS = {   # group: member suffixes on the top setting's model dir ("" = top setting, seed 0)
+    "seeds": ["", "_seed1", "_seed2"],
+    "settings": ["", "_nbest1", "_nbest2"],
+}
+SEEDHP_COLOR_SETTINGS = "#1F2F6B"   # navy: top-3 settings (seeds use the paper color of each combo)
+SEEDHP_KEY3 = ["omega_cold", "sigma8_cold", "b1"]
+SEEDHP_COVERAGE_SUBSET = "inner500"
+SEEDHP_CRED = np.linspace(0, 1, 51)
+
+
+def _seedhp_dir(statistics, mask, member):
+    return Path(str(model_dir(statistics, mask, 0)) + member)
+
+
+def _seedhp_key3(samples, param_names):
+    """(..., n_params) samples in NPE coordinates -> (..., 3) physical (Ω_c, σ8, b1)."""
+    s, names = ui.unreparameterize_theta(np.asarray(samples, dtype=np.float64), list(param_names), strict=False)
+    names = list(names)
+    return s[..., [names.index(k) for k in SEEDHP_KEY3]]
+
+
+def _seedhp_mix(arrs, seed=0):
+    """Equal-weight mixture over the first (sample) axis."""
+    rng = np.random.default_rng(seed)
+    n = min(a.shape[0] for a in arrs) // len(arrs)
+    return np.concatenate([a[rng.choice(a.shape[0], n, replace=False)] for a in arrs], axis=0)
+
+
+def _seedhp_fob3(s, truth):
+    diff = s.mean(axis=0) - truth
+    return float(np.sqrt(diff @ np.linalg.solve(np.cov(s, rowvar=False), diff))) / fob_chi2_sqrt_limit(3)
+
+
+def _seedhp_coverage_delta(s, truth):
+    """Mean over credibility levels and (Ω_c, σ8, b1) of (empirical coverage − credibility) of central
+    intervals; + = conservative, − = overconfident. s: (n_samples, n_obs, 3), truth: (n_obs, 3)."""
+    a = 2 * np.abs((s < truth[None]).mean(axis=0) - 0.5)
+    pp = np.stack([(a[:, j][:, None] <= SEEDHP_CRED[None]).mean(axis=0) for j in range(3)])
+    return float((pp - SEEDHP_CRED[None]).mean())
+
+
+def _build_seedhp_metrics(configs=None):
+    """Per network and per 3-member mixture: best validation NLL, SHAMe FoB(Ω_c, σ8, b1) at the fiducial n̄,
+    and the coverage summary on the inner500 rows of the v2 coverage set. configs: (statistics, mask) pairs
+    (default FIDUCIAL_CONFIGS)."""
+    truth_shame = data_loader.load_params_ood("shame", TAG_MOCK_SHAME)
+    truth_shame = np.array([float(truth_shame[k]) for k in SEEDHP_KEY3])
+    dir_params = REPO_ROOT / "data" / "params"
+    idxs = np.load(dir_params / f"idxs_obs{TAG_PARAMS_TEST_COV}_{SEEDHP_COVERAGE_SUBSET}.npy")
+    cosmo = pd.read_csv(dir_params / f"params_lh{TAG_PARAMS_TEST_COV}.txt", index_col=0)
+    bias = pd.read_csv(dir_params / f"params_lh{TAG_BIASPARAMS_TEST_COV}.txt", index_col=0)
+    truth_cov = np.stack([cosmo.loc[idxs, "omega_cold"], cosmo.loc[idxs, "sigma8_cold"], bias.loc[idxs, "b1"]], axis=1)
+    members = sorted(set(sum(SEEDHP_GROUPS.values(), [])))
+    out = {}
+    for statistics, mask in (configs or FIDUCIAL_CONFIGS):
+        combo = get_stat_label_short(statistics)
+        shame, cov = {}, {}
+        # a combo is shown only when all 5 networks have their tests (left blank otherwise)
+        missing = []
+        for m in members:
+            d = _seedhp_dir(statistics, mask, m)
+            sub = "" if m == "" else f"_{SEEDHP_COVERAGE_SUBSET}"
+            for fn_need in ("param_names.txt", "inference.p",
+                            f"samples_test{eku.shame_test_tag(statistics, mask, TAG_MOCK_SHAME)}_pred.npy",
+                            f"samples_test{eku.coverage_test_tag(statistics, mask)}{sub}_pred.npy"):
+                if not (d / fn_need).is_file():
+                    missing.append(f"{m or 'top,seed0'}: {fn_need.split('_pk')[0] if 'samples' in fn_need else fn_need}"
+                                   + (" (shame)" if "shame" in fn_need else " (coverage)" if "coverage" in fn_need else ""))
+        if missing:
+            print(f"Fig C: {combo} left out, missing: " + "; ".join(missing))
+            eku.log_partial(("seeds/settings", "_".join(statistics), mask, "figC", "left out"), 0, len(members))
+            continue
+        for m in members:
+            d = _seedhp_dir(statistics, mask, m)
+            names = np.loadtxt(d / "param_names.txt", dtype=str)
+            with open(d / "inference.p", "rb") as f:
+                val_nll = float(pickle.load(f)._summary["best_validation_loss"][-1])
+            s = np.load(d / f"samples_test{eku.shame_test_tag(statistics, mask, TAG_MOCK_SHAME)}_pred.npy")
+            shame[m] = _seedhp_key3(s[:, 0, :] if s.ndim == 3 else s, names)
+            # the top setting, seed 0 runs all 1000 coverage rows (Figs 4/5); the others run only inner500
+            sub = "" if m == "" else f"_{SEEDHP_COVERAGE_SUBSET}"
+            s = np.load(d / f"samples_test{eku.coverage_test_tag(statistics, mask)}{sub}_pred.npy", mmap_mode="r")
+            cov[m] = _seedhp_key3(s[:, idxs] if m == "" else s, names)
+            out[(combo, m)] = {"val_nll": val_nll, "fob3": _seedhp_fob3(shame[m], truth_shame),
+                               "cov_delta": _seedhp_coverage_delta(cov[m], truth_cov)}
+        for group, ms in SEEDHP_GROUPS.items():
+            out[(combo, f"mix_{group}")] = {
+                "val_nll": np.nan,
+                "fob3": _seedhp_fob3(_seedhp_mix([shame[m] for m in ms]), truth_shame),
+                "cov_delta": _seedhp_coverage_delta(_seedhp_mix([cov[m] for m in ms]), truth_cov)}
+    return out
+
+
+@contextlib.contextmanager
+def _old_pgm_fiducial_models():
+    """Model names of the old P_gm fiducial (kpgm0.24 sweep): plain ``_best-rand16`` (no ``-topkpgm0.37``)."""
+    old = gci.SWEEP_SOURCE_TAGS
+    gci.SWEEP_SOURCE_TAGS = {}
+    try:
+        yield
+    finally:
+        gci.SWEEP_SOURCE_TAGS = old
+
+
+def plot_figC_seed_vs_hparam_scatter(save_name="figC_seed_vs_hparam_scatter", *, old_pgm_fiducial=False):
+    """Appendix: network-to-network scatter at the fiducial cuts, for each statistic combination. Left of each
+    combo: the top hyperparameter setting trained with seeds 0, 1, 2 (filled circles, paper color). Right: the
+    top-3 settings of the sweep at seed 0 (open navy squares). Both groups share the top setting, seed 0.
+    Horizontal bars are the equal-weight 3-member mixtures. Panels: best validation NLL relative to the top
+    setting, seed 0; SHAMe FoB(Ω_c, σ8, b1) at the fiducial n̄; mean (coverage − credibility) on inner500.
+
+    old_pgm_fiducial=True: the P_gm combos at the old kpgm0.24 fiducial with their kpgm0.24-sweep networks (complete
+    there); P and P+B are the same networks either way. For a first version while the kpgm0.37 seeds/settings run."""
+    configs = FIDUCIAL_CONFIGS
+    if old_pgm_fiducial:
+        configs = [(s, m.replace("_kpgm0.37", "_kpgm0.24")) for s, m in FIDUCIAL_CONFIGS]
+    with (_old_pgm_fiducial_models() if old_pgm_fiducial else contextlib.nullcontext()):
+        metrics = load_or_build(f"figC_seed_vs_hparam{TAG_SWEEP}" + "".join(m for _, m in configs[-1:])
+                                + ("_oldpgmfid" if old_pgm_fiducial else "")
+                                + ("_partial" if eku.ALLOW_PARTIAL_ENSEMBLES else ""),  # first versions: never cached
+                                lambda: _build_seedhp_metrics(configs))
+    combos = [get_stat_label_short(s) for s, _ in configs]
+    panels = [
+        ("val_nll", r"$\Delta$ best validation NLL" + "\n(vs. top setting, seed 0)", None),
+        ("fob3", r"SHAMe FoB($\Omega_{\rm m}$, $\sigma_8$, $b_1$) / 1$\sigma$", 1.0),
+        ("cov_delta", "coverage $-$ credibility\n" + r"(mean over levels, $\Omega_{\rm m}$, $\sigma_8$, $b_1$)", 0.0),
+    ]
+    offsets = {"seeds": -0.17, "settings": 0.17}
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.2))
+    for ax, (key, ylabel, yref) in zip(axes, panels):
+        for i, combo in enumerate(combos):
+            if (combo, "") not in metrics:  # left out: not all networks have their tests yet
+                continue
+            ref = metrics[(combo, "")]["val_nll"] if key == "val_nll" else 0.0
+            for group, ms in SEEDHP_GROUPS.items():
+                x = i + offsets[group]
+                y = np.array([metrics[(combo, m)][key] for m in ms]) - ref
+                if group == "seeds":
+                    ax.scatter(np.full(len(y), x), y, s=34, color=COLORS_FID[i], edgecolor="k", lw=0.4, zorder=3)
+                else:
+                    ax.scatter(np.full(len(y), x), y, s=34, marker="s", facecolor="none",
+                               edgecolor=SEEDHP_COLOR_SETTINGS, lw=1.3, zorder=3)
+                y_mix = metrics[(combo, f"mix_{group}")][key]
+                if np.isfinite(y_mix):
+                    ax.hlines(y_mix - ref, x - 0.12, x + 0.12, lw=2.6, zorder=4,
+                              color=COLORS_FID[i] if group == "seeds" else SEEDHP_COLOR_SETTINGS)
+        if yref is not None:
+            ax.axhline(yref, color="0.5", ls=":", lw=1.0, zorder=0)
+        ax.axhline(0.0, color="0.85", lw=0.8, zorder=0) if key == "val_nll" else None
+        ax.set_xticks(range(len(combos)), [c.replace(" + ", "\n+ ") for c in combos], fontsize=10)
+        ax.set_xlim(-0.5, len(combos) - 0.5)
+        ax.set_ylabel(ylabel, fontsize=11)
+        for i in range(1, len(combos)):
+            ax.axvline(i - 0.5, color="0.92", lw=0.8, zorder=0)
+    axes[1].set_ylim(bottom=0)
+    handles = [
+        Line2D([0], [0], marker="o", ls="none", markerfacecolor="0.6", markeredgecolor="k", markeredgewidth=0.4,
+               markersize=7, label="top setting, seeds 0, 1, 2"),
+        Line2D([0], [0], marker="s", ls="none", markerfacecolor="none", markeredgecolor=SEEDHP_COLOR_SETTINGS,
+               markeredgewidth=1.3, markersize=7, label="top-3 settings, seed 0"),
+        Line2D([0], [0], color="0.4", lw=2.6, label="3-member mixture"),
+    ]
+    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 1.06), ncol=3, frameon=False, fontsize=11)
+    fig.tight_layout()
+    save_figure(fig, save_name)
+    rows = [{"combo": c, "model": m.strip("_") or "top, seed 0", **v} for (c, m), v in metrics.items()]
+    return fig, pd.DataFrame(rows).set_index(["combo", "model"])
+
+
+# =============================================================================
+# Fig C (appendix, 2026-11-24 layout): sweep ranking at the fiducial cut (ensemble members vs seed scatter) and at
+# k_max^B = 0.11 (hyperparameter transfer), full combo P+P_gm+B
+# =============================================================================
+# Best validation NLLs are parsed from the job logs (each inference.p is ~70 MB): sweep logs name the sweep's train
+# config, the W&B run id and the chunked-training lines "epoch N: val loss X (best Y, ...)"; training logs name their
+# train config. Requeued jobs append to the same log, so the last "best" is the network's best. Same parsing as the
+# shared helpers of notebooks/2026-11-19_v2_checks.ipynb (A1, B2).
+LOG_DIR_V2 = Path("/scratch/kstoreyf/muchisimocks/logs_v2")
+FIGC_KB_TRANSFER = 0.11
+FIGC_NLL_RANGE = 1.0   # y range above the best trial (nats); worse trials are drawn at the top edge
+FIGC_SETTINGS = {"": "setting 1", "_nbest1": "setting 2", "_nbest2": "setting 3"}   # best_runs.txt lines 0-2
+FIGC_COLORS = {"setting 1": "#2a78d6", "setting 2": "#eb6834", "setting 3": "#1baf7a"}
+FIGC_MARKERS = {"setting 1": "o", "setting 2": "s", "setting 3": "^"}
+_RE_BEST = re.compile(r"epoch (\d+): val loss \S+ \(best (\S+),")
+
+
+def _figc_sweep_trials(dir_sweep):
+    """Trials of one sweep (incl. extension sweeps writing into the same dir; retired trials left out), sorted by best
+    val NLL: DataFrame run, best_val_loss, done."""
+    rows = {}
+    for f in sorted(LOG_DIR_V2.glob("sweep_v2_*_[0-9]*_[0-9]*.out"), key=os.path.getmtime):
+        t = f.read_text(errors="ignore").replace("\r", "\n")
+        cfg = re.findall(r"^config_train_file: \S*/config_muchisimocks_(\S+)\.yaml", t, re.M)
+        rid = re.findall(r"run-\d{8}_\d{6}-([a-z0-9]{8})", t)
+        best = _RE_BEST.findall(t)
+        if cfg and rid and best and "sbi_muchisimocks_" + re.sub(r"_ext\d+$", "", cfg[-1]) == dir_sweep.name:
+            rows[rid[-1]] = {"run": rid[-1], "best_val_loss": float(best[-1][1])}
+    d = pd.DataFrame(rows.values(), columns=["run", "best_val_loss"])
+    fn_ret = dir_sweep / "retired_trials.csv"
+    if fn_ret.is_file():
+        d = d[~d["run"].isin(pd.read_csv(fn_ret)["run_id"])]
+    d = d.assign(done=[(dir_sweep / r / "posterior.p").is_file() for r in d["run"]])
+    return d.sort_values("best_val_loss").reset_index(drop=True)
+
+
+def _figc_train_logs():
+    """{train config name: (best val NLL, done)} over all training logs; the newest log for a config wins."""
+    out = {}
+    for f in sorted(LOG_DIR_V2.glob("train_*.out"), key=os.path.getmtime):
+        t = f.read_text(errors="ignore").replace("\r", "\n")
+        cfg = re.findall(r"^train: \S*config_muchisimocks_(\S+)\.yaml", t, re.M)
+        best = _RE_BEST.findall(t)
+        if cfg and best:
+            out[cfg[-1]] = (float(best[-1][1]), "Saved model to" in t)
+    return out
+
+
+def plot_figC_sweep_ranking(save_name="figC_sweep_ranking"):
+    """Appendix C. Left: the -rand16 sweep at the fiducial cuts, trials sorted by best validation NLL; ranks 1-3 are
+    the top-3 settings mixed in the ensemble, and open markers are their retrains with other seeds (seed scatter).
+    Right: the sweep at k_max^B = 0.11 (other cuts fiducial), with the fiducial top-3 settings trained at that cut,
+    drawn at the rank they would have among its trials (hyperparameter transfer). Full combo P+P_gm+B.
+    Val NLLs compare only within a panel (the data vectors differ)."""
+    statistics, mask_fid = FIDUCIAL_CONFIGS[-1]
+    assert statistics == ["pk", "pgm", "bispec"], statistics
+    kb_fid = eku.KCUT_FID_OVERALL_CAPS["bispec"]
+    mask_tr = mask_fid.replace(data_loader.kcut_tag("bispec", kb_fid), data_loader.kcut_tag("bispec", FIGC_KB_TRANSFER))
+    assert mask_tr != mask_fid, (mask_fid, mask_tr)
+    best = best_tag(TAG_SWEEP, None, statistics)
+    logs = _figc_train_logs()
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+    for ax, mask, title in ((axes[0], mask_fid, rf"fiducial cuts ($k_{{\rm max}}^B={kb_fid:.2f}$)"),
+                            (axes[1], mask_tr, rf"$k_{{\rm max}}^B={FIGC_KB_TRANSFER:.2f}$ (transfer)")):
+        name_best = model_dir(statistics, mask, 0).name          # sbi_..._best-rand16-topkpgm0.37[_seed1]
+        name_best = name_best[: name_best.index(best) + len(best)]
+        dir_sweep = dir_sbi / name_best.replace(best, "_sweep" + TAG_SWEEP)
+        d = _figc_sweep_trials(dir_sweep)
+        rank = np.arange(1, len(d) + 1)
+        vl = d["best_val_loss"].values
+        ax.plot(rank, np.minimum(vl, vl.min() + FIGC_NLL_RANGE), "-", color="0.8", lw=1, zorder=1)
+        on_fid = mask == mask_fid
+        grey = np.ones(len(d), bool)
+        if on_fid:
+            grey[:3] = False   # the top-3 settings are drawn in their colors
+        # zoom on the competitive trials; worse ones are drawn as carets on the top edge
+        ytop = vl.min() + FIGC_NLL_RANGE
+        off = vl > ytop
+        ax.scatter(rank[grey & ~off], vl[grey & ~off], color="0.55", s=26, zorder=2,
+                   label="sweep trials" if on_fid else None)
+        ax.scatter(rank[grey & off], np.full((grey & off).sum(), ytop), marker="^", color="0.55", s=26, zorder=2,
+                   clip_on=False)
+        cfg_base = name_best[len("sbi_muchisimocks_"):]
+        for i, (member, lab) in enumerate(FIGC_SETTINGS.items()):
+            c, mk = FIGC_COLORS[lab], FIGC_MARKERS[lab]
+            if on_fid:   # ranks 1-3 are the settings themselves (seed 0); other seeds at the same rank, offset
+                ax.scatter(i + 1, vl[i], marker=mk, color=c, s=60, edgecolor="k", lw=0.5, zorder=4,
+                           label=f"{lab}, seed 0")
+                for j, seed in enumerate((1, 2)):
+                    r = logs.get(cfg_base + member + f"_seed{seed}")
+                    if r is not None:
+                        ax.scatter(i + 1 + 0.3 * (j + 1), r[0], marker=mk, facecolor="none", edgecolor=c, lw=1.5,
+                                   s=60, zorder=4, label="other seeds (open)" if (i, j) == (0, 0) else None)
+            else:        # fiducial settings trained at this cut: drawn at the rank they would have among the trials
+                r = logs.get(cfg_base + member)
+                if r is None:
+                    print(f"Fig C: no training log for {cfg_base + member}")
+                    continue
+                rk = 1 + (vl < r[0]).sum()
+                ax.scatter(rk - 0.5, r[0], marker=mk, color=c, s=60, edgecolor="k", lw=0.5, zorder=4,
+                           label=f"fiducial {lab}")
+        ax.axvline(3.5, color="0.5", ls=":", lw=1, zorder=0)
+        ax.set_ylim(vl.min() - 0.08 * FIGC_NLL_RANGE, ytop)
+        ax.set_title(title + f", {len(d)} trials", fontsize=12)
+        ax.set_xlabel("rank in sweep", fontsize=12)
+        ax.set_xticks(rank[::3])
+        ax.tick_params(labelsize=11)
+        ax.legend(fontsize=9.5, frameon=False, loc="upper left")
+    axes[0].set_ylabel("best validation loss (NLL)", fontsize=12)
+    fig.tight_layout()
+    save_figure(fig, save_name)
+    plt.show()
+    return fig

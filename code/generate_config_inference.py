@@ -21,8 +21,14 @@ TAG_SWEEP = f"-rand{SWEEP_NUM_RUNS}"  # sweep/best dir suffix; single source of 
 # Scale cuts (labels from data_loader.K_CUTS; a cut keeps every bin with top edge <= label).
 # SWEEP_MASKS: where hyperparameter sweeps are run (and named); models at other cuts reuse
 # that sweep's hyperparameters. FIDUCIAL_MASKS: the analysis fiducial (currently the same).
-SWEEP_MASKS = {"pk": "_kp0.37", "bispec": "_kb0.24", "pgm": "_kpgm0.24"}
+# 2026-11-22: fiducial k_max^{P_gm} moved 0.24 -> 0.37 (notebooks/2026-11-19_v2_checks.ipynb §6).
+SWEEP_MASKS = {"pk": "_kp0.37", "bispec": "_kb0.24", "pgm": "_kpgm0.37"}
 FIDUCIAL_MASKS = dict(SWEEP_MASKS)
+# Best-mode model names say which sweep their hyperparameters come from, for statistics whose
+# sweep cut moved: combos with pgm get "-topkpgm0.37" (sweep at kpgm0.37), so they never share
+# a name with the earlier kpgm0.24-sweep models (plain "_best-rand16", kept for the appendix).
+# Combos without pgm (P, P+B) are unaffected.
+SWEEP_SOURCE_TAGS = {"pgm": "-top" + SWEEP_MASKS["pgm"].lstrip("_")}
 # v2 test cosmology/IC sets (own IC seeds; v1 _coverage/_shame shared phases with training).
 TAG_PARAMS_COVERAGE = "_coveragev2_p5_n1000"
 TAG_PARAMS_SHAME = "_cvshamev2_p0_n1000"  # SHAMe-cosmology cosmic-variance set
@@ -124,16 +130,19 @@ def nth_passing_run_id(sweep_dir: Path, nth: int = 0) -> str:
     )
 
 
-def best_tag(tag_sweep: str, nth_best_run: int | None) -> str:
-    """``_best{tag_sweep}`` (top run, ``nth_best_run`` None or 0) or ``..._nbest{n}`` (n-th run)."""
+def best_tag(tag_sweep: str, nth_best_run: int | None, statistics: list[str]) -> str:
+    """``_best{tag_sweep}{source}`` (top run, ``nth_best_run`` None or 0) or ``..._nbest{n}`` (n-th run);
+    ``source`` = ``SWEEP_SOURCE_TAGS`` of the statistics in the combo (e.g. ``-topkpgm0.37``)."""
     nth = 0 if nth_best_run is None else int(nth_best_run)
-    return f"_best{tag_sweep}" + (f"_nbest{nth}" if nth else "")
+    source = "".join(SWEEP_SOURCE_TAGS.get(s, "") for s in statistics)
+    return f"_best{tag_sweep}{source}" + (f"_nbest{nth}" if nth else "")
 
 
 def _tag_inf_train_for_test(
     base_inf_train: str,
     tag_sweep: str | None,
     nth_best_run: int | None,
+    statistics: list[str],
     seed: int = 0,
 ) -> str:
     """``tag_inf`` of the trained model a test config evaluates (= generate_train_config's).
@@ -143,7 +152,7 @@ def _tag_inf_train_for_test(
     """
     if tag_sweep is None:
         return base_inf_train + _seed_suffix(seed)
-    return base_inf_train + best_tag(tag_sweep, nth_best_run) + _seed_suffix(seed)
+    return base_inf_train + best_tag(tag_sweep, nth_best_run, statistics) + _seed_suffix(seed)
 
 
 def _seed_suffix(seed: int) -> str:
@@ -302,7 +311,7 @@ def generate_train_config(dir_config=str(DEFAULT_CONFIGS_TRAIN_DIR),
         tag_inf = sweep_name
     elif run_mode == 'best':
         # Output dir tag includes this bx/n_train; sweep_name is the completed fiducial sweep.
-        tag_inf = base_inf + best_tag(tag_sweep, nth_best_run) + _seed_suffix(seed)
+        tag_inf = base_inf + best_tag(tag_sweep, nth_best_run, statistics) + _seed_suffix(seed)
         sweep_name = build_sweep_name(data_mode, statistics, tag_params, tag_biasparams, tag_noise,
                                       reparameterize, tag_sweep)
     else:  # single
@@ -405,7 +414,7 @@ def generate_test_config(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         build_sweep_name(data_mode, statistics, tag_params, tag_biasparams, tag_noise,
                          reparameterize, tag_sweep)
     )
-    tag_inf_train = _tag_inf_train_for_test(base_inf_train, tag_sweep, nth_best_run, seed=seed)
+    tag_inf_train = _tag_inf_train_for_test(base_inf_train, tag_sweep, nth_best_run, statistics, seed=seed)
 
     tag_test = build_config_tag_test(
         tag_inf_train,
@@ -499,7 +508,7 @@ def generate_test_config_ood(dir_config=str(DEFAULT_CONFIGS_TEST_DIR),
         build_sweep_name(data_mode, statistics, tag_params, tag_biasparams, tag_noise,
                          reparameterize, tag_sweep)
     )
-    tag_inf_train = _tag_inf_train_for_test(base_inf_train, tag_sweep, nth_best_run, seed=seed)
+    tag_inf_train = _tag_inf_train_for_test(base_inf_train, tag_sweep, nth_best_run, statistics, seed=seed)
 
     ### test tags
     tag_data_test = '_'+data_mode_test + tag_stats + tag_masks_train + tag_mock

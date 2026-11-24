@@ -50,6 +50,9 @@ def grid():
 
 
 def main():
+    # Written for the kpgm0.24-sweep models (plain "_best-rand16"); since 2026-11-22 the config generator names
+    # P_gm combos after the kpgm0.37 sweep, so rerunning this would point at different models.
+    assert gci.SWEEP_MASKS["pgm"] == "_kpgm0.24", "historical script: lists are for the kpgm0.24-sweep models"
     assert os.environ.get("MUCHISIMOCKS_DATA", "").endswith("data_v2"), "source code_auxiliary/env_v2.sh first"
     train_kw = gci.resolve_train_tag_bundle("_p5_n10000", "noisy")
     lines = []

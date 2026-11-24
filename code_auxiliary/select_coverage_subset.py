@@ -10,7 +10,10 @@ The edge distance of a row is min_j min(u_j, 1 - u_j) over the three key paramet
 (Over all 14 varied params the inner 500 would only be >= 2.4% of each width from the edges.) Keep the N_INNER rows with the
 largest edge distance, then draw N_RAND of them.
 
-Output: data/params/idxs_obs_coveragev2_p5_n1000_inner{N_INNER}_rand{N_RAND}.npy (sorted row indices)
+Output (sorted row indices), data/params/idxs_obs_coveragev2_p5_n1000_<name>.npy:
+  inner{N_INNER}, inner{N_INNER}_rand{N_RAND}, and outer{N - N_INNER} = the complement of inner{N_INNER} (2026-11-23:
+  the full set is run as inner + outer halves and merged with merge_coverage_subsets.py). Existing files must come out
+  identical (they name test outputs), so they are checked, not overwritten.
   python select_coverage_subset.py      (seconds; fine on a login node)
 """
 import sys
@@ -45,7 +48,13 @@ print(f"edge distance over {PARAMS_EDGE}")
 print(f"inner {N_INNER}: edge distance >= {d_edge[order[N_INNER - 1]]:.4f} of each prior width "
       f"(all 1000: median {np.median(d_edge):.4f})")
 
-for fn_tag, arr in ((f"inner{N_INNER}", idxs_inner), (f"inner{N_INNER}_rand{N_RAND}", idxs)):
+idxs_outer = np.setdiff1d(np.arange(len(df)), idxs_inner)
+for fn_tag, arr in ((f"inner{N_INNER}", idxs_inner), (f"inner{N_INNER}_rand{N_RAND}", idxs),
+                    (f"outer{len(df) - N_INNER}", idxs_outer)):
     fn = DIR_PARAMS / f"idxs_obs{TAG_PARAMS}_{fn_tag}.npy"
+    if fn.is_file():
+        assert np.array_equal(np.load(fn), arr), f"{fn} exists with different rows"
+        print(f"unchanged {fn} ({len(arr)} rows)")
+        continue
     np.save(fn, arr)
     print(f"saved {fn} ({len(arr)} rows)")
